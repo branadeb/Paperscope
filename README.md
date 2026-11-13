@@ -4,9 +4,7 @@ A free research discovery app. You type a few words or a question; Paperscope se
 
 Paperscope is **not** Google Scholar. It searches different sources, ranks differently, and makes no claim to match Scholar's results. See `EVALUATION.md` for how it compares and where it falls short.
 
-The whole app is one file, `index.html` (about 290 KB, including its typeface).
-
-**Live version:** <https://branadeb.github.io/Paperscope/> There is no server, account or paid AI service.
+The whole app is one file, `index.html` (about 290 KB, including its typeface). There is no server, account or paid AI service.
 
 ## Running it
 
@@ -32,6 +30,8 @@ OpenAlex meters its free API. Without a key you get about $0.10 of free use per 
 | Short follow-up questions | Working | Asks when an acronym has several meanings ("MD") or when short query words are used across unrelated domains ("coherence", "relaxation"). Answers from your profile when it can. |
 | Synonym and related-term expansion | Working | A small curated synonym list (shown and switchable per search) plus OpenAlex's meaning-based search. Not a full thesaurus. |
 | Related terms from the results | Working | Works in any field: terms OpenAlex attaches to many of the top results, shown as chips. Tap one to search it too (one extra call). |
+| Author search | Working | Switch the search box to **Authors** and type a name or ORCID iD. If several OpenAlex profiles match, pick one or tick several to combine them (OpenAlex sometimes splits one person). Shows works, citations, h-index and active years, a bar chart of works by field, and every work grouped by field (newest or most cited first). Any field can be loaded in full or hidden. Tap any author's name on a result to open their works. |
+| DOI lookup | Working | Paste a DOI (or a doi.org link) in the topic search box to open that paper; falls back to Crossref if OpenAlex lacks it. |
 | Citation trail | Working | On any result: papers citing it, its references, or similar papers. "Back" returns to your search. |
 | Sort: best match, newest, most cited | Working | "Newest first" also fetches papers from the last three years; weakly matching papers stay below relevant ones. |
 | Follow a search | Working | Saved on this device. "Check for new papers" (Saved tab) shows what was published since your last check, marked New. No emails yet. |
@@ -61,6 +61,7 @@ OpenAlex meters its free API. Without a key you get about $0.10 of free use per 
 | Titles pasted into "Compare with Google Scholar" | Nowhere, unless you tap "Check OpenAlex", which sends the missing titles to OpenAlex. |
 | Saved papers and followed searches | Nowhere. |
 | Your ORCID iD (only if you import from ORCID) | OpenAlex, to find your publications. |
+| An author name or ORCID iD you search for, or a DOI | OpenAlex (and Crossref for a DOI OpenAlex lacks). |
 | For "Write a short answer" (only if you set it up): your search and the titles and abstracts of the top papers | The AI provider you choose, using your own key and billed to you. Never your CV or profile. |
 
 Code is downloaded only when needed, and never with your data: pdf.js or mammoth.js (about 1 MB, from jsDelivr) when you open a PDF or Word file, and the optional model (below). As with any website, each service sees your IP address.
@@ -103,6 +104,8 @@ The brief asked for a free, open-weight model running on the device. What was bu
 - Field and topic labels come from OpenAlex's classifier and can be wrong for interdisciplinary papers.
 - Saved papers and settings are per browser. Clearing site data deletes them; export first.
 - The synonym list is small and hand-made. Meaning-based search covers much of the rest.
+- Author profiles are OpenAlex's automatic matching of papers to people. It sometimes splits one person into several profiles and sometimes merges people with similar names (for example, one well-known chemist's profile also holds an atmospheric scientist's papers). The field breakdown makes this easy to spot, and the author view lets you combine profiles or hide a field, but it cannot fix the underlying data.
+- An author's h-index and citation total are OpenAlex's figures; when profiles are combined, citations are summed and the largest single h-index is shown (a true combined h-index would need every work's citations).
 
 ## Design
 
@@ -120,6 +123,7 @@ tools/build.mjs  inlines everything into dist/index.html
 test/core.test.cjs   unit tests (node test/core.test.cjs)
 test/ui.test.cjs     end-to-end test in headless Chrome with mocked APIs (needs puppeteer-core and axe-core)
 test/ui-step1.test.cjs  browser tests for related terms, citation trail, sorting, follows, ORCID and answers
+test/ui-author.test.cjs browser tests for author search, works by field, co-author navigation and DOI lookup
 ```
 
 Build: `node tools/build.mjs`. Licence for the data: OpenAlex is CC0; check each publisher's terms for full texts.

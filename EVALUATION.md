@@ -120,3 +120,23 @@ New: profile from ORCID, related terms from the results, citation trail (citing 
 - Anthropic's browser access (the `anthropic-dangerous-direct-browser-access` header) and the model name `claude-haiku-5-5`.
 - OpenAI-compatible services and local model servers, which must allow requests from web pages (CORS); many local servers need a setting for this.
 - "Check for new papers" uses publication dates, so papers indexed late with an older date can be missed.
+
+## Author search and DOI lookup (13 November 2026)
+
+New: a Topics / Authors switch on the search box; author search by name or ORCID iD with a profile picker that can combine split profiles; an author page with works, citations, h-index, active years, a bar chart of works by field and every work grouped by field; per-field loading and hiding; tappable author names on every result; and DOI lookup from the topic search box.
+
+**Checked against live OpenAlex** (web fetch, 13 November 2026):
+
+- `/authors?search=Frances Arnold` returns ranked profiles with ORCID, works count, institution and topics (cost $0.001).
+- `/authors/orcid:0000-0002-4027-364X` returns the same profile (free).
+- `/works?filter=author.id:…&group_by=primary_topic.field.id` returns 20 fields for her 848 works ($0.0001). The group counts summed to 847: works with no field are not listed, so Paperscope shows the difference as "Not classified".
+- `/works?filter=author.id:…,primary_topic.field.id:13` returns only that field's works (452, $0.0001), and `sort=publication_year:asc&per_page=1` returns the first year ($0.0001).
+- `/works/doi:10.7717/peerj.4375` returns the paper (free).
+
+The same check showed why the field view matters: that profile lists 179 works in Earth and Planetary Sciences, which on inspection are atmospheric-chemistry papers by a different researcher with the same surname and initial. OpenAlex's author matching merged them. The author page now says this can happen and lets you hide a field.
+
+Opening an author costs about $0.0003 in OpenAlex usage (field counts, first year, one page of up to 200 works); a name search adds $0.001. Each further page or field is $0.0001.
+
+**Tested:** 68/68 new browser checks (plus 43/43, 32/32 and 41/41 unit tests) pass, with OpenAlex and Crossref mocked: the picker and combining profiles, exact requests, header figures, bar counts and order, grouping, "Show all" fetching the rest of a field, sorting, hiding a field, year filters, paging, co-author and byline navigation with Back, citation trail and Back, ORCID, single and no matches, DOI found, DOI only in Crossref, and unknown DOI. axe-core found no WCAG 2 A/AA violations in light or dark mode, and the page does not scroll sideways on a phone.
+
+**Not verified live:** the Crossref fallback for a DOI that OpenAlex lacks (Crossref's documented `/works/{doi}`).

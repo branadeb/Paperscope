@@ -558,7 +558,8 @@
     return {
       key: '', openalexId: w.id || '', doi: cleanDoi(w.doi), title: stripTags(w.display_name || w.title || ''),
       year: w.publication_year || null, date: w.publication_date || '',
-      authors: (w.authorships || []).map(a => a && a.author && a.author.display_name).filter(Boolean),
+      authors: (w.authorships || []).filter(a => a && a.author && a.author.display_name).map(a => a.author.display_name),
+      authorIds: (w.authorships || []).filter(a => a && a.author && a.author.display_name).map(a => a.author.id || ''),
       venue: (prim.source && prim.source.display_name) || '',
       abstract: reconstructAbstract(w.abstract_inverted_index), abstractFrom: w.abstract_inverted_index ? 'OpenAlex' : '',
       oaType: w.type || '', crType: prim.raw_type || '', epmcTypes: [],
@@ -786,7 +787,7 @@
       else score = 0.78 * qrel + 0.08 * prof + 0.1 * impact + 0.04 * recency;
       if (w.retracted) score -= 0.5;
       if (/^(dataset|software|book-review|paratext|erratum|grant|libguides|reference-entry|peer-review|supplementary-materials)$/.test(w.oaType || '')) score -= 0.12;
-      if (!ctx.trail && !q.hits.length && !(w.ranks && (w.ranks.oa_sem !== undefined))) score -= 0.15; // nothing matched and not a meaning-based hit
+      if (!ctx.trail && !ctx.author && !q.hits.length && !(w.ranks && (w.ranks.oa_sem !== undefined))) score -= 0.15; // nothing matched and not a meaning-based hit
       w.rank = { score, qrel, q: q.score, rrf, prof, profRaw: pr.score, impact, recency, qHits: q.hits, relHits: q.relHits, pHits: pr.hits, sem: sem || null };
     }
     return works.slice().sort((a, b) => b.rank.score - a.rank.score);
@@ -961,7 +962,7 @@
 
   // Slim copy for saving (no derived fields).
   function slim(w) {
-    const keep = ['key', 'openalexId', 'doi', 'title', 'year', 'date', 'authors', 'venue', 'abstract', 'abstractFrom', 'oaType', 'crType', 'epmcTypes',
+    const keep = ['key', 'openalexId', 'doi', 'title', 'year', 'date', 'authors', 'authorIds', 'venue', 'abstract', 'abstractFrom', 'oaType', 'crType', 'epmcTypes',
       'isOA', 'landing', 'oaUrl', 'pdf', 'oaHost', 'cites', 'topic', 'retracted', 'sources'];
     const o = {}; keep.forEach(k => { o[k] = w[k]; }); o.savedAt = new Date().toISOString(); return o;
   }
@@ -1094,11 +1095,52 @@
     return top.concat(rest);
   }
 
+  // ---------------------------------------------------------------- authors and DOIs
+  function normAuthor(a) {
+    if (!a) return null;
+    const inst = (a.last_known_institutions && a.last_known_institutions[0]) || a.last_known_institution || null;
+    const st = a.summary_stats || {};
+    return {
+      id: a.id || '', name: a.display_name || '', orcid: a.orcid ? String(a.orcid).replace(/^https?:\/\/orcid\.org\//, '') : '',
+      works: a.works_count || 0, cites: a.cited_by_count || 0, h: st.h_index != null ? st.h_index : null,
+      inst: inst ? inst.display_name || '' : '', country: inst ? inst.country_code || '' : '',
+      topics: (a.topics || []).slice(0, 4).map(t => ({ name: t.display_name, count: t.count, field: t.field && t.field.display_name })),
+      full: !!(a.works_count != null),
+    };
+  }
+  // Group works by the field of their main OpenAlex topic; unclassified works go last.
+  function groupByField(works) {
+    const m = new Map();
+    for (const w of works) {
+      const key = w.topic && w.topic.field ? w.topic.field : 'Not classified';
+      let g = m.get(key);
+      if (!g) { g = { field: key, works: [], tcount: new Map(), y0: Infinity, y1: -Infinity }; m.set(key, g); }
+      g.works.push(w);
+      if (w.topic && w.topic.name) g.tcount.set(w.topic.name, (g.tcount.get(w.topic.name) || 0) + 1);
+      if (w.year) { g.y0 = Math.min(g.y0, w.year); g.y1 = Math.max(g.y1, w.year); }
+    }
+    return [...m.values()].map(g => ({ field: g.field, works: g.works, count: g.works.length,
+      years: isFinite(g.y0) ? [g.y0, g.y1] : null,
+      topTopics: [...g.tcount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, count]) => ({ name, count })) }))
+      .sort((a, b) => (a.field === 'Not classified') - (b.field === 'Not classified') || b.count - a.count);
+  }
+  // Returns a bare DOI if the whole input is a DOI (with or without the doi.org prefix), else null.
+  function isDOI(q) {
+    const m = String(q || '').trim().match(/^(?:doi:\s*|https?:\/\/(?:dx\.)?doi\.org\/)?(10\.\d{4,9}\/[^\s"<>]+)$/i);
+    return m ? m[1].replace(/[.,;]+$/, '').toLowerCase() : null;
+  }
+  function initials(name) {
+    const parts = String(name || '').replace(/[^\p{L}\s.-]/gu, '').split(/[\s.-]+/).filter(Boolean);
+    if (!parts.length) return '?';
+    return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+  }
+
   const Core = {
     stem, stems, words, contentStems, phraseStems, hasPhrase, splitSentences, cleanDoi, normTitle, stripTags, reconstructAbstract,
     extractGlossary, extractProfile, profileTerms, profileText, analyzeQuery, assessFieldAmbiguity,
     normOpenAlex, normCrossref, normEPMC, workKey, dedupeInto, classifyType, prepWork, scoreQuery, scoreProfile, rankWorks,
     explain, highlightStems, computeThemes, parseScholarLines, titleSimilarity, compareWithList, toBibTeX, toRIS, toCSV, slim,
+    normAuthor, groupByField, isDOI, initials,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };

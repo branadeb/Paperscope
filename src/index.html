@@ -36,10 +36,14 @@
     <div class="hero" id="hero">
     <svg class="hero-rings" viewBox="0 0 200 200" aria-hidden="true"><circle class="r" cx="100" cy="100" r="96"/><circle class="r" cx="100" cy="100" r="70"/><circle class="r" cx="100" cy="100" r="44"/><circle class="r" cx="100" cy="100" r="18"/><circle class="o1" cx="44" cy="141" r="4.5"/><circle class="o2" cx="181" cy="58" r="3.5"/><circle class="o1" cx="118" cy="57" r="2.5"/></svg>
     <h1 id="search-h" class="hero-title">Find the papers that matter to your work.</h1>
-    <p class="hero-lede">Search open scholarly databases and see, for each paper, why it may matter to you.</p>
+    <p class="hero-lede" id="hero-lede">Search open scholarly databases and see, for each paper, why it may matter to you.</p>
+    <div class="pathways" role="radiogroup" aria-label="Search by">
+      <button type="button" role="radio" data-pathway="topic" aria-checked="true">Topics</button>
+      <button type="button" role="radio" data-pathway="author" aria-checked="false">Authors</button>
+    </div>
     <form id="search-form" class="searchbar" role="search">
-      <label for="q" class="sr-only">Search terms or research question</label>
-      <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Keywords, a phrase or a question">
+      <label for="q" class="sr-only">Search terms, research question or DOI</label>
+      <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Keywords, a phrase, a question or a DOI">
       <button class="btn primary" type="submit">Search</button>
     </form>
     <p class="profile-line" id="profile-line"></p>
@@ -60,6 +64,12 @@
         <li><button type="button">coherence</button></li>
         <li><button type="button">How do ion channels drive confined cancer cell migration?</button></li>
         <li><button type="button">MD simulations of polymer electrolytes</button></li>
+      </ul>
+      <h2 class="start-h">Or look up a researcher</h2>
+      <p class="muted small">See everything an author has published, grouped by field. You can also tap any author’s name on a result.</p>
+      <ul class="examples authors-ex">
+        <li><button type="button" data-author-example="Jennifer Doudna">Jennifer Doudna</button></li>
+        <li><button type="button" data-author-example="Frances Arnold">Frances Arnold</button></li>
       </ul>
     </div>
 
@@ -118,6 +128,7 @@
         <tr><td>Your search words, any acronym meaning you pick, the field you choose, and filters</td><td>OpenAlex (api.openalex.org), plus Crossref (api.crossref.org) and Europe PMC (ebi.ac.uk) if those sources are on.</td></tr>
         <tr><td>Your OpenAlex API key, if you add one</td><td>OpenAlex only, with each request.</td></tr>
         <tr><td>Your ORCID iD, if you import from ORCID</td><td>OpenAlex, to find your publications.</td></tr>
+        <tr><td>An author name, ORCID iD or DOI you search for</td><td>OpenAlex (and Crossref for a DOI that OpenAlex lacks).</td></tr>
         <tr><td>For “Write a short answer” (off unless you set it up): your search and the titles and abstracts of the top papers</td><td>The AI provider you choose, with your own key, billed to you. Never your CV or profile.</td></tr>
         <tr><td>Followed searches</td><td>Nowhere. Kept in this browser; checking one runs a normal search.</td></tr>
         <tr><td>Titles you paste into “Compare with Google Scholar”</td><td>Nowhere, unless you tap “Check OpenAlex”; then the missing titles go to OpenAlex.</td></tr>

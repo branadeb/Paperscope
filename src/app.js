@@ -49,6 +49,7 @@
     settings: Object.assign({ apiKey: '', crossref: true, epmc: true, semantic: true, rememberProfile: false, ai: false,
       llmProvider: 'anthropic', llmKey: '', llmModel: 'claude-haiku-5-5', llmBase: 'https://api.openai.com/v1', llmConsent: false }, store.get('settings', {})),
     sort: 'best',
+    pathway: 'topic',
     follows: store.get('follows', []) || [],
     prevSearch: null,
     profile: null,
@@ -64,6 +65,7 @@
   (store.get('saved', []) || []).forEach(w => { if (w && w.key) { C.prepWork(w); S.saved.set(w.key, w); } });
   S.mode = store.get('mode', 'all');
   S.sort = store.get('sort', 'best');
+  S.pathway = store.get('pathway', 'topic') === 'author' ? 'author' : 'topic';
   function saveSettings() { store.set('settings', S.settings); }
   function persistProfile() { if (S.settings.rememberProfile && S.profile) store.set('profile', S.profile); else store.del('profile'); }
   function persistSaved() { return store.set('saved', [...S.saved.values()].map(C.slim)); }
@@ -95,6 +97,13 @@
     Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, v); });
     if (S.settings.apiKey) p.set('api_key', S.settings.apiKey.trim());
     return `${OA}/works?${p.toString()}`;
+  }
+  function oaPath(path, params = {}) {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, v); });
+    if (S.settings.apiKey) p.set('api_key', S.settings.apiKey.trim());
+    const qs = p.toString();
+    return `${OA}${path}${qs ? '?' + qs : ''}`;
   }
   function addCost(r) { if (r && r.ok && r.data && r.data.meta && typeof r.data.meta.cost_usd === 'number') { S.sessionCost += r.data.meta.cost_usd; if (S.search) S.search.cost += r.data.meta.cost_usd; } }
   function failText(src, r) {
@@ -152,7 +161,7 @@
   let searchToken = 0;
   function ctx() {
     const s = S.search;
-    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile(), trail: s.kind === 'trail' ? s.trail : null };
+    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile(), trail: s.kind === 'trail' ? s.trail : null, author: s.kind === 'author' || s.kind === 'doi' ? (s.author || true) : null };
   }
   function hasProfile() { return !!(S.profile && ((S.profile.interests || []).length + (S.profile.methods || []).length + (S.profile.areas || []).length)); }
 
@@ -168,6 +177,7 @@
       shown: PAGE, cost: 0, serverFilters: opts.serverFilters || null, sem: new Map(), dupes: 0, fetched: 0, compare: null,
       since: opts.since || null, wantRecent: S.sort === 'newest', answer: null, followIndex: opts.followIndex != null ? opts.followIndex : null };
     S.filters.theme = null; S.prevSearch = null;
+    if (S.pathway !== 'topic') { S.pathway = 'topic'; renderPathway(); }
     clearSearchUI();
     if (location.hash && location.hash !== '#search') location.hash = '#search';
 
@@ -202,7 +212,7 @@
   async function runTrail(seed, kind) {
     if (!seed || !seed.openalexId) return;
     const token = ++searchToken;
-    const prev = S.search && S.search.kind === 'search' ? S.search : (S.prevSearch || null);
+    const prev = S.search && (S.search.kind === 'search' || S.search.kind === 'author') ? S.search : (S.prevSearch || null);
     const analysis = C.analyzeQuery(seed.title, S.profile, {});
     S.search = { kind: 'trail', trail: { kind, seed: { key: seed.key, title: seed.title, openalexId: seed.openalexId, cites: seed.cites } },
       q: seed.title, analysis, choices: {}, sense: null, pool: new Map(), ranked: [], themes: null, status: {}, pages: { oa_trail: 1 }, exhausted: {},
@@ -316,7 +326,7 @@
   }
 
   function rerank() {
-    const s = S.search; if (!s) return;
+    const s = S.search; if (!s || !s.pool) return;
     s.ranked = C.rankWorks([...s.pool.values()], ctx());
     s.themes = C.computeThemes(s.ranked, ctx());
   }
@@ -349,7 +359,15 @@
     $('#loading-text').textContent = text; el.hidden = false;
   }
 
+  function renderPathway() {
+    document.querySelectorAll('.pathways [data-pathway]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.pathway === S.pathway)));
+    $('#hero').dataset.searchBy = S.pathway;
+    $('#q').placeholder = S.pathway === 'author' ? 'Author name or ORCID iD' : 'Keywords, a phrase, a question or a DOI';
+    $('#hero-lede').textContent = S.pathway === 'author' ? 'Look up a researcher by name or ORCID iD and see all their work, grouped by field.' : 'Search open scholarly databases and see, for each paper, why it may matter to you.';
+    const lab = document.querySelector('label[for="q"]'); if (lab) lab.textContent = S.pathway === 'author' ? 'Author name or ORCID iD' : 'Search terms, research question or DOI';
+  }
   function renderModes() {
+    renderPathway();
     const hp = hasProfile();
     document.querySelectorAll('#modes button').forEach(b => {
       const m = b.dataset.mode;
@@ -419,6 +437,12 @@
   function renderInterp() {
     const s = S.search;
     if (s.kind === 'trail') { renderTrailHeader(); return; }
+    if (s.kind === 'doi') {
+      const st = s.status.doi || {};
+      $('#interp').innerHTML = `<div class="panel ${st.ok === false ? 'warn' : ''}"><strong>${st.ok === false ? 'No paper found for this DOI.' : 'Paper found from its DOI.'}</strong> <code>${esc(s.q)}</code>
+        <p class="tiny" style="margin:4px 0 0">${esc(st.msg || 'Use Explore on the card to see papers citing it, its references or similar papers.')}</p></div>`;
+      return;
+    }
     const a = s.analysis;
     const bits = [];
     bits.push(`<p>Keyword search: <code>${esc(a.keywordQuery)}</code></p>`);
@@ -454,7 +478,7 @@
   }
   function renderMap() {
     const s = S.search;
-    if (!s.themes || !s.ranked.length) { $('#map-holder').innerHTML = ''; return; }
+    if (!s.themes || !s.ranked.length || (s.kind !== 'search' && s.kind !== 'trail')) { $('#map-holder').innerHTML = ''; return; }
     const { themes, hasProfile: hp } = s.themes;
     const top = themes.filter(t => t.id !== 'none').slice(0, 12);
     if (top.length < 2) { $('#map-holder').innerHTML = ''; return; }
@@ -512,10 +536,21 @@
     if (f.oaOnly) chips.push(`<li class="chip">Open access <button data-clear="oaOnly" aria-label="Clear">×</button></li>`);
     if (f.theme && s.themes) { const t = s.themes.themes.find(x => x.id === f.theme); if (t) chips.push(`<li class="chip">Theme: ${esc(t.name)} <button data-clear="theme" aria-label="Clear theme">×</button></li>`); }
     $('#filterbar').innerHTML = `<div class="filterbar"><button type="button" class="btn small" id="open-filters">Filters${filtersActive() ? ' (on)' : ''}</button>
-      <label class="sortsel"><span class="sr-only">Sort results</span><select id="sort"><option value="best" ${S.sort === 'best' ? 'selected' : ''}>Best match</option><option value="newest" ${S.sort === 'newest' ? 'selected' : ''}>Newest first</option><option value="cited" ${S.sort === 'cited' ? 'selected' : ''}>Most cited</option></select></label>
-      <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${Math.min(s.shown, vis.length)} of ${vis.length} shown</span></div>`;
+      <label class="sortsel"><span class="sr-only">Sort results</span><select id="sort">${sortOptions(s)}</select></label>
+      <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${s.kind === 'author' ? `${fmt(vis.length)} works` : `${Math.min(s.shown, vis.length)} of ${vis.length} shown`}</span></div>`;
   }
 
+  function sortOptions(s) {
+    const opt = (v, label, on) => `<option value="${v}" ${on ? 'selected' : ''}>${label}</option>`;
+    if (s.kind === 'author' && !hasProfile()) return opt('best', 'Newest first', S.sort !== 'cited') + opt('cited', 'Most cited', S.sort === 'cited');
+    return opt('best', s.kind === 'author' ? 'Closest to my work' : 'Best match', S.sort === 'best') + opt('newest', 'Newest first', S.sort === 'newest') + opt('cited', 'Most cited', S.sort === 'cited');
+  }
+  // Author names as buttons that open that author's works (when OpenAlex gives an author id).
+  function authorLinks(w, n) {
+    const names = w.authors || []; const ids = w.authorIds || [];
+    const shown = names.slice(0, n).map((name, i) => ids[i] ? `<button type="button" class="auth" data-author-id="${esc(shortId(ids[i]))}" data-author-name="${esc(name)}">${esc(name)}</button>` : esc(name));
+    return shown.join(', ') + (names.length > n ? ' et al.' : '');
+  }
   function primaryLink(w) { return safeUrl(w.doi ? `https://doi.org/${w.doi}` : w.landing) || safeUrl(w.oaUrl) || safeUrl(w.openalexId); }
 
   function highlight(text, hset) {
@@ -533,7 +568,7 @@
     const lvl = Math.max(1, Math.min(5, Math.ceil(5 * Math.max(0, w.rank.score) / (c.topScore || 1))));
     const lvlName = ['', 'weak', 'weak', 'fair', 'good', 'strong'][lvl];
     const meter = `<span class="meter m${lvl}" role="img" aria-label="Match ${lvlName}${closeCls === 'close' ? ', close to your work' : closeCls === 'adj' ? ', outside your listed areas' : ''}" title="Match: ${lvlName}"><i></i><i></i><i></i><i></i><i></i></span>`;
-    const authors = w.authors.length > 3 ? `${w.authors.slice(0, 3).join(', ')} et al.` : w.authors.join(', ');
+    const authors = authorLinks(w, 3);
     const saved = S.saved.has(w.key);
     const link = primaryLink(w);
     const free = safeUrl(w.oaUrl) && w.isOA ? safeUrl(w.oaUrl) : '';
@@ -545,7 +580,7 @@
     return `<li class="paper ${closeCls}" data-key="${esc(w.key)}">
       <div class="badges">${S.search && S.search.since && w.date && w.date >= S.search.since ? '<span class="badge new">New</span>' : ''}<span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}${w.cites ? `<span class="badge">Cited by ${fmt(w.cites)}</span>` : ''}${meter}</div>
       <h3>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
-      <p class="byline">${esc(authors)}${authors ? '. ' : ''}${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
+      <p class="byline">${authors}${authors ? '. ' : ''}${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
       <div class="why"><ul>${reasons}</ul>${ev}${ex.note ? `<p class="note">${esc(ex.note)}</p>` : ''}</div>
       <div class="actions">
         <button type="button" class="save" data-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>
@@ -617,7 +652,8 @@
   }
 
   function renderAll() {
-    if (!S.search) return;
+    if (!S.search || S.search.kind === 'authorpick') return;
+    if (S.search.kind === 'author') { renderModes(); renderAuthorView(); return; }
     renderModes(); renderInterp(); renderMap(); renderAnswer(); renderResults(); renderCompare();
   }
 
@@ -651,7 +687,7 @@
     f.yearFrom = y($('#f-y1').value); f.yearTo = y($('#f-y2').value);
     f.oaOnly = $('#f-oa').checked;
     S.search.shown = PAGE;
-    closeSheet(); renderResults();
+    closeSheet(); S.search.kind === 'author' ? renderAuthorView() : renderResults();
   }
 
   // ---------------------------------------------------------------- saving
@@ -842,6 +878,217 @@
     rerank(); renderAll();
   }
 
+  // ---------------------------------------------------------------- author pathway
+  function newAuthorState(kind, q) {
+    return { kind, q, analysis: C.analyzeQuery('', S.profile, {}), choices: {}, sense: null, pool: new Map(), ranked: [], themes: null,
+      status: {}, pages: { oa_author: 1 }, exhausted: {}, shown: PAGE, cost: 0, sem: new Map(), dupes: 0, fetched: 0, answer: null };
+  }
+  async function runAuthorSearch(raw) {
+    raw = String(raw || '').trim(); if (!raw) return;
+    $('#q').value = raw;
+    const token = ++searchToken;
+    if (location.hash && location.hash !== '#search') location.hash = '#search';
+    S.prevSearch = null; S.filters.theme = null;
+    S.search = newAuthorState('authorpick', raw);
+    clearSearchUI(); setLoading('Looking up authors…');
+    const orcid = /\d{4}/.test(raw) ? C.normOrcid(raw) : null;
+    const r = orcid ? await getJSON(oaPath(`/authors/orcid:${orcid}`)) : await getJSON(oaPath('/authors', { search: raw, per_page: 8 }));
+    if (token !== searchToken) return;
+    addCost(r); setLoading(null);
+    if (!r.ok) {
+      $('#clarify').innerHTML = `<div class="panel warn" role="alert">${r.status === 404 && orcid ? `OpenAlex has no author linked to ORCID ${esc(orcid)}.` : esc(failText('OpenAlex', r))}</div>`;
+      return;
+    }
+    const cands = (orcid ? [r.data] : (r.data.results || [])).map(C.normAuthor).filter(Boolean);
+    S.search.candidates = cands;
+    if (!cands.length) { $('#clarify').innerHTML = `<div class="panel">No authors named “${esc(raw)}” in OpenAlex. Check the spelling, try initials (e.g. “P. Blom”), or search by topic instead.</div>`; return; }
+    if (cands.length === 1) { openAuthor(cands); return; }
+    renderAuthorPicker(cands);
+  }
+  function renderAuthorPicker(cands) {
+    const q = S.search.q;
+    $('#clarify').innerHTML = `<div class="panel ask" role="group" aria-labelledby="ap-h">
+      <h3 id="ap-h">Which “${esc(q)}”?</h3>
+      <p class="small muted">OpenAlex sometimes splits one person into several profiles. Tick every profile that is the same person, then show their works.</p>
+      <ul class="authors">${cands.map((c, i) => `<li><label class="acand"><input type="checkbox" name="acand" value="${i}" ${i === 0 ? 'checked' : ''}>
+        <span class="avatar" aria-hidden="true">${esc(C.initials(c.name))}</span>
+        <span class="ainfo"><span class="aname"><strong>${esc(c.name)}</strong>${c.orcid ? ' <span class="badge oa">ORCID</span>' : ''}</span>
+          <span class="small muted">${esc(c.inst || 'Institution not listed')}${c.country ? `, ${esc(c.country)}` : ''}</span>
+          <span class="tiny">${fmt(c.works)} works, cited ${fmt(c.cites)} times${c.h != null ? `, h‑index ${c.h}` : ''}</span>
+          ${c.topics.length ? `<span class="tiny">${esc(c.topics.slice(0, 2).map(t => t.name).join('; '))}</span>` : ''}</span></label></li>`).join('')}</ul>
+      <div class="row" style="margin-top:10px"><button type="button" class="btn primary" id="author-open">Show works</button><span class="tiny">Profiles are listed by how well the name matches.</span></div></div>`;
+  }
+  // Open one or more author profiles (combined) and load their works grouped by field.
+  async function openAuthor(cands, opts = {}) {
+    const token = ++searchToken;
+    const prev = S.search && (S.search.kind === 'search' || S.search.kind === 'trail' || S.search.kind === 'author') && !opts.noBack ? S.search : S.prevSearch;
+    const ids = cands.map(c => shortId(c.id));
+    const s = newAuthorState('author', cands[0].name);
+    s.author = { cands, ids, name: cands[0].name };
+    s.openFields = new Set(); s.fieldShown = {}; s.fieldCounts = null; s.fieldDone = {}; s.hiddenFields = new Set();
+    S.search = s; S.prevSearch = prev && prev !== s ? prev : null; S.filters.theme = null;
+    S.pathway = 'author'; renderPathway();
+    $('#q').value = cands[0].name;
+    if (location.hash && location.hash !== '#search') location.hash = '#search';
+    clearSearchUI(); window.scrollTo(0, 0);
+    setLoading(`Loading works by ${cands[0].name}…`);
+    const jobs = [getJSON(oaURL({ filter: `author.id:${ids.join('|')}`, group_by: 'primary_topic.field.id' })),
+      getJSON(oaURL({ filter: `author.id:${ids.join('|')}`, sort: 'publication_year:asc', per_page: 1, select: 'publication_year' }))];
+    const needDetails = cands.filter(c => !c.full);
+    needDetails.forEach(c => jobs.push(getJSON(oaPath(`/authors/${shortId(c.id)}`))));
+    const [gb, first, ...details] = await Promise.all(jobs);
+    if (token !== searchToken) return;
+    addCost(gb); addCost(first);
+    if (first.ok && first.data.results && first.data.results[0]) s.firstYear = first.data.results[0].publication_year || null;
+    if (gb.ok) {
+      s.fieldCounts = (gb.data.group_by || []).map(g => {
+        const known = g.key_display_name && g.key_display_name !== 'unknown' && g.key !== 'unknown';
+        return { name: known ? g.key_display_name : 'Not classified', count: g.count, id: known ? shortId(g.key) : null };
+      });
+      s.totalWorks = gb.data.meta ? gb.data.meta.count : null;
+      const summed = s.fieldCounts.reduce((t, f) => t + f.count, 0);
+      if (s.totalWorks && s.totalWorks > summed && !s.fieldCounts.some(f => f.name === 'Not classified')) s.fieldCounts.push({ name: 'Not classified', count: s.totalWorks - summed, id: null });
+    } else s.status.groupby = { ok: false, label: 'OpenAlex field counts', msg: failText('OpenAlex', gb) };
+    details.forEach((d, i) => { if (d.ok) { const full = C.normAuthor(d.data); const idx = cands.indexOf(needDetails[i]); if (full && idx >= 0) cands[idx] = full; } });
+    await fetchAuthorBatch(token);
+  }
+  async function fetchAuthorBatch(token) {
+    const s = S.search; if (!s || s.kind !== 'author' || s.exhausted.oa_author) return;
+    setLoading(s.fetched ? 'Loading more works…' : `Loading works by ${s.author.name}…`);
+    const page = s.pages.oa_author;
+    const r = await getJSON(oaURL({ filter: `author.id:${s.author.ids.join('|')}`, per_page: 200, page, sort: 'publication_date:desc', select: OA_SELECT }), { timeout: 30000 });
+    if (token !== searchToken) return;
+    setLoading(null);
+    if (!r.ok) { s.status.oa_author = { ok: false, label: 'OpenAlex works', msg: failText('OpenAlex', r) }; s.exhausted.oa_author = true; rerank(); renderAll(); return; }
+    addCost(r);
+    const res = r.data.results || [];
+    const items = res.map((w, k) => C.normOpenAlex(w, 'oa_author', (page - 1) * 200 + k + 1));
+    C.dedupeInto(s.pool, items);
+    s.fetched = s.pool.size;
+    const total = r.data.meta ? r.data.meta.count : res.length;
+    s.status.oa_author = { ok: true, label: 'OpenAlex works', n: s.fetched, total };
+    if (!s.totalWorks) s.totalWorks = total;
+    s.pages.oa_author++;
+    if (res.length < 200 || s.fetched >= total) s.exhausted.oa_author = true;
+    rerank(); renderAll();
+  }
+  // Fetch all of the author's works in one field (used when the first pages did not include them all).
+  async function loadField(name) {
+    const s = S.search; if (!s || s.kind !== 'author' || s.exhausted.oa_author) return false;
+    const fc = (s.fieldCounts || []).find(f => f.name === name);
+    if (!fc || !fc.id || s.fieldDone[name]) return false;
+    const have = [...s.pool.values()].filter(w => (w.topic && w.topic.field) === name).length;
+    if (have >= fc.count) { s.fieldDone[name] = true; return false; }
+    const token = searchToken;
+    setLoading(`Loading all ${fmt(fc.count)} works in ${name}…`);
+    for (let page = 1; page <= 5; page++) {
+      const r = await getJSON(oaURL({ filter: `author.id:${s.author.ids.join('|')},primary_topic.field.id:${fc.id}`, per_page: 200, page, sort: 'publication_date:desc', select: OA_SELECT }), { timeout: 30000 });
+      if (token !== searchToken) return false;
+      if (!r.ok) { s.status.field = { ok: false, label: 'OpenAlex field works', msg: failText('OpenAlex', r) }; break; }
+      addCost(r);
+      const res = r.data.results || [];
+      C.dedupeInto(s.pool, res.map((w, k) => C.normOpenAlex(w, 'oa_author', 100000 + (page - 1) * 200 + k)));
+      if (res.length < 200) break;
+    }
+    s.fieldDone[name] = true; s.fetched = s.pool.size;
+    setLoading(null); rerank();
+    return true;
+  }
+  function authorSorted(list) {
+    const by = S.sort === 'cited' ? (a, b) => (b.cites || 0) - (a.cites || 0)
+      : S.sort === 'best' && hasProfile() ? (a, b) => (b.rank.prof - a.rank.prof) || String(b.date || b.year).localeCompare(String(a.date || a.year))
+      : (a, b) => String(b.date || b.year || '').localeCompare(String(a.date || a.year || ''));
+    return list.slice().sort(by);
+  }
+  const fieldSlug = f => 'fg-' + f.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  function wrowHTML(w) {
+    const ti = w.typeInfo; const link = primaryLink(w); const saved = S.saved.has(w.key);
+    const co = (w.authors || []).length ? `<div class="wco">${authorLinks(w, 4)}</div>` : '';
+    return `<li class="wrow" data-key="${esc(w.key)}">
+      <div class="badges"><span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}</div>
+      ${link ? `<a class="wt" href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : `<span class="wt">${esc(w.title)}</span>`}
+      <div class="wmeta">${w.venue ? `<span class="venue">${esc(w.venue)}</span>, ` : ''}${w.year || 'n.d.'}${w.cites ? `, cited by ${fmt(w.cites)}` : ''}${w.topic ? `. ${esc(w.topic.name)}` : ''}</div>
+      ${co}
+      <div class="actions"><button type="button" class="save" data-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>
+        ${w.cites ? `<button type="button" class="btn link" data-trail="cites" data-key="${esc(w.key)}">Cited by ${fmt(w.cites)}</button>` : ''}
+        <button type="button" class="btn link" data-trail="refs" data-key="${esc(w.key)}">References</button>
+        <button type="button" class="btn link" data-trail="related" data-key="${esc(w.key)}">Similar</button></div></li>`;
+  }
+  function renderAuthorView() {
+    const s = S.search; const a = s.author; const c0 = a.cands[0];
+    const vis = visibleWorks();
+    const years = [...s.pool.values()].map(w => w.year).filter(Boolean);
+    const y0 = s.exhausted.oa_author || !s.firstYear ? (years.length ? Math.min(...years) : null) : s.firstYear;
+    const y1 = years.length ? Math.max(...years) : null;
+    const cites = a.cands.reduce((t, c) => t + (c.cites || 0), 0);
+    const hs = a.cands.map(c => c.h).filter(h => h != null);
+    const fails = Object.values(s.status).filter(x => x && x.ok === false);
+    $('#interp').innerHTML = `${fails.length ? `<div class="panel warn" role="alert"><strong>Incomplete.</strong> ${fails.map(f => esc(f.msg)).join(' ')}</div>` : ''}
+      <div class="panel author-head">
+        <div class="ah-top"><span class="avatar big" aria-hidden="true">${esc(C.initials(a.name))}</span>
+          <div><h2 class="ah-name">${esc(a.name)}</h2><p class="small muted" style="margin:0">${esc(c0.inst || '')}${c0.country ? `, ${esc(c0.country)}` : ''}</p>
+          ${c0.orcid ? `<p class="tiny" style="margin:2px 0 0">ORCID <a href="https://orcid.org/${esc(c0.orcid)}" target="_blank" rel="noopener">${esc(c0.orcid)}</a></p>` : ''}</div></div>
+        <dl class="ah-stats">
+          <div><dt>Works</dt><dd>${s.totalWorks != null ? fmt(s.totalWorks) : '–'}</dd></div>
+          <div><dt>Citations</dt><dd>${fmt(cites)}</dd></div>
+          <div><dt>h-index</dt><dd>${hs.length ? Math.max(...hs) : '–'}</dd></div>
+          <div><dt>Active</dt><dd>${y0 && y1 ? (y0 === y1 ? y0 : `${y0}–${y1}`) : '–'}</dd></div></dl>
+        <p class="tiny ah-note">OpenAlex links papers to people automatically and sometimes merges people with similar names. A field that looks out of place may hold someone else’s papers; you can hide it below.</p>
+        ${a.cands.length > 1 ? `<p class="tiny">Combining ${a.cands.length} OpenAlex profiles: ${esc(a.cands.map(c => c.name).join('; '))}. Citations are summed; the h-index shown is the largest single profile’s.</p>` : ''}
+        <div class="row">${S.prevSearch ? `<button type="button" class="btn small" id="trail-back">Back to “${esc(S.prevSearch.q.length > 32 ? S.prevSearch.q.slice(0, 30) + '…' : S.prevSearch.q)}”</button>` : ''}
+          <a class="small" href="${esc(safeUrl(c0.id))}" target="_blank" rel="noopener">OpenAlex profile</a></div>
+        <p class="tiny" style="margin:6px 0 0">${s.status.oa_author && s.status.oa_author.ok ? `${fmt(s.fetched)} of ${fmt(s.status.oa_author.total)} works loaded. ` : ''}OpenAlex cost: $${s.cost.toFixed(4)}.</p></div>`;
+    // field bars: counts over all works (group_by), else over loaded works
+    const rows = s.fieldCounts && s.fieldCounts.length ? s.fieldCounts.slice() : C.groupByField(vis).map(g => ({ name: g.field, count: g.count }));
+    rows.sort((x, y) => (x.name === 'Not classified') - (y.name === 'Not classified') || y.count - x.count);
+    const total = rows.reduce((t, r) => t + r.count, 0) || 1; const max = Math.max(1, ...rows.map(r => r.count));
+    $('#map-holder').innerHTML = rows.length ? `<section class="panel fields" aria-labelledby="fields-h"><h3 id="fields-h">Works by field</h3>
+      <p class="tiny" style="margin-top:0">${s.fieldCounts ? `All ${fmt(total)} works, by the field of each work’s main topic in OpenAlex.` : 'Works loaded so far, by the field of each work’s main topic.'} Tap a field to open it.</p>
+      <ul class="fbars">${rows.map(r => `<li><button type="button" data-field-jump="${esc(r.name)}"><span class="fb-label"><span>${esc(r.name)}</span><span class="fb-n">${fmt(r.count)} <span class="tiny">${Math.round(100 * r.count / total)}%</span></span></span><span class="fb-track" aria-hidden="true"><span class="fb-bar" style="width:${(100 * r.count / max).toFixed(1)}%"></span></span></button></li>`).join('')}</ul></section>` : '';
+    $('#answer-holder').innerHTML = ''; $('#compare-holder').innerHTML = '';
+    renderFilterbar(vis);
+    const allGroups = C.groupByField(vis);
+    const groups = allGroups.filter(g => !s.hiddenFields.has(g.field));
+    const hidden = allGroups.filter(g => s.hiddenFields.has(g.field));
+    const serverField = name => (s.fieldCounts || []).find(x => x.name === name) || null;
+    if (!s.openFields.size && groups.length) s.openFields.add(groups[0].field);
+    $('#results').innerHTML = groups.length ? groups.map(g => {
+      const n = s.fieldShown[g.field] || 8; const list = authorSorted(g.works);
+      const sf = serverField(g.field); const all = sf ? sf.count : null;
+      const missing = !s.exhausted.oa_author && !s.fieldDone[g.field] && sf && sf.id && all > g.count && !filtersActive();
+      const more = g.count > n ? `Show all ${fmt(missing ? all : g.count)} in ${esc(g.field)}` : missing ? `Load the other ${fmt(all - g.count)} in ${esc(g.field)}` : '';
+      return `<li class="fgroup" id="${fieldSlug(g.field)}"><details ${s.openFields.has(g.field) ? 'open' : ''} data-field-group="${esc(g.field)}">
+        <summary><span class="fg-name">${esc(g.field)}</span> <span class="fg-n">${fmt(g.count)}${missing ? ` <span class="tiny">of ${fmt(all)}</span>` : ''}</span><span class="fg-sub tiny">${g.years ? `${g.years[0]}–${g.years[1]}` : ''}${g.topTopics.length ? `${g.years ? '. ' : ''}${esc(g.topTopics.map(t => t.name).join('; '))}` : ''}</span></summary>
+        <ol class="wlist">${list.slice(0, n).map(wrowHTML).join('')}</ol>
+        <div class="row fg-foot">${more ? `<button type="button" class="btn small fg-more" data-fg-more="${esc(g.field)}">${more}</button>` : ''}
+          <button type="button" class="btn link" data-fg-hide="${esc(g.field)}">Hide this field</button></div></details></li>`;
+    }).join('') + (hidden.length ? `<li class="fg-hidden small muted">Hidden: ${hidden.map(g => `${esc(g.field)} (${fmt(g.count)}) <button type="button" class="btn link" data-fg-show="${esc(g.field)}">Show</button>`).join('; ')}</li>` : '')
+      : `<li class="panel">${s.status.oa_author && s.status.oa_author.ok ? 'No works match your filters.' : 'No works loaded.'}</li>`;
+    $('#more').innerHTML = !s.exhausted.oa_author ? `<button type="button" class="btn" id="author-more">Load more works</button><span class="tiny">${fmt(s.fetched)} of ${fmt(s.status.oa_author ? s.status.oa_author.total : 0)} loaded. Field counts above already cover all works.</span>` : '';
+  }
+  const doiPath = doi => encodeURI(doi).replace(/[#?]/g, c => encodeURIComponent(c));
+  async function runDOI(doi) {
+    const token = ++searchToken;
+    $('#q').value = doi;
+    S.prevSearch = null; S.filters.theme = null;
+    const s = newAuthorState('doi', doi); S.search = s;
+    clearSearchUI(); setLoading('Looking up the DOI…');
+    let r = await getJSON(oaPath(`/works/doi:${doiPath(doi)}`));
+    if (token !== searchToken) return;
+    let w = null;
+    if (r.ok) w = C.normOpenAlex(r.data, 'oa_doi', 1);
+    else {
+      const c = await getJSON(`${CR}/works/${doiPath(doi)}`, { timeout: 15000 });
+      if (token !== searchToken) return;
+      if (c.ok && c.data && c.data.message) { w = C.normCrossref(c.data.message, 1); s.status.doi = { ok: true, msg: 'Not in OpenAlex; found in Crossref, so citation links are not available.' }; }
+    }
+    setLoading(null);
+    if (!w) { s.status.doi = { ok: false, msg: r.status === 404 ? 'Neither OpenAlex nor Crossref has a record of it. Check the DOI.' : failText('OpenAlex', r) }; renderInterp(); return; }
+    s.analysis = C.analyzeQuery(w.title, S.profile, {});
+    C.dedupeInto(s.pool, [w]); s.fetched = 1;
+    rerank(); renderAll();
+  }
+
   // ---------------------------------------------------------------- answer mode (user's own AI key)
   function llmReady() {
     const st = S.settings;
@@ -976,6 +1223,8 @@
   const FEATURES = [
     ['Profile from CV or statement', 'ok', 'Rule-based extraction in the browser (PDF, .docx, text). Editable. Works best on English CVs with section headings.'],
     ['Profile from ORCID', 'ok', 'Reads your publications in OpenAlex: their keywords, topics, titles and abstracts.'],
+    ['Author search', 'ok', 'Search by name or ORCID iD; pick or combine profiles; all works grouped by field with counts. Tap any author name on a result to open their works.'],
+    ['DOI lookup', 'ok', 'Paste a DOI in the search box to open that paper (OpenAlex, then Crossref).'],
     ['Related terms from the results', 'ok', 'Works in any field: terms OpenAlex attaches to many top results. Tap to search them too.'],
     ['Citation trail', 'ok', 'Citing papers, references and similar papers for any result.'],
     ['Sort by best match, newest or most cited', 'ok', 'Newest first also fetches recent papers (last 3 years).'],
@@ -1050,7 +1299,7 @@
       if (S.search) { S.search.shown = PAGE; rerank(); renderAll(); }
       return;
     }
-    if (t.closest('#examples')) { runSearch(t.textContent); return; }
+    if (t.closest('#examples') && !d.authorExample) { S.pathway = 'topic'; store.set('pathway', 'topic'); renderPathway(); runSearch(t.textContent); return; }
     if (d.acr !== undefined && d.long !== undefined) { runSearch(S.search.q, { choices: { ...S.search.choices, [d.acr]: d.long } }); return; }
     if (d.field) {
       if (d.field === 'all') runSearch(S.search.q, { choices: S.search.choices, allFields: true });
@@ -1076,10 +1325,36 @@
       applyAppearance(next); toast(`Appearance: ${APPEARANCE_NAMES[next]}`); return;
     }
     if (t.id === 'home-link') { goHome(); return; }
+    if (d.pathway && t.closest('.pathways')) {
+      S.pathway = d.pathway; store.set('pathway', S.pathway); renderPathway(); $('#q').focus(); return;
+    }
+    if (d.authorExample) { S.pathway = 'author'; store.set('pathway', 'author'); renderPathway(); runAuthorSearch(d.authorExample); return; }
+    if (t.id === 'author-open') {
+      const picked = [...document.querySelectorAll('input[name="acand"]:checked')].map(i => S.search.candidates[Number(i.value)]).filter(Boolean);
+      if (!picked.length) { toast('Tick at least one profile'); return; }
+      openAuthor(picked, { noBack: true }); return;
+    }
+    if (d.authorId) { openAuthor([{ id: `https://openalex.org/${d.authorId}`, name: d.authorName || 'Author', topics: [], full: false }]); return; }
+    if (d.fieldJump !== undefined) {
+      const s = S.search; const name = d.fieldJump; s.openFields.add(name);
+      const go = () => { renderAuthorView(); const el = document.getElementById(fieldSlug(name)); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); const sm = el.querySelector('summary'); if (sm) sm.focus({ preventScroll: true }); } };
+      const has = [...s.pool.values()].some(w => (w.topic && w.topic.field || 'Not classified') === name);
+      if (!has) loadField(name).then(go); else go();
+      return;
+    }
+    if (d.fgMore !== undefined) {
+      const s = S.search; const name = d.fgMore; s.fieldShown[name] = 100000; s.openFields.add(name);
+      loadField(name).then(() => renderAuthorView()); return;
+    }
+    if (d.fgHide !== undefined) { S.search.hiddenFields.add(d.fgHide); renderAuthorView(); toast(`Hid ${d.fgHide}`); return; }
+    if (d.fgShow !== undefined) { S.search.hiddenFields.delete(d.fgShow); S.search.openFields.add(d.fgShow); renderAuthorView(); return; }
+    if (t.id === 'author-more') { fetchAuthorBatch(searchToken); return; }
     if (d.trail && d.key) { const w = S.search && S.search.pool.get(d.key); if (w) runTrail(w, d.trail); return; }
     if (d.trailSwitch) { runTrail(S.search.trail.seed, d.trailSwitch); return; }
     if (t.id === 'trail-back' && S.prevSearch) {
-      searchToken++; S.search = S.prevSearch; S.prevSearch = null; $('#q').value = S.search.q; clearSearchUI(); rerank(); renderAll(); window.scrollTo(0, 0); return;
+      searchToken++; S.search = S.prevSearch; S.prevSearch = null; $('#q').value = S.search.q;
+      S.pathway = S.search.kind === 'author' ? 'author' : 'topic'; renderPathway();
+      clearSearchUI(); rerank(); renderAll(); window.scrollTo(0, 0); return;
     }
     if (d.relatedAdd !== undefined || d.relatedRm !== undefined) {
       const s = S.search; const cur = (s.choices.related || []).slice();
@@ -1106,14 +1381,14 @@
     if (t.id === 'open-filters') { openFilters(); return; }
     if (d.closeSheet !== undefined) { closeSheet(); return; }
     if (t.id === 'apply-filters') { applyFilters(); return; }
-    if (t.id === 'reset-filters') { S.filters = { cats: new Set(CATS.map(c => c[0])), hideInferred: false, yearFrom: '', yearTo: '', oaOnly: false, theme: S.filters.theme }; closeSheet(); renderResults(); return; }
+    if (t.id === 'reset-filters') { S.filters = { cats: new Set(CATS.map(c => c[0])), hideInferred: false, yearFrom: '', yearTo: '', oaOnly: false, theme: S.filters.theme }; closeSheet(); S.search.kind === 'author' ? renderAuthorView() : renderResults(); return; }
     if (d.clear) {
       const f = S.filters;
       if (d.clear === 'cats') f.cats = new Set(CATS.map(c => c[0]));
       else if (d.clear === 'years') { f.yearFrom = ''; f.yearTo = ''; }
       else if (d.clear === 'theme') { f.theme = null; renderMap(); }
       else f[d.clear] = false;
-      renderResults(); return;
+      S.search.kind === 'author' ? renderAuthorView() : renderResults(); return;
     }
     if (t.id === 'show-more') { S.search.shown += PAGE; renderResults(); return; }
     if (t.id === 'fetch-more') { S.search.shown += PAGE; fetchBatch(searchToken); return; }
@@ -1143,6 +1418,10 @@
     if (t.id === 'ai-on') { loadAI(false); return; }
     if (t.id === 'ai-off') { S.ai.status = 'off'; S.ai.pipe = null; S.settings.ai = false; saveSettings(); renderAI(); if (S.search) { S.search.sem = new Map(); rerank(); renderAll(); } return; }
   });
+  document.addEventListener('toggle', e => {
+    const dg = e.target && e.target.dataset && e.target.dataset.fieldGroup;
+    if (dg !== undefined && S.search && S.search.openFields) { e.target.open ? S.search.openFields.add(dg) : S.search.openFields.delete(dg); }
+  }, true);
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && $('#sheet-root').innerHTML) closeSheet();
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-theme], [data-exp]')) { e.preventDefault(); e.target.click(); }
@@ -1150,7 +1429,14 @@
   document.addEventListener('submit', e => {
     e.preventDefault();
     const f = e.target;
-    if (f.id === 'search-form') { runSearch($('#q').value); $('#q').blur(); return; }
+    if (f.id === 'search-form') {
+      const q = $('#q').value.trim(); $('#q').blur();
+      if (!q) return;
+      if (S.pathway === 'author') { runAuthorSearch(q); return; }
+      const doi = C.isDOI(q);
+      if (doi) runDOI(doi); else runSearch(q);
+      return;
+    }
     if (f.id === 'orcid-form') { importOrcid($('#orcid').value); return; }
     if (f.dataset.acrForm) { const v = $('input', f).value.trim(); if (v) runSearch(S.search.q, { choices: { ...S.search.choices, [f.dataset.acrForm]: v } }); return; }
     if (f.dataset.addterm) {
@@ -1174,6 +1460,7 @@
       const s = S.search; if (!s) return;
       s.shown = PAGE;
       if (S.sort === 'newest' && s.kind === 'search' && !s.wantRecent && !s.since) { s.wantRecent = true; fetchBatch(searchToken, { only: ['oa_recent'] }); }
+      else if (s.kind === 'author') renderAuthorView();
       else renderResults();
     }
     if (t.id === 'llm-provider') {
