@@ -4,9 +4,9 @@ A free research discovery app. You type a few words or a question; Paperscope se
 
 Paperscope is **not** Google Scholar. It searches different sources, ranks differently, and makes no claim to match Scholar's results. See `EVALUATION.md` for how it compares and where it falls short.
 
-The whole app is one file, `index.html` (about 150 KB). There is no server, account or paid AI service.
+The whole app is one file, `index.html` (about 290 KB, including its typeface).
 
-**Live version:** <https://branadeb.github.io/Paperscope/>
+**Live version:** <https://branadeb.github.io/Paperscope/> There is no server, account or paid AI service.
 
 ## Running it
 
@@ -41,6 +41,7 @@ OpenAlex meters its free API. Without a key you get about $0.10 of free use per 
 | Theme map | Working | Built from OpenAlex topics. Inner ring overlaps your profile; outer ring is adjacent; dashed ring marks themes with many recent papers. Tap to filter. |
 | Filters: publication type, year, open access | Working | Applied to fetched results; can re-query the databases with year, open-access, review or preprint filters. |
 | Paging | Working | 10 at a time, then fetches more from the databases. |
+| Appearance: Light, Dark or Auto | Working | Like macOS: Auto follows the device setting. Header button or About › Settings; remembered on the device. |
 | Save, export (BibTeX, RIS, CSV), open publisher or repository page | Working | Saved papers live in this browser only. |
 | Incomplete-results warnings | Working | Each source's status is shown; failures and exhausted allowances are explained. |
 | On-device relevance model | Prototype | Optional all-MiniLM-L6-v2 (Apache 2.0) running in the browser. Tested in desktop Chrome; not yet measured on a phone. |
@@ -103,12 +104,17 @@ The brief asked for a free, open-weight model running on the device. What was bu
 - Saved papers and settings are per browser. Clearing site data deletes them; export first.
 - The synonym list is small and hand-made. Meaning-based search covers much of the rest.
 
+## Design
+
+A night-sky hero and theme map with a thin light-spectrum band as the signature; titles in Spectral (Production Type, SIL Open Font License), embedded in the page so no font is fetched from another site; a phone-style tab bar at the bottom on small screens. Each result shows a five-bar match meter: teal when it overlaps your profile, amber when it lies outside your listed areas. Checked with axe-core in light, dark and auto modes (no WCAG 2 A/AA violations).
+
 ## Development
 
 ```
 src/core.js      ranking, profile extraction, query analysis, types, explanations (no DOM; testable in Node)
 src/app.js       user interface
-src/styles.css   styles
+src/styles.css   styles (light and dark themes)
+src/fonts/       Spectral web fonts and licence (OFL)
 src/index.html   page template
 tools/build.mjs  inlines everything into dist/index.html
 test/core.test.cjs   unit tests (node test/core.test.cjs)

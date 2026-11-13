@@ -46,6 +46,7 @@ function mockOpenAlex(req, u) {
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.setRequestInterception(true);
   page.on('request', req => {
+    if (req.url().startsWith('data:')) return req.continue();
     const u = new URL(req.url());
     if (u.hostname === 'localhost') return req.continue();
     if (req.method() === 'OPTIONS') return req.respond({ status: 204, headers: CORS });

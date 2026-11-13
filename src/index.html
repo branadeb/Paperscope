@@ -4,33 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0c1430">
+<script>try{var a=JSON.parse(localStorage.getItem('paperscope.appearance')||'"auto"');if(a==='light'||a==='dark')document.documentElement.setAttribute('data-appearance',a);}catch(e){}</script>
 <meta name="description" content="Free research discovery: search OpenAlex, Crossref and Europe PMC, ranked against your own research profile, which never leaves your device.">
 <title>Paperscope: find papers that fit your research</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='none' stroke='%230e6b7b' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='7.5' fill='none' stroke='%23a2650f' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%2313202f'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='none' stroke='%230b7480' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='7.5' fill='none' stroke='%23c47f12' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%230c1430'/%3E%3C/svg%3E">
 <style>/*@@CSS@@*/</style>
 </head>
 <body>
 <header class="top">
   <div class="top-inner">
-    <div class="brand">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="var(--close)" stroke-width="2.5"/><circle cx="16" cy="16" r="7.5" fill="none" stroke="var(--adj)" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="var(--ink)"/></svg>
+    <a class="brand" href="#search" id="home-link" aria-label="Paperscope, back to the start">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="#4fc8d2" stroke-width="2.4"/><circle cx="16" cy="16" r="7.5" fill="none" stroke="#f0ac4b" stroke-width="2.4"/><circle cx="16" cy="16" r="3" fill="#eef2ff"/></svg>
       <span>Paperscope</span>
-    </div>
+    </a>
+    <button type="button" class="icon-btn" id="appearance-btn" aria-label="Appearance: Auto. Tap to change."></button>
   </div>
 </header>
 <div class="tabbar">
-    <nav class="tabs" aria-label="Sections">
-      <a href="#search" data-view="search">Search</a>
-      <a href="#profile" data-view="profile">Profile</a>
-      <a href="#saved" data-view="saved">Saved <span class="count" id="saved-count"></span></a>
-      <a href="#about" data-view="about">About</a>
-    </nav>
+  <nav class="tabs" aria-label="Sections">
+    <a href="#search" data-view="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Search</span></a>
+    <a href="#profile" data-view="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.8 4-5.6 7.5-5.6s6.3 1.8 7.5 5.6"/></svg><span>Profile</span></a>
+    <a href="#saved" data-view="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.8h11v16.7l-5.5-3.9-5.5 3.9z"/></svg><span>Saved <span class="count" id="saved-count"></span></span></a>
+    <a href="#about" data-view="about"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.1"/></svg><span>About</span></a>
+  </nav>
 </div>
 
 <main>
   <!-- SEARCH -->
   <section id="view-search" aria-labelledby="search-h">
-    <h1 id="search-h" class="sr-only">Search</h1>
+    <div class="hero" id="hero">
+    <svg class="hero-rings" viewBox="0 0 200 200" aria-hidden="true"><circle class="r" cx="100" cy="100" r="96"/><circle class="r" cx="100" cy="100" r="70"/><circle class="r" cx="100" cy="100" r="44"/><circle class="r" cx="100" cy="100" r="18"/><circle class="o1" cx="44" cy="141" r="4.5"/><circle class="o2" cx="181" cy="58" r="3.5"/><circle class="o1" cx="118" cy="57" r="2.5"/></svg>
+    <h1 id="search-h" class="hero-title">Find the papers that matter to your work.</h1>
+    <p class="hero-lede">Search open scholarly databases and see, for each paper, why it may matter to you.</p>
     <form id="search-form" class="searchbar" role="search">
       <label for="q" class="sr-only">Search terms or research question</label>
       <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Keywords, a phrase or a question">
@@ -43,11 +49,12 @@
       <button type="button" role="radio" data-mode="adjacent" aria-checked="false">Adjacent &amp; emerging</button>
     </div>
     <p class="mode-hint" id="mode-hint"></p>
+    </div>
 
     <div id="start">
-      <p class="lede">Search open scholarly databases and see, for each paper, why it may matter to your own research.</p>
       <div id="follows-start"></div>
-      <p class="muted small">Add a profile first for personalised ranking, or just try a search:</p>
+      <h2 class="start-h">Try a search</h2>
+      <p class="muted small">Add a profile first for personalised ranking, or tap an example:</p>
       <ul class="examples" id="examples">
         <li><button type="button">exciton migration in molecular crystals</button></li>
         <li><button type="button">coherence</button></li>
@@ -123,6 +130,12 @@
     <p class="small">OpenAlex now meters its free API. Without a key you get about $0.10 of free use a day (roughly 30 searches here); with a free key, $1 a day (roughly 300). Paperscope shows what each search used. When the allowance runs out, OpenAlex refuses requests until midnight UTC; it does not bill you unless you have bought prepaid credit on openalex.org. Crossref and Europe PMC are free and need no key, but may slow down busy users.</p>
 
     <h3>Settings</h3>
+    <fieldset class="appearance" id="appearance-picker"><legend>Appearance</legend>
+      <label class="ap"><input type="radio" name="appearance" value="light"><span class="ap-prev light" aria-hidden="true"><b></b><i></i></span>Light</label>
+      <label class="ap"><input type="radio" name="appearance" value="dark"><span class="ap-prev dark" aria-hidden="true"><b></b><i></i></span>Dark</label>
+      <label class="ap"><input type="radio" name="appearance" value="auto"><span class="ap-prev auto" aria-hidden="true"><b></b><i></i></span>Auto</label>
+    </fieldset>
+    <p class="tiny">Auto follows your device’s light or dark setting, like other apps.</p>
     <div class="field">
       <label for="api-key">OpenAlex API key (free, optional)</label>
       <input id="api-key" type="password" autocomplete="off" placeholder="Paste key from openalex.org/settings/api">
@@ -152,7 +165,7 @@
     <ul class="small" id="limits"></ul>
 
     <h3>Credits</h3>
-    <p class="small muted">Metadata from <a href="https://openalex.org" target="_blank" rel="noopener">OpenAlex</a> (CC0), <a href="https://www.crossref.org" target="_blank" rel="noopener">Crossref</a> and <a href="https://europepmc.org" target="_blank" rel="noopener">Europe PMC</a>. Optional model: all-MiniLM-L6-v2 (Apache 2.0) run with Transformers.js and ONNX Runtime Web. PDF reading by pdf.js; Word reading by mammoth.js. Version <span id="version"></span>.</p>
+    <p class="small muted">Metadata from <a href="https://openalex.org" target="_blank" rel="noopener">OpenAlex</a> (CC0), <a href="https://www.crossref.org" target="_blank" rel="noopener">Crossref</a> and <a href="https://europepmc.org" target="_blank" rel="noopener">Europe PMC</a>. Optional model: all-MiniLM-L6-v2 (Apache 2.0) run with Transformers.js and ONNX Runtime Web. PDF reading by pdf.js; Word reading by mammoth.js. Typeface: Spectral by Production Type (SIL Open Font License), built into the page. Version <span id="version"></span>.</p>
   </section>
 </main>
 

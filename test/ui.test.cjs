@@ -50,6 +50,7 @@ function mockOpenAlex(req, u) {
   page.on('pageerror', e => consoleErrors.push('pageerror: ' + e.message));
   await page.setRequestInterception(true);
   page.on('request', req => {
+    if (req.url().startsWith('data:')) return req.continue();
     const u = new URL(req.url());
     if (u.hostname === 'localhost') return req.continue();
     if (req.method() === 'OPTIONS') return req.respond({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } });

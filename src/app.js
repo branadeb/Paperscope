@@ -105,6 +105,35 @@
     return `${src} returned an error (${r.status}).`;
   }
 
+  // ---------------------------------------------------------------- appearance (Light / Dark / Auto, like macOS)
+  const APPEARANCE_ICONS = {
+    light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.8v2.1M12 19.1v2.1M2.8 12h2.1M19.1 12h2.1M5.5 5.5l1.5 1.5M17 17l1.5 1.5M5.5 18.5 7 17M17 7l1.5-1.5"/></svg>',
+    dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1z"/></svg>',
+    auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>',
+  };
+  const APPEARANCE_NAMES = { light: 'Light', dark: 'Dark', auto: 'Auto (follows your device)' };
+  function currentAppearance() { const a = store.get('appearance', 'auto'); return ['light', 'dark', 'auto'].includes(a) ? a : 'auto'; }
+  function applyAppearance(a) {
+    const root = document.documentElement;
+    if (a === 'light' || a === 'dark') root.setAttribute('data-appearance', a); else root.removeAttribute('data-appearance');
+    store.set('appearance', a);
+    renderAppearance();
+  }
+  function renderAppearance() {
+    const a = currentAppearance();
+    const b = $('#appearance-btn');
+    if (b) { b.innerHTML = APPEARANCE_ICONS[a]; b.setAttribute('aria-label', `Appearance: ${APPEARANCE_NAMES[a]}. Tap to change.`); b.title = `Appearance: ${APPEARANCE_NAMES[a]}`; }
+    document.querySelectorAll('input[name="appearance"]').forEach(r => { r.checked = r.value === a; });
+  }
+  function goHome() {
+    searchToken++;
+    S.search = null; S.prevSearch = null; S.filters.theme = null;
+    ['#clarify', '#interp', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
+    setLoading(null);
+    $('#start').hidden = false; $('#hero').classList.remove('compact'); $('#q').value = '';
+    renderModes(); renderFollows();
+  }
+
   // ---------------------------------------------------------------- routing
   const VIEWS = ['search', 'profile', 'saved', 'about'];
   function route() {
@@ -165,6 +194,7 @@
 
   function clearSearchUI() {
     $('#start').hidden = true;
+    $('#hero').classList.add('compact');
     ['#clarify', '#interp', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
   }
 
@@ -415,6 +445,13 @@
     $('#interp').innerHTML = `${warn}${since}${renderRelated()}<details class="panel interp"><summary class="small"><strong>How this was searched</strong></summary>${bits.join('')}</details>${follow}`;
   }
 
+  // A fixed, faint starfield behind the theme map (seeded, so it does not jump between renders).
+  function stars(W, H) {
+    let seed = 42; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    let out = '';
+    for (let i = 0; i < 46; i++) out += `<circle cx="${(rnd() * W).toFixed(1)}" cy="${(rnd() * H).toFixed(1)}" r="${(0.4 + rnd() * 0.9).toFixed(2)}" opacity="${(0.12 + rnd() * 0.35).toFixed(2)}"/>`;
+    return out;
+  }
   function renderMap() {
     const s = S.search;
     if (!s.themes || !s.ranked.length) { $('#map-holder').innerHTML = ''; return; }
@@ -444,6 +481,7 @@
       return `<text x="${lx.toFixed(1)}" y="${(ly + dy).toFixed(1)}" style="text-anchor:${anchor}">${esc(short(n.t))}</text>`;
     };
     const svg = `<svg class="map-svg" viewBox="0 0 ${W} ${H}" role="group" aria-label="Map of research themes in these results: ${inner.length} ${hp ? 'close to your profile' : 'at the core of your search'}, ${outer.length} ${hp ? 'adjacent' : 'further out'}. The same themes are listed below.">
+      <g class="sky" aria-hidden="true">${stars(W, H)}</g>
       <ellipse class="ring" cx="${cx}" cy="${cy}" rx="${R1}" ry="${R1 * SQ}"/><ellipse class="ring" cx="${cx}" cy="${cy}" rx="${R2}" ry="${R2 * SQ}"/>
       <circle class="hub" cx="${cx}" cy="${cy}" r="18"/><text class="hub-label" x="${cx}" y="${cy + 3.5}">${hp ? 'you' : 'query'}</text>
       ${nodes.map(n => {
@@ -492,6 +530,9 @@
     const ti = w.typeInfo;
     const hp = c.hasProfile;
     const closeCls = hp ? (w.rank.prof >= 0.25 ? 'close' : (w.rank.prof < 0.08 ? 'adj' : '')) : '';
+    const lvl = Math.max(1, Math.min(5, Math.ceil(5 * Math.max(0, w.rank.score) / (c.topScore || 1))));
+    const lvlName = ['', 'weak', 'weak', 'fair', 'good', 'strong'][lvl];
+    const meter = `<span class="meter m${lvl}" role="img" aria-label="Match ${lvlName}${closeCls === 'close' ? ', close to your work' : closeCls === 'adj' ? ', outside your listed areas' : ''}" title="Match: ${lvlName}"><i></i><i></i><i></i><i></i><i></i></span>`;
     const authors = w.authors.length > 3 ? `${w.authors.slice(0, 3).join(', ')} et al.` : w.authors.join(', ');
     const saved = S.saved.has(w.key);
     const link = primaryLink(w);
@@ -502,7 +543,7 @@
     const ev = ex.evidence ? `<blockquote>“${highlight(ex.evidence.text, hset)}${ex.evidence.truncated ? '…' : ''}”<cite>From the abstract (${esc(ex.evidence.from)})</cite></blockquote>` : '';
     const sem = w.rank.sem ? `; model similarity to query ${w.rank.sem.q.toFixed(2)}${w.rank.sem.p != null ? `, to profile ${w.rank.sem.p.toFixed(2)}` : ''}` : '';
     return `<li class="paper ${closeCls}" data-key="${esc(w.key)}">
-      <div class="badges">${S.search && S.search.since && w.date && w.date >= S.search.since ? '<span class="badge new">New</span>' : ''}<span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}${w.cites ? `<span class="badge">Cited by ${fmt(w.cites)}</span>` : ''}</div>
+      <div class="badges">${S.search && S.search.since && w.date && w.date >= S.search.since ? '<span class="badge new">New</span>' : ''}<span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}${w.cites ? `<span class="badge">Cited by ${fmt(w.cites)}</span>` : ''}${meter}</div>
       <h3>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
       <p class="byline">${esc(authors)}${authors ? '. ' : ''}${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
       <div class="why"><ul>${reasons}</ul>${ev}${ex.note ? `<p class="note">${esc(ex.note)}</p>` : ''}</div>
@@ -531,6 +572,7 @@
     renderFilterbar(vis);
     const c = ctx(); const hset = C.highlightStems(c);
     const list = vis.slice(0, s.shown);
+    c.topScore = vis.reduce((m, w) => Math.max(m, w.rank ? w.rank.score : 0), 0.0001);
     if (!s.ranked.length) {
       const anyFail = Object.values(s.status).some(x => x && x.ok === false);
       $('#results').innerHTML = `<li class="panel">${anyFail ? 'No results could be fetched. See the messages above.' : 'No papers matched. Try fewer or broader words, or turn off a field restriction.'}</li>`;
@@ -945,6 +987,7 @@
     ['Ranking with explanations', 'ok', 'Explanations only cite words found in the title or abstract, and quote the abstract verbatim.'],
     ['Publication type filter', 'ok', 'Reviews and perspectives are partly inferred from wording and marked with ?.'],
     ['Theme map', 'ok', 'Based on OpenAlex topics; “close” means overlap with your profile terms.'],
+    ['Appearance: Light, Dark or Auto', 'ok', 'Auto follows your device setting. Switch from the header button or here in Settings.'],
     ['Save and export (BibTeX, RIS, CSV)', 'ok', 'Stored in this browser only; no sync between devices.'],
     ['On-device relevance model', 'proto', 'Optional. Tested in desktop Chrome (about 0.8 s for 24 papers); not yet measured on a phone.'],
     ['Google Scholar comparison', 'proto', 'Manual: paste titles from Scholar. Automated comparison is not possible (Scholar blocks automated access).'],
@@ -1028,6 +1071,11 @@
       if (S.filters.theme) $('#filterbar').scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
+    if (t.id === 'appearance-btn') {
+      const order = ['auto', 'light', 'dark']; const next = order[(order.indexOf(currentAppearance()) + 1) % 3];
+      applyAppearance(next); toast(`Appearance: ${APPEARANCE_NAMES[next]}`); return;
+    }
+    if (t.id === 'home-link') { goHome(); return; }
     if (d.trail && d.key) { const w = S.search && S.search.pool.get(d.key); if (w) runTrail(w, d.trail); return; }
     if (d.trailSwitch) { runTrail(S.search.trail.seed, d.trailSwitch); return; }
     if (t.id === 'trail-back' && S.prevSearch) {
@@ -1115,6 +1163,7 @@
   document.addEventListener('change', e => {
     const t = e.target;
     if (t.id === 'cv-file' && t.files[0]) readFile(t.files[0]);
+    if (t.name === 'appearance') { applyAppearance(t.value); return; }
     if (t.id === 'remember') { S.settings.rememberProfile = t.checked; saveSettings(); persistProfile(); toast(t.checked ? 'Profile will be remembered on this device' : 'Profile removed from this device’s storage'); }
     if (t.id === 'api-key') { S.settings.apiKey = t.value.trim(); saveSettings(); toast(S.settings.apiKey ? 'API key saved in this browser' : 'API key removed'); }
     if (t.id === 'set-semantic') { S.settings.semantic = t.checked; saveSettings(); }
@@ -1143,7 +1192,7 @@
   window.addEventListener('hashchange', route);
 
   // ---------------------------------------------------------------- init
-  updateSavedCount(); renderModes(); route(); renderFollows();
+  updateSavedCount(); renderModes(); route(); renderFollows(); renderAppearance();
   if (S.settings.ai) loadAI(true);
   window.Paperscope = { S, runSearch, version: VERSION }; // for debugging and tests
 })();
