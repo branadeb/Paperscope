@@ -31,9 +31,9 @@ function work({ title, abs, year, type = 'article', t, cites = 10, oa = false, k
 const kwWorks = [
   work({ title: 'Exciton migration in molecular crystals of perylene diimide', abs: 'We measure exciton migration in molecular crystals of perylene diimide using transient absorption microscopy. Diffusion lengths reach 200 nm along the stacking axis. The results link crystal packing to exciton transport.', year: 2023, t: T.oe, cites: 40, kw: ['exciton diffusion', 'organic semiconductors'], pct: 0.95 }),
   work({ title: 'Exciton diffusion in organic semiconductors: a review', abs: 'Experiments and basic physics of exciton diffusion in organic semiconductors are reviewed. We summarize recent measurement methods.', year: 2015, t: T.oe, cites: 1000, kw: ['exciton diffusion'], pct: 0.997, venue: 'Energy Test Science' }),
-  work({ title: 'Long-range exciton transport in ordered molecular crystals', abs: 'Ordered molecular crystals support long-range exciton transport. We image the spreading of excitons with femtosecond resolution and model the dynamics with a Redfield approach.', year: 2021, t: T.oe, cites: 120, oa: true, kw: ['exciton transport'], pct: 0.9 }),
+  work({ title: 'Long-range exciton transport in ordered molecular crystals', abs: 'Ordered molecular crystals support long-range exciton transport. We image the spreading of excitons with femtosecond resolution and model the dynamics with a Redfield approach.', year: 2021, t: T.oe, cites: 120, oa: true, kw: ['exciton transport', 'organic semiconductors'], pct: 0.9 }),
   work({ title: 'Vibronic coupling controls energy transfer in molecular aggregates', abs: 'Vibronic coupling shapes energy transfer in molecular aggregates. Two-dimensional electronic spectroscopy reveals coherent oscillations. Hierarchical equations of motion reproduce the spectra.', year: 2024, t: T.sp, cites: 15, kw: ['vibronic coupling', 'energy transfer'] }),
-  work({ title: 'Singlet fission in tetracene crystals', abs: 'Singlet fission produces two triplet excitons in tetracene crystals. Triplet migration limits device efficiency.', year: 2019, t: T.ph, cites: 300, kw: ['singlet fission'] }),
+  work({ title: 'Singlet fission in tetracene crystals', abs: 'Singlet fission produces two triplet excitons in tetracene crystals. Triplet migration limits device efficiency.', year: 2019, t: T.ph, cites: 300, kw: ['singlet fission', 'triplet excitons'] }),
   work({ title: 'Perspective: the future of exciton transport in molecular crystals', abs: 'In this perspective we discuss open questions about exciton transport in molecular crystals and outline opportunities for new spectroscopies.', year: 2025, t: T.oe, cites: 3 }),
   work({ title: 'Light harvesting in photosynthetic complexes: excitation energy migration', abs: 'Photosynthetic antenna complexes channel excitation energy to reaction centres. Energy migration occurs within picoseconds across chlorophyll networks.', year: 2022, t: T.ps, cites: 80, oa: true, kw: ['photosynthesis'] }),
   work({ title: 'Ion migration in halide perovskite crystals', abs: 'Ion migration in halide perovskite crystals causes hysteresis. We quantify vacancy diffusion with impedance spectroscopy.', year: 2024, t: T.pv, cites: 25, kw: ['ion migration'] }),
@@ -41,7 +41,7 @@ const kwWorks = [
   work({ title: 'Machine learning prediction of exciton diffusion lengths', abs: 'A graph neural network predicts exciton diffusion lengths of molecular crystals from structure, enabling high-throughput screening.', year: 2025, t: T.ml, cites: 4, type: 'preprint' }),
   work({ title: 'Charge transport in organic semiconductor crystals', abs: 'Charge transport in organic semiconductor crystals is limited by dynamic disorder. We combine theory and measurement.', year: 2020, t: T.oe, cites: 210, oa: true }),
   work({ title: 'Retracted: exciton migration measured by a flawed method', abs: 'Exciton migration in molecular crystals was measured with a method later found to be flawed.', year: 2018, t: T.oe, cites: 12, retracted: true }),
-  work({ title: 'Triplet exciton diffusion in rubrene single crystals', abs: null, year: 2011, t: T.oe, cites: 400, pct: 0.98 }),
+  work({ title: 'Triplet exciton diffusion in rubrene single crystals', abs: null, year: 2011, t: T.oe, cites: 400, pct: 0.98, kw: ['triplet excitons'] }),
   work({ title: 'Recent advances in perovskite quantum dots', abs: 'Perovskite quantum dots have advanced rapidly. This review covers synthesis, stability and devices.', year: 2023, t: T.pv, cites: 90, type: 'review' }),
   work({ title: 'Delocalized exciton migration in self-assembled nanofibers', abs: 'Self-assembled nanofibers of perylene diimide show delocalized exciton migration over micrometres.', year: 2024, t: T.oe, cites: 18, oa: true }),
   work({ title: 'Ultrafast polaron formation in conjugated polymers', abs: 'Polarons form within 100 fs in conjugated polymers. Broadband transient absorption tracks the formation.', year: 2022, t: T.sp, cites: 33 }),
@@ -76,4 +76,20 @@ const groupByCoherence = [
   { key: 'https://openalex.org/fields/32', key_display_name: 'Psychology', count: 79898 }, { key: 'https://openalex.org/fields/14', key_display_name: 'Business, Management and Accounting', count: 68915 },
   { key: 'https://openalex.org/fields/28', key_display_name: 'Neuroscience', count: 58110 }, { key: 'https://openalex.org/fields/23', key_display_name: 'Environmental Science', count: 48642 },
 ];
-module.exports = { kwWorks, semWorks, crossref, epmc, groupByPhysical, groupByCoherence };
+// Extra records for step-1 features (related terms, citation trail, recent papers, ORCID).
+const relWorks = [work({ title: 'Charge and energy flow in organic semiconductor films', abs: 'Organic semiconductors show coupled charge and energy flow in thin films.', year: 2022, t: T.oe, cites: 30, kw: ['organic semiconductors'] })];
+const citingWorks = [
+  work({ title: 'Citing paper A: exciton imaging in polymorphs', abs: 'We image excitons in polymorphs and compare with the earlier study.', year: 2024, t: T.oe, cites: 9 }),
+  work({ title: 'Citing paper B: a theory of exciton transport in disordered films', abs: 'A theory of exciton transport in disordered films is developed.', year: 2020, t: T.sp, cites: 55 }),
+];
+const today = new Date().toISOString().slice(0, 10);
+const newWork = Object.assign(work({ title: 'A brand-new exciton migration measurement', abs: 'Exciton migration in molecular crystals measured last week.', year: new Date().getFullYear(), t: T.oe, cites: 0 }), { publication_date: today });
+const recentWorks = [
+  work({ title: 'Recent exciton migration in molecular crystals by interferometric scattering', abs: 'Interferometric scattering reveals exciton migration in molecular crystals.', year: new Date().getFullYear() - 1, t: T.oe, cites: 3 }),
+];
+const orcidWorks = [
+  { id: 'https://openalex.org/W1', display_name: 'Ion hopping in nanoconfined polymer membranes', publication_year: 2023, keywords: [{ display_name: 'ion transport' }, { display_name: 'nanoconfinement' }], primary_topic: { subfield: { display_name: 'Physical and Theoretical Chemistry' } }, abstract_inverted_index: inv('We use two-dimensional infrared spectroscopy (2DIR) to follow ion transport in nanoconfined polymer membranes.') },
+  { id: 'https://openalex.org/W2', display_name: 'Spectral diffusion reports on ion transport', publication_year: 2022, keywords: [{ display_name: 'ion transport' }, { display_name: 'spectral diffusion' }], primary_topic: { subfield: { display_name: 'Physical and Theoretical Chemistry' } }, abstract_inverted_index: inv('Spectral diffusion measured by two-dimensional infrared spectroscopy reports on ion transport.') },
+  { id: 'https://openalex.org/W3', display_name: 'Exciton migration in perylene diimide crystals', publication_year: 2025, keywords: [{ display_name: 'exciton migration' }, { display_name: 'spectral diffusion' }], primary_topic: { subfield: { display_name: 'Spectroscopy' } }, abstract_inverted_index: inv('Transient absorption microscopy resolves exciton migration in perylene diimide crystals.') },
+];
+module.exports = { relWorks, citingWorks, newWork, recentWorks, orcidWorks, kwWorks, semWorks, crossref, epmc, groupByPhysical, groupByCoherence };

@@ -28,8 +28,13 @@ OpenAlex meters its free API. Without a key you get about $0.10 of free use per 
 | Feature | Status | Notes |
 |---|---|---|
 | Profile from a CV or research statement (PDF, .docx, text, or pasted) | Working | Rule-based extraction in the browser. Lists research interests, methods, areas and acronyms (e.g. "TA = transient absorption"). Fully editable. |
+| Profile from ORCID | Working | Enter your ORCID iD; Paperscope reads your publications in OpenAlex (keywords, topics, titles, abstracts) and builds or extends your profile. |
 | Short follow-up questions | Working | Asks when an acronym has several meanings ("MD") or when short query words are used across unrelated domains ("coherence", "relaxation"). Answers from your profile when it can. |
 | Synonym and related-term expansion | Working | A small curated synonym list (shown and switchable per search) plus OpenAlex's meaning-based search. Not a full thesaurus. |
+| Related terms from the results | Working | Works in any field: terms OpenAlex attaches to many of the top results, shown as chips. Tap one to search it too (one extra call). |
+| Citation trail | Working | On any result: papers citing it, its references, or similar papers. "Back" returns to your search. |
+| Sort: best match, newest, most cited | Working | "Newest first" also fetches papers from the last three years; weakly matching papers stay below relevant ones. |
+| Follow a search | Working | Saved on this device. "Check for new papers" (Saved tab) shows what was published since your last check, marked New. No emails yet. |
 | Multi-source search, merge and de-duplicate | Working | OpenAlex keyword + meaning-based search, Crossref, Europe PMC. Merged by DOI, then title and year. |
 | Ranking with "why this may be relevant" | Working | Every explanation names only words found in the title or abstract and quotes the abstract verbatim. Papers without an abstract say so. |
 | Close to my work / Everything / Adjacent & emerging | Working | Needs a profile. |
@@ -39,8 +44,10 @@ OpenAlex meters its free API. Without a key you get about $0.10 of free use per 
 | Save, export (BibTeX, RIS, CSV), open publisher or repository page | Working | Saved papers live in this browser only. |
 | Incomplete-results warnings | Working | Each source's status is shown; failures and exhausted allowances are explained. |
 | On-device relevance model | Prototype | Optional all-MiniLM-L6-v2 (Apache 2.0) running in the browser. Tested in desktop Chrome; not yet measured on a phone. |
+| Short answers written from the top abstracts | Prototype | Optional and off by default. Uses your own key with Anthropic, or any OpenAI-compatible service, including a model on your own computer. Every sentence must cite a numbered abstract; uncited sentences and citations to papers that were not supplied are flagged. |
 | Google Scholar comparison | Prototype | Manual: paste Scholar's titles; Paperscope reports which it found and checks OpenAlex for the rest. Scholar blocks automated access. |
-| AI-written paper summaries | Planned, not built | See "On-device AI" below. |
+| Answers without your own key | Planned | Needs a paid server-side model (a possible Pro tier). |
+| Email alerts; jobs matched to your CV | Planned | Need a small server (step 2). |
 | Accounts / sync across devices | Planned, not built | Would need a server. |
 
 ## Privacy: what leaves your device
@@ -51,7 +58,9 @@ OpenAlex meters its free API. Without a key you get about $0.10 of free use per 
 | Search words, an acronym meaning you choose, the domain you pick, filters | OpenAlex; also Crossref and Europe PMC if those sources are on (About › Settings). |
 | Your OpenAlex API key | OpenAlex only. |
 | Titles pasted into "Compare with Google Scholar" | Nowhere, unless you tap "Check OpenAlex", which sends the missing titles to OpenAlex. |
-| Saved papers | Nowhere. |
+| Saved papers and followed searches | Nowhere. |
+| Your ORCID iD (only if you import from ORCID) | OpenAlex, to find your publications. |
+| For "Write a short answer" (only if you set it up): your search and the titles and abstracts of the top papers | The AI provider you choose, using your own key and billed to you. Never your CV or profile. |
 
 Code is downloaded only when needed, and never with your data: pdf.js or mammoth.js (about 1 MB, from jsDelivr) when you open a PDF or Word file, and the optional model (below). As with any website, each service sees your IP address.
 
@@ -81,7 +90,8 @@ The brief asked for a free, open-weight model running on the device. What was bu
   - Download: about 20 MB compressed (23 MB model, 14 MB runtime), once, from Hugging Face and jsDelivr; cached by the browser. Clear it by clearing the site's data.
   - Compatibility: any current browser with WebAssembly. Memory use was not measured.
   - Speed: in testing, the model started in about 4 s and embedded 24 papers in about 0.8 s on a desktop-class CPU in headless Chrome. Phones will be slower; this has not been measured.
-- **Not built:** a generative model to write summaries or explanations. Models small enough to run in a phone browser (roughly 250 MB–1 GB downloads, e.g. 0.5B-parameter instruct models via WebLLM or Transformers.js) are slow without WebGPU, strain phone memory, and can state findings that are not in the abstract. Explanations instead quote the abstract and name the matching words, which can be checked.
+- **Answers (optional, your own key):** under About › Settings you can connect Anthropic (default model `claude-haiku-5-5`) or any OpenAI-compatible service, including a model running on your own computer (free, but it must accept requests from web pages). Paperscope sends the search and the top abstracts, asks for an answer that cites them by number, then checks every sentence for a citation. The provider bills you directly and shows token counts after each answer.
+- **Not built on the device:** a generative model running inside the browser. Models small enough to run in a phone browser (roughly 250 MB–1 GB downloads, e.g. 0.5B-parameter instruct models via WebLLM or Transformers.js) are slow without WebGPU, strain phone memory, and can state findings that are not in the abstract. Explanations instead quote the abstract and name the matching words, which can be checked.
 
 ## Known limitations
 
@@ -100,9 +110,10 @@ src/core.js      ranking, profile extraction, query analysis, types, explanation
 src/app.js       user interface
 src/styles.css   styles
 src/index.html   page template
-tools/build.mjs  inlines everything into dist/index.html (copy it to the repository root as index.html to publish)
+tools/build.mjs  inlines everything into dist/index.html
 test/core.test.cjs   unit tests (node test/core.test.cjs)
 test/ui.test.cjs     end-to-end test in headless Chrome with mocked APIs (needs puppeteer-core and axe-core)
+test/ui-step1.test.cjs  browser tests for related terms, citation trail, sorting, follows, ORCID and answers
 ```
 
 Build: `node tools/build.mjs`. Licence for the data: OpenAlex is CC0; check each publisher's terms for full texts.

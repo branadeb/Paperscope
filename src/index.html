@@ -46,6 +46,7 @@
 
     <div id="start">
       <p class="lede">Search open scholarly databases and see, for each paper, why it may matter to your own research.</p>
+      <div id="follows-start"></div>
       <p class="muted small">Add a profile first for personalised ranking, or just try a search:</p>
       <ul class="examples" id="examples">
         <li><button type="button">exciton migration in molecular crystals</button></li>
@@ -58,6 +59,7 @@
     <div id="clarify"></div>
     <div id="interp"></div>
     <div id="map-holder"></div>
+    <div id="answer-holder"></div>
     <div id="filterbar"></div>
     <div id="loading" class="loading" hidden><span class="spinner" aria-hidden="true"></span><span id="loading-text">Searching…</span></div>
     <ol class="results" id="results" aria-live="polite"></ol>
@@ -69,6 +71,11 @@
   <section id="view-profile" aria-labelledby="profile-h" hidden>
     <h2 id="profile-h">Your research profile</h2>
     <p class="lede">Upload a CV or paste a research statement. Paperscope reads it in this browser and lists your interests, methods and areas. Nothing from it is uploaded.</p>
+    <h3>Import from ORCID</h3>
+    <p class="small muted">Builds your profile from your publications in OpenAlex. Your ORCID iD is sent to OpenAlex; your publications are public there already.</p>
+    <form id="orcid-form" class="add-term"><label for="orcid" class="sr-only">ORCID iD</label><input id="orcid" autocomplete="off" placeholder="ORCID iD, e.g. 0000-0002-1825-0097"><button class="btn small primary" type="submit">Import</button></form>
+    <p id="orcid-status" class="small muted" role="status"></p>
+    <h3>Or use a CV or research statement</h3>
     <div class="drop" id="drop">
       <p><label class="btn" for="cv-file">Choose a file</label> <span class="muted small">or drop it here: PDF, Word (.docx) or plain text</span></p>
       <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" class="sr-only">
@@ -88,6 +95,7 @@
   <section id="view-saved" aria-labelledby="saved-h" hidden>
     <h2 id="saved-h">Saved papers</h2>
     <div id="saved-body"></div>
+    <div id="follows-saved"></div>
   </section>
 
   <!-- ABOUT -->
@@ -102,6 +110,9 @@
         <tr><td>Your CV or statement, and the profile made from it</td><td>Nowhere. Read and stored only in this browser (stored only if you turn on “Remember”).</td></tr>
         <tr><td>Your search words, any acronym meaning you pick, the field you choose, and filters</td><td>OpenAlex (api.openalex.org), plus Crossref (api.crossref.org) and Europe PMC (ebi.ac.uk) if those sources are on.</td></tr>
         <tr><td>Your OpenAlex API key, if you add one</td><td>OpenAlex only, with each request.</td></tr>
+        <tr><td>Your ORCID iD, if you import from ORCID</td><td>OpenAlex, to find your publications.</td></tr>
+        <tr><td>For “Write a short answer” (off unless you set it up): your search and the titles and abstracts of the top papers</td><td>The AI provider you choose, with your own key, billed to you. Never your CV or profile.</td></tr>
+        <tr><td>Followed searches</td><td>Nowhere. Kept in this browser; checking one runs a normal search.</td></tr>
         <tr><td>Titles you paste into “Compare with Google Scholar”</td><td>Nowhere, unless you tap “Check OpenAlex”; then the missing titles go to OpenAlex.</td></tr>
         <tr><td>Saved papers</td><td>Nowhere. Kept in this browser.</td></tr>
       </tbody>
@@ -120,6 +131,16 @@
     <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>
+
+    <h3>AI answers (optional)</h3>
+    <p class="small">Paperscope can ask an AI model to write a short answer to your search from the abstracts of the top papers, citing each one. It uses your own account with the provider, which bills you directly; Paperscope adds no charge. Your key is kept in this browser only.</p>
+    <div class="field"><label for="llm-provider">Provider</label>
+      <select id="llm-provider"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI-compatible service or local model</option></select></div>
+    <div class="field"><label for="llm-key">API key</label><input id="llm-key" type="password" autocomplete="off" placeholder="Your own key (optional for a local model)"></div>
+    <div class="field"><label for="llm-model">Model</label><input id="llm-model" type="text" autocomplete="off" placeholder="Model name from your provider"></div>
+    <div class="field" id="llm-base-field"><label for="llm-base">Service address</label><input id="llm-base" type="text" autocomplete="off" placeholder="https://api.openai.com/v1 or http://localhost:11434/v1">
+      <span class="tiny">Any service with an OpenAI-style /chat/completions endpoint. A model running on your own computer costs nothing, but it must allow requests from this page.</span></div>
+    <label class="switch"><input type="checkbox" id="llm-consent"><span>I understand each answer sends my search and the top abstracts to this provider and may be billed to my account.</span></label>
 
     <h3>Feature status</h3>
     <div class="table-wrap"><table id="feature-table">

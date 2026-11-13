@@ -508,8 +508,10 @@
     let semanticQuery = raw;
     for (const a of acronyms) semanticQuery = semanticQuery.replace(new RegExp(`\\b${a.acr.replace(/[-]/g, '\\-')}\\b`), `${a.long} (${a.acr})`);
     const phrase = expert ? [] : content.map(stem);
+    const related = (choices.related || []).map(t => ({ text: t, stems: phraseStems(t) })).filter(r => r.stems.length);
+    const relatedQuery = related.map(r => `"${r.text.replace(/"/g, '')}"`).join(' OR ');
     return { raw, expert, tokens: toks, content, groups, phrase, acronyms, expansions, keywordQuery, semanticQuery,
-      shortQuery: content.length <= 3, question };
+      shortQuery: content.length <= 3, question, related, relatedQuery };
   }
 
   // Decide whether a query spans unrelated domains, using OpenAlex group_by counts per field.
@@ -726,7 +728,8 @@
     }
     let score = groups.length ? sum / groups.length : 0;
     if (analysis.phrase.length > 1 && hasPhrase(p.titleSt, analysis.phrase)) score = Math.min(1, score + 0.15);
-    return { score, hits };
+    const relHits = (analysis.related || []).filter(r => matchTerm(p, r.stems)).map(r => r.text);
+    return { score, hits, relHits };
   }
 
   function scoreProfile(w, pTerms) {
@@ -747,7 +750,8 @@
     return { score: Math.min(1, sum / 2.5), hits };
   }
 
-  // ctx: {analysis, profile, mode, nowYear, sem: Map(key -> {q, p})}
+  const CHANNEL_WEIGHT = { oa_kw: 1, oa_sem: 1, oa_trail: 1, oa_recent: 0.8, oa_rel: 0.6, crossref: 0.6, epmc: 0.6 };
+  // ctx: {analysis, profile, mode, nowYear, sem: Map(key -> {q, p}), trail}
   function rankWorks(works, ctx) {
     const pTerms = profileTerms(ctx.profile);
     const nowYear = ctx.nowYear || new Date().getFullYear();
@@ -758,7 +762,7 @@
     let maxRrf = 0;
     for (const w of works) {
       let r = 0;
-      for (const [ch, rank] of Object.entries(w.ranks || {})) r += (ch === 'oa_kw' || ch === 'oa_sem' ? 1 : 0.6) / (K + rank);
+      for (const [ch, rank] of Object.entries(w.ranks || {})) r += (CHANNEL_WEIGHT[ch] != null ? CHANNEL_WEIGHT[ch] : 0.6) / (K + rank);
       w._rrf = r; if (r > maxRrf) maxRrf = r;
     }
     for (const w of works) {
@@ -769,11 +773,11 @@
       const recency = Math.max(0, Math.min(1, 1 - (age - 2) / 13));
       const impact = w.pct != null ? w.pct : Math.min(1, Math.log1p(w.cites || 0) / Math.log1p(1000));
       const sem = ctx.sem && ctx.sem.get(w.key);
-      let qrel = 0.55 * q.score + 0.45 * rrf;
+      let qrel = 0.55 * q.score + 0.45 * rrf + (q.relHits.length ? 0.08 : 0);
       let prof = pr.score;
       if (sem) {
         const sq = Math.max(0, Math.min(1, (sem.q - 0.15) / 0.55));
-        qrel = 0.35 * q.score + 0.3 * rrf + 0.35 * sq;
+        qrel = 0.35 * q.score + 0.3 * rrf + 0.35 * sq + (q.relHits.length ? 0.05 : 0);
         if (sem.p != null) prof = 0.5 * prof + 0.5 * Math.max(0, Math.min(1, (sem.p - 0.1) / 0.5));
       }
       let score;
@@ -782,8 +786,8 @@
       else score = 0.78 * qrel + 0.08 * prof + 0.1 * impact + 0.04 * recency;
       if (w.retracted) score -= 0.5;
       if (/^(dataset|software|book-review|paratext|erratum|grant|libguides|reference-entry|peer-review|supplementary-materials)$/.test(w.oaType || '')) score -= 0.12;
-      if (!q.hits.length && !(w.ranks && (w.ranks.oa_sem !== undefined))) score -= 0.15; // nothing matched and not a meaning-based hit
-      w.rank = { score, qrel, q: q.score, rrf, prof, profRaw: pr.score, impact, recency, qHits: q.hits, pHits: pr.hits, sem: sem || null };
+      if (!ctx.trail && !q.hits.length && !(w.ranks && (w.ranks.oa_sem !== undefined))) score -= 0.15; // nothing matched and not a meaning-based hit
+      w.rank = { score, qrel, q: q.score, rrf, prof, profRaw: pr.score, impact, recency, qHits: q.hits, relHits: q.relHits, pHits: pr.hits, sem: sem || null };
     }
     return works.slice().sort((a, b) => b.rank.score - a.rank.score);
   }
@@ -792,7 +796,11 @@
   function explain(w, ctx) {
     const r = w.rank || {};
     const reasons = [];
-    const qh = (r.qHits || []);
+    if (ctx && ctx.trail && w.ranks && w.ranks.oa_trail !== undefined) {
+      const how = { cites: 'Cites the paper you started from.', refs: 'Cited by the paper you started from.', related: 'OpenAlex lists it as related to the paper you started from.' }[ctx.trail.kind];
+      if (how) reasons.push({ kind: 'trail', text: how });
+    }
+    const qh = ctx && ctx.trail ? [] : (r.qHits || []);
     const inTitle = qh.filter(h => h.where === 'title').map(h => h.text);
     const inAbs = qh.filter(h => h.where === 'abstract').map(h => h.text);
     const inKw = qh.filter(h => h.where === 'keywords').map(h => h.text);
@@ -801,7 +809,10 @@
     if (inAbs.length) reasons.push({ kind: 'query', text: `Abstract mentions ${listify(inAbs)}.` });
     if (inKw.length && !inTitle.length && !inAbs.length) reasons.push({ kind: 'query', text: `Tagged by OpenAlex with ${listify(inKw)}.` });
     if (syn.length) reasons.push({ kind: 'synonym', text: `Uses ${listify(syn.map(h => `“${h.text}”`))} for ${listify([...new Set(syn.map(h => `“${h.label}”`))])}.` });
-    if (!qh.length && w.ranks && w.ranks.oa_sem !== undefined) reasons.push({ kind: 'semantic', text: 'Found by OpenAlex meaning-based search; it does not use your exact search words.' });
+    if (r.relHits && r.relHits.length) reasons.push({ kind: 'query', text: `Mentions the related term${r.relHits.length > 1 ? 's' : ''} ${listify(r.relHits.map(t => `“${t}”`))}.` });
+    else if (w.ranks && w.ranks.oa_rel !== undefined && Object.keys(w.ranks).length === 1) reasons.push({ kind: 'semantic', text: 'Found through a related term you added.' });
+    if (ctx && ctx.trail) { /* trail results are explained by their link to the starting paper */ }
+    else if (!qh.length && w.ranks && w.ranks.oa_sem !== undefined) reasons.push({ kind: 'semantic', text: 'Found by OpenAlex meaning-based search; it does not use your exact search words.' });
     else if (w.ranks && w.ranks.oa_sem !== undefined && w.ranks.oa_kw === undefined) reasons.push({ kind: 'semantic', text: 'Found only by meaning-based search, not by keyword search.' });
     const ph = (r.pHits || []).slice(0, 3);
     if (ctx && ctx.hasProfile) {
@@ -950,9 +961,137 @@
 
   // Slim copy for saving (no derived fields).
   function slim(w) {
-    const keep = ['key', 'openalexId', 'doi', 'title', 'year', 'authors', 'venue', 'abstract', 'abstractFrom', 'oaType', 'crType', 'epmcTypes',
+    const keep = ['key', 'openalexId', 'doi', 'title', 'year', 'date', 'authors', 'venue', 'abstract', 'abstractFrom', 'oaType', 'crType', 'epmcTypes',
       'isOA', 'landing', 'oaUrl', 'pdf', 'oaHost', 'cites', 'topic', 'retracted', 'sources'];
     const o = {}; keep.forEach(k => { o[k] = w[k]; }); o.savedAt = new Date().toISOString(); return o;
+  }
+
+  // ---------------------------------------------------------------- related terms (field-agnostic expansion)
+  // Terms that OpenAlex attaches to many of the top results but that the query does not already contain.
+  function relatedTerms(ranked, analysis, limit = 8) {
+    const qStems = new Set();
+    (analysis.groups || []).forEach(g => g.alts.forEach(a => a.stems.forEach(x => qStems.add(x))));
+    (analysis.related || []).forEach(r => r.stems.forEach(x => qStems.add(x)));
+    const tally = new Map();
+    ranked.slice(0, 30).forEach((w, i) => {
+      const wt = 1 / (1 + i / 10);
+      const seen = new Set();
+      (w.keywords || []).forEach(k => {
+        const st = phraseStems(k);
+        if (!st.length) return;
+        const key = st.join(' ');
+        if (seen.has(key)) return; seen.add(key);
+        if (st.every(x => qStems.has(x))) return;
+        if (st.length === 1 && (GENERIC_SINGLE.has(st[0]) || st[0].length < 4)) return;
+        const t = tally.get(key) || { text: normSpace(k).toLowerCase(), n: 0, score: 0 };
+        t.n++; t.score += wt; tally.set(key, t);
+      });
+    });
+    return [...tally.values()].filter(t => t.n >= 2).sort((a, b) => b.score - a.score).slice(0, limit);
+  }
+
+  // ---------------------------------------------------------------- ORCID and profile from publications
+  function orcidChecksumOk(id) {
+    const d = id.replace(/-/g, '');
+    if (!/^\d{15}[\dX]$/.test(d)) return false;
+    let total = 0;
+    for (let i = 0; i < 15; i++) total = (total + Number(d[i])) * 2;
+    const res = (12 - (total % 11)) % 11;
+    return (res === 10 ? 'X' : String(res)) === d[15];
+  }
+  function normOrcid(s) {
+    const m = String(s || '').trim().match(/(\d{4})-?(\d{4})-?(\d{4})-?(\d{3}[\dXx])/);
+    if (!m) return null;
+    const id = `${m[1]}-${m[2]}-${m[3]}-${m[4].toUpperCase()}`;
+    return orcidChecksumOk(id) ? id : null;
+  }
+  // Build a profile from a researcher's own OpenAlex works (keywords, topics, titles and abstracts).
+  function profileFromWorks(works, meta = {}) {
+    const kw = new Map(); const sub = new Map();
+    let text = '';
+    for (const w of works || []) {
+      const seen = new Set();
+      for (const k of w.keywords || []) {
+        const name = typeof k === 'string' ? k : k && k.display_name;
+        const st = phraseStems(name || '');
+        if (!st.length) continue;
+        const key = st.join(' ');
+        if (seen.has(key)) continue; seen.add(key);
+        const t = kw.get(key) || { text: normSpace(name).toLowerCase(), n: 0, stems: st };
+        t.n++; kw.set(key, t);
+      }
+      const sf = w.primary_topic && w.primary_topic.subfield && w.primary_topic.subfield.display_name;
+      if (sf) sub.set(sf, (sub.get(sf) || 0) + 1);
+      text += `${stripTags(w.display_name || w.title || '')}.\n${reconstructAbstract(w.abstract_inverted_index)}\n\n`;
+    }
+    const fromText = extractProfile(text, { defaultWeight: 2 });
+    const out = { interests: [], methods: [], areas: [], glossary: fromText.glossary || {} };
+    const limits = { interests: 16, methods: 12, areas: 6 };
+    const has = (g, st) => out[g].some(t => { const ts = phraseStems(t.text); return hasPhrase(ts, st) || hasPhrase(st, ts); });
+    const minN = (works || []).length >= 6 ? 2 : 1;
+    [...kw.values()].filter(t => t.n >= minN && !(t.stems.length === 1 && GENERIC_SINGLE.has(t.stems[0]))).sort((a, b) => b.n - a.n).forEach(t => {
+      const g = classifyPhrase(t.stems);
+      if (out[g].length < limits[g] && !has(g, t.stems)) out[g].push({ text: t.text, score: t.n });
+    });
+    for (const g of ['interests', 'methods', 'areas']) {
+      for (const t of fromText[g] || []) if (out[g].length < limits[g] && !has(g, phraseStems(t.text))) out[g].push(t);
+    }
+    [...sub.entries()].sort((a, b) => b[1] - a[1]).filter(([, n]) => n >= minN).slice(0, 4).forEach(([name, n]) => {
+      if (out.areas.length < limits.areas && !has('areas', phraseStems(name))) out.areas.push({ text: name.toLowerCase(), score: n });
+    });
+    return { ...out, createdAt: new Date().toISOString(), source: meta.source || 'publications', orcid: meta.orcid || '' };
+  }
+  function mergeProfiles(a, b) {
+    if (!a) return b; if (!b) return a;
+    const out = { ...a, glossary: { ...(a.glossary || {}), ...(b.glossary || {}) } };
+    for (const g of ['interests', 'methods', 'areas']) {
+      const seen = new Set((a[g] || []).map(t => t.text.toLowerCase()));
+      out[g] = [...(a[g] || []), ...(b[g] || []).filter(t => !seen.has(t.text.toLowerCase()))];
+    }
+    out.source = [a.source, b.source].filter(Boolean).join(' + ');
+    if (b.orcid) out.orcid = b.orcid;
+    return out;
+  }
+
+  // ---------------------------------------------------------------- answer mode helpers (the model is called by the app)
+  function buildAnswerPrompt(question, papers) {
+    const system = 'You help a researcher by answering their question using ONLY the numbered paper abstracts provided. ' +
+      'Cite every factual claim with the number of the abstract it comes from, like [2] or [1, 3]. Do not use outside knowledge. ' +
+      'If the abstracts do not answer the question, say so plainly and say what they do cover. Note disagreements between papers. ' +
+      'Write at most 180 words of plain prose, no headings, no bullet points.';
+    const list = papers.map((w, i) => `[${i + 1}] ${w.title} (${w.year || 'n.d.'}). Abstract: ${w.abstract}`).join('\n\n');
+    return { system, user: `Question: ${question}\n\nAbstracts:\n\n${list}` };
+  }
+  function expandRefs(s) {
+    const out = [];
+    String(s).split(/\s*[,;]\s*/).forEach(part => {
+      const m = part.match(/^(\d+)\s*[–-]\s*(\d+)$/);
+      if (m) { const a = Number(m[1]), b = Number(m[2]); if (b >= a && b - a < 20) for (let i = a; i <= b; i++) out.push(i); }
+      else if (/^\d+$/.test(part)) out.push(Number(part));
+    });
+    return out;
+  }
+  // Checks an AI answer: which sentences cite sources, and whether every citation points to a supplied paper.
+  function checkAnswer(text, n) {
+    const sentences = splitSentences(text).map(sent => {
+      const cites = [...sent.matchAll(/\[(\d+(?:\s*[,;–-]\s*\d+)*)\]/g)].flatMap(m => expandRefs(m[1]));
+      const hedge = /\b(do not|does not|don't|doesn't|cannot|no information|not (address|discuss|mention|cover))\b/i.test(sent);
+      return { text: sent, cites, uncited: !cites.length && sent.split(/\s+/).length > 5 && !hedge, invalid: cites.filter(c => c < 1 || c > n) };
+    });
+    const cited = [...new Set(sentences.flatMap(x => x.cites))].filter(c => c >= 1 && c <= n).sort((a, b) => a - b);
+    return { sentences, uncited: sentences.filter(x => x.uncited).length, invalid: [...new Set(sentences.flatMap(x => x.invalid))], cited };
+  }
+
+  // Sorting that keeps weakly relevant items from jumping to the top when sorting by date or citations.
+  function sortWorks(ranked, how) {
+    if (!how || how === 'best') return ranked;
+    const max = Math.max(0.0001, ...ranked.map(w => (w.rank ? w.rank.qrel : 0)));
+    const relevant = w => (w.rank && w.rank.qrel >= 0.45 * max) || (w.ranks && (w.ranks.oa_sem !== undefined || w.ranks.oa_trail !== undefined));
+    const key = how === 'newest' ? (w => String(w.date || w.year || '')) : (w => String(w.cites || 0).padStart(9, '0'));
+    const cmp = (a, b) => (key(b) > key(a) ? 1 : key(b) < key(a) ? -1 : 0);
+    const top = ranked.filter(relevant).sort(cmp);
+    const rest = ranked.filter(w => !relevant(w)).sort(cmp);
+    return top.concat(rest);
   }
 
   const Core = {
@@ -960,6 +1099,7 @@
     extractGlossary, extractProfile, profileTerms, profileText, analyzeQuery, assessFieldAmbiguity,
     normOpenAlex, normCrossref, normEPMC, workKey, dedupeInto, classifyType, prepWork, scoreQuery, scoreProfile, rankWorks,
     explain, highlightStems, computeThemes, parseScholarLines, titleSimilarity, compareWithList, toBibTeX, toRIS, toCSV, slim,
+    relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Core;

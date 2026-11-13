@@ -192,5 +192,52 @@ t('exports are well-formed', () => {
   assert.strictEqual(C.toCSV([w]).split('\n').length, 2);
 });
 
+// ---------------------------------------------------------------- step 1
+t('related terms: frequent result keywords not already in the query', () => {
+  const analysis = C.analyzeQuery('exciton migration', null);
+  const mk = (kw, i) => ({ key: 'k' + i, keywords: kw });
+  const r = C.relatedTerms([mk(['exciton diffusion', 'singlet fission'], 1), mk(['singlet fission', 'organic semiconductors'], 2), mk(['organic semiconductors', 'excitons'], 3), mk(['quantum dots'], 4)], analysis);
+  assert.deepStrictEqual(r.map(x => x.text).sort(), ['organic semiconductors', 'singlet fission']);
+});
+t('ORCID iD: format and checksum', () => {
+  assert.strictEqual(C.normOrcid('https://orcid.org/0000-0002-1825-0097'), '0000-0002-1825-0097');
+  assert.strictEqual(C.normOrcid('0000000218250097'), '0000-0002-1825-0097');
+  assert.strictEqual(C.normOrcid('0000-0002-1825-0098'), null);
+  assert.strictEqual(C.normOrcid('0000-0001-5109-018x'), '0000-0001-5109-018X'); // checksum digit X
+});
+t('profile from publications: keywords, subfields, acronyms', () => {
+  const M = require('./mock-data.js');
+  const p = C.profileFromWorks(M.orcidWorks, { source: 'test' });
+  const all = [...p.interests, ...p.methods, ...p.areas].map(x => x.text);
+  ['ion transport', 'spectral diffusion', 'physical and theoretical chemistry'].forEach(x => assert(all.includes(x), `${x} missing: ${all}`));
+  assert.strictEqual(p.glossary['2DIR'], 'two-dimensional infrared spectroscopy');
+});
+t('merging profiles keeps both sets without duplicates', () => {
+  const m = C.mergeProfiles({ interests: [{ text: 'ion transport' }], methods: [], areas: [], glossary: { A: 'a' }, source: 'cv' }, { interests: [{ text: 'Ion transport' }, { text: 'excitons' }], methods: [{ text: 'raman' }], areas: [], glossary: { B: 'b' }, source: 'orcid' });
+  assert.deepStrictEqual(m.interests.map(x => x.text), ['ion transport', 'excitons']);
+  assert.deepStrictEqual(Object.keys(m.glossary), ['A', 'B']);
+});
+t('answer prompt numbers every abstract and forbids outside knowledge', () => {
+  const pr = C.buildAnswerPrompt('Why?', [{ title: 'T1', year: 2020, abstract: 'A1.' }, { title: 'T2', year: 2021, abstract: 'A2.' }]);
+  assert(/\[1\] T1 \(2020\)\. Abstract: A1\./.test(pr.user) && /\[2\] T2/.test(pr.user) && /ONLY/.test(pr.system) && /outside knowledge/.test(pr.system));
+});
+t('answer check flags uncited sentences and unknown citations', () => {
+  const c = C.checkAnswer('A is true [1]. B is true [2-3]. C holds in every system ever studied. The abstracts do not cover D. E [7].', 3);
+  assert.deepStrictEqual([c.uncited, c.invalid, c.cited], [1, [7], [1, 2, 3]]);
+});
+t('sorting by date keeps weakly relevant papers below relevant ones', () => {
+  const w = (y, q) => ({ year: y, date: `${y}-01-01`, cites: y, rank: { qrel: q }, ranks: {} });
+  const sorted = C.sortWorks([w(2010, 0.9), w(2026, 0.1), w(2020, 0.8)], 'newest');
+  assert.deepStrictEqual(sorted.map(x => x.year), [2020, 2010, 2026]);
+});
+t('related-term matches raise a paper and are explained', () => {
+  const analysis = C.analyzeQuery('exciton migration', null, { related: ['singlet fission'] });
+  const a = { key: 'a', title: 'Exciton migration and singlet fission', abstract: '', authors: [], ranks: { oa_kw: 2 }, keywords: [] };
+  const b = { key: 'b', title: 'Exciton migration in crystals', abstract: '', authors: [], ranks: { oa_kw: 1 }, keywords: [] };
+  const r = C.rankWorks([a, b], { analysis, profile: null, mode: 'all' });
+  assert(a.rank.relHits.length === 1 && a.rank.qrel > b.rank.qrel - 0.05);
+  assert(C.explain(a, { analysis }).reasons.some(x => /related term “singlet fission”/.test(x.text)));
+});
+
 console.log(`\n${pass}/${pass + fail} unit tests passed`);
 process.exit(fail ? 1 : 0);

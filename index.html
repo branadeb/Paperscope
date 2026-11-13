@@ -91,7 +91,7 @@ p { margin: .5em 0; }
 .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: .85rem; line-height: 1.35; }
 .chip button { appearance: none; border: 0; background: none; padding: 0 2px; cursor: pointer; color: var(--ink-3); font-size: 1rem; line-height: 1; }
 .chip.off { text-decoration: line-through; color: var(--ink-3); }
-.chip.toggle { cursor: pointer; }
+.chip.toggle { cursor: pointer; appearance: none; font-family: inherit; font-size: .85rem; color: inherit; }
 .sources { list-style: none; padding: 0; margin: 8px 0 0; font-size: .85rem; display: grid; gap: 2px; }
 .sources li::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--ok); vertical-align: 1px; }
 .sources li.fail::before { background: var(--warn); }
@@ -222,6 +222,30 @@ th { font-weight: 600; }
   .paper { padding-left: 20px; }
   .sheet { left: 50%; right: auto; transform: translateX(-50%); width: min(560px, 100vw); bottom: auto; top: 10vh; border-radius: 16px; }
 }
+
+/* step 1 additions */
+.related { margin: 14px 0 4px; }
+.chip.add { cursor: pointer; background: var(--surface); appearance: none; font-family: inherit; font-size: .85rem; color: inherit; }
+.chip.add:hover { border-color: var(--ink-3); }
+.chip.on { border-color: var(--close); color: var(--close); }
+.follow-row { margin: 8px 0 0; }
+.follow-row .btn[aria-pressed="true"] { border-color: var(--close); color: var(--close); }
+.trail { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; margin-top: 4px; font-size: .85rem; }
+.trail .btn.link { font-size: .85rem; }
+.sortsel select { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); font-size: .875rem; }
+.badge.new { border-color: var(--close); color: var(--close); font-weight: 600; }
+.panel.since { border-color: var(--close); }
+.trail-head h3 { font-size: 1.05rem; }
+.answer-text { font: 1rem/1.6 var(--serif); margin: 0; }
+.answer-text a { text-decoration: none; font: .8em var(--sans); font-weight: 600; }
+.answer .uncited { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; }
+.answer .bad-ref { color: var(--warn); font-weight: 700; }
+.ans-src { font-size: .85rem; padding-left: 1.4em; margin: 10px 0 4px; }
+.answer.loading { display: flex; gap: 10px; align-items: center; color: var(--ink-2); }
+.field select { padding: 9px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+.follows { margin-top: 18px; }
+.follows h3 { margin-top: 0; }
+#start .follows { margin: 10px 0 14px; }
 </style>
 </head>
 <body>
@@ -261,6 +285,7 @@ th { font-weight: 600; }
 
     <div id="start">
       <p class="lede">Search open scholarly databases and see, for each paper, why it may matter to your own research.</p>
+      <div id="follows-start"></div>
       <p class="muted small">Add a profile first for personalised ranking, or just try a search:</p>
       <ul class="examples" id="examples">
         <li><button type="button">exciton migration in molecular crystals</button></li>
@@ -273,6 +298,7 @@ th { font-weight: 600; }
     <div id="clarify"></div>
     <div id="interp"></div>
     <div id="map-holder"></div>
+    <div id="answer-holder"></div>
     <div id="filterbar"></div>
     <div id="loading" class="loading" hidden><span class="spinner" aria-hidden="true"></span><span id="loading-text">Searching…</span></div>
     <ol class="results" id="results" aria-live="polite"></ol>
@@ -284,6 +310,11 @@ th { font-weight: 600; }
   <section id="view-profile" aria-labelledby="profile-h" hidden>
     <h2 id="profile-h">Your research profile</h2>
     <p class="lede">Upload a CV or paste a research statement. Paperscope reads it in this browser and lists your interests, methods and areas. Nothing from it is uploaded.</p>
+    <h3>Import from ORCID</h3>
+    <p class="small muted">Builds your profile from your publications in OpenAlex. Your ORCID iD is sent to OpenAlex; your publications are public there already.</p>
+    <form id="orcid-form" class="add-term"><label for="orcid" class="sr-only">ORCID iD</label><input id="orcid" autocomplete="off" placeholder="ORCID iD, e.g. 0000-0002-1825-0097"><button class="btn small primary" type="submit">Import</button></form>
+    <p id="orcid-status" class="small muted" role="status"></p>
+    <h3>Or use a CV or research statement</h3>
     <div class="drop" id="drop">
       <p><label class="btn" for="cv-file">Choose a file</label> <span class="muted small">or drop it here: PDF, Word (.docx) or plain text</span></p>
       <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" class="sr-only">
@@ -303,6 +334,7 @@ th { font-weight: 600; }
   <section id="view-saved" aria-labelledby="saved-h" hidden>
     <h2 id="saved-h">Saved papers</h2>
     <div id="saved-body"></div>
+    <div id="follows-saved"></div>
   </section>
 
   <!-- ABOUT -->
@@ -317,6 +349,9 @@ th { font-weight: 600; }
         <tr><td>Your CV or statement, and the profile made from it</td><td>Nowhere. Read and stored only in this browser (stored only if you turn on “Remember”).</td></tr>
         <tr><td>Your search words, any acronym meaning you pick, the field you choose, and filters</td><td>OpenAlex (api.openalex.org), plus Crossref (api.crossref.org) and Europe PMC (ebi.ac.uk) if those sources are on.</td></tr>
         <tr><td>Your OpenAlex API key, if you add one</td><td>OpenAlex only, with each request.</td></tr>
+        <tr><td>Your ORCID iD, if you import from ORCID</td><td>OpenAlex, to find your publications.</td></tr>
+        <tr><td>For “Write a short answer” (off unless you set it up): your search and the titles and abstracts of the top papers</td><td>The AI provider you choose, with your own key, billed to you. Never your CV or profile.</td></tr>
+        <tr><td>Followed searches</td><td>Nowhere. Kept in this browser; checking one runs a normal search.</td></tr>
         <tr><td>Titles you paste into “Compare with Google Scholar”</td><td>Nowhere, unless you tap “Check OpenAlex”; then the missing titles go to OpenAlex.</td></tr>
         <tr><td>Saved papers</td><td>Nowhere. Kept in this browser.</td></tr>
       </tbody>
@@ -335,6 +370,16 @@ th { font-weight: 600; }
     <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>
+
+    <h3>AI answers (optional)</h3>
+    <p class="small">Paperscope can ask an AI model to write a short answer to your search from the abstracts of the top papers, citing each one. It uses your own account with the provider, which bills you directly; Paperscope adds no charge. Your key is kept in this browser only.</p>
+    <div class="field"><label for="llm-provider">Provider</label>
+      <select id="llm-provider"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI-compatible service or local model</option></select></div>
+    <div class="field"><label for="llm-key">API key</label><input id="llm-key" type="password" autocomplete="off" placeholder="Your own key (optional for a local model)"></div>
+    <div class="field"><label for="llm-model">Model</label><input id="llm-model" type="text" autocomplete="off" placeholder="Model name from your provider"></div>
+    <div class="field" id="llm-base-field"><label for="llm-base">Service address</label><input id="llm-base" type="text" autocomplete="off" placeholder="https://api.openai.com/v1 or http://localhost:11434/v1">
+      <span class="tiny">Any service with an OpenAI-style /chat/completions endpoint. A model running on your own computer costs nothing, but it must allow requests from this page.</span></div>
+    <label class="switch"><input type="checkbox" id="llm-consent"><span>I understand each answer sends my search and the top abstracts to this provider and may be billed to my account.</span></label>
 
     <h3>Feature status</h3>
     <div class="table-wrap"><table id="feature-table">
@@ -862,8 +907,10 @@ th { font-weight: 600; }
     let semanticQuery = raw;
     for (const a of acronyms) semanticQuery = semanticQuery.replace(new RegExp(`\\b${a.acr.replace(/[-]/g, '\\-')}\\b`), `${a.long} (${a.acr})`);
     const phrase = expert ? [] : content.map(stem);
+    const related = (choices.related || []).map(t => ({ text: t, stems: phraseStems(t) })).filter(r => r.stems.length);
+    const relatedQuery = related.map(r => `"${r.text.replace(/"/g, '')}"`).join(' OR ');
     return { raw, expert, tokens: toks, content, groups, phrase, acronyms, expansions, keywordQuery, semanticQuery,
-      shortQuery: content.length <= 3, question };
+      shortQuery: content.length <= 3, question, related, relatedQuery };
   }
 
   // Decide whether a query spans unrelated domains, using OpenAlex group_by counts per field.
@@ -1080,7 +1127,8 @@ th { font-weight: 600; }
     }
     let score = groups.length ? sum / groups.length : 0;
     if (analysis.phrase.length > 1 && hasPhrase(p.titleSt, analysis.phrase)) score = Math.min(1, score + 0.15);
-    return { score, hits };
+    const relHits = (analysis.related || []).filter(r => matchTerm(p, r.stems)).map(r => r.text);
+    return { score, hits, relHits };
   }
 
   function scoreProfile(w, pTerms) {
@@ -1101,7 +1149,8 @@ th { font-weight: 600; }
     return { score: Math.min(1, sum / 2.5), hits };
   }
 
-  // ctx: {analysis, profile, mode, nowYear, sem: Map(key -> {q, p})}
+  const CHANNEL_WEIGHT = { oa_kw: 1, oa_sem: 1, oa_trail: 1, oa_recent: 0.8, oa_rel: 0.6, crossref: 0.6, epmc: 0.6 };
+  // ctx: {analysis, profile, mode, nowYear, sem: Map(key -> {q, p}), trail}
   function rankWorks(works, ctx) {
     const pTerms = profileTerms(ctx.profile);
     const nowYear = ctx.nowYear || new Date().getFullYear();
@@ -1112,7 +1161,7 @@ th { font-weight: 600; }
     let maxRrf = 0;
     for (const w of works) {
       let r = 0;
-      for (const [ch, rank] of Object.entries(w.ranks || {})) r += (ch === 'oa_kw' || ch === 'oa_sem' ? 1 : 0.6) / (K + rank);
+      for (const [ch, rank] of Object.entries(w.ranks || {})) r += (CHANNEL_WEIGHT[ch] != null ? CHANNEL_WEIGHT[ch] : 0.6) / (K + rank);
       w._rrf = r; if (r > maxRrf) maxRrf = r;
     }
     for (const w of works) {
@@ -1123,11 +1172,11 @@ th { font-weight: 600; }
       const recency = Math.max(0, Math.min(1, 1 - (age - 2) / 13));
       const impact = w.pct != null ? w.pct : Math.min(1, Math.log1p(w.cites || 0) / Math.log1p(1000));
       const sem = ctx.sem && ctx.sem.get(w.key);
-      let qrel = 0.55 * q.score + 0.45 * rrf;
+      let qrel = 0.55 * q.score + 0.45 * rrf + (q.relHits.length ? 0.08 : 0);
       let prof = pr.score;
       if (sem) {
         const sq = Math.max(0, Math.min(1, (sem.q - 0.15) / 0.55));
-        qrel = 0.35 * q.score + 0.3 * rrf + 0.35 * sq;
+        qrel = 0.35 * q.score + 0.3 * rrf + 0.35 * sq + (q.relHits.length ? 0.05 : 0);
         if (sem.p != null) prof = 0.5 * prof + 0.5 * Math.max(0, Math.min(1, (sem.p - 0.1) / 0.5));
       }
       let score;
@@ -1136,8 +1185,8 @@ th { font-weight: 600; }
       else score = 0.78 * qrel + 0.08 * prof + 0.1 * impact + 0.04 * recency;
       if (w.retracted) score -= 0.5;
       if (/^(dataset|software|book-review|paratext|erratum|grant|libguides|reference-entry|peer-review|supplementary-materials)$/.test(w.oaType || '')) score -= 0.12;
-      if (!q.hits.length && !(w.ranks && (w.ranks.oa_sem !== undefined))) score -= 0.15; // nothing matched and not a meaning-based hit
-      w.rank = { score, qrel, q: q.score, rrf, prof, profRaw: pr.score, impact, recency, qHits: q.hits, pHits: pr.hits, sem: sem || null };
+      if (!ctx.trail && !q.hits.length && !(w.ranks && (w.ranks.oa_sem !== undefined))) score -= 0.15; // nothing matched and not a meaning-based hit
+      w.rank = { score, qrel, q: q.score, rrf, prof, profRaw: pr.score, impact, recency, qHits: q.hits, relHits: q.relHits, pHits: pr.hits, sem: sem || null };
     }
     return works.slice().sort((a, b) => b.rank.score - a.rank.score);
   }
@@ -1146,7 +1195,11 @@ th { font-weight: 600; }
   function explain(w, ctx) {
     const r = w.rank || {};
     const reasons = [];
-    const qh = (r.qHits || []);
+    if (ctx && ctx.trail && w.ranks && w.ranks.oa_trail !== undefined) {
+      const how = { cites: 'Cites the paper you started from.', refs: 'Cited by the paper you started from.', related: 'OpenAlex lists it as related to the paper you started from.' }[ctx.trail.kind];
+      if (how) reasons.push({ kind: 'trail', text: how });
+    }
+    const qh = ctx && ctx.trail ? [] : (r.qHits || []);
     const inTitle = qh.filter(h => h.where === 'title').map(h => h.text);
     const inAbs = qh.filter(h => h.where === 'abstract').map(h => h.text);
     const inKw = qh.filter(h => h.where === 'keywords').map(h => h.text);
@@ -1155,7 +1208,10 @@ th { font-weight: 600; }
     if (inAbs.length) reasons.push({ kind: 'query', text: `Abstract mentions ${listify(inAbs)}.` });
     if (inKw.length && !inTitle.length && !inAbs.length) reasons.push({ kind: 'query', text: `Tagged by OpenAlex with ${listify(inKw)}.` });
     if (syn.length) reasons.push({ kind: 'synonym', text: `Uses ${listify(syn.map(h => `“${h.text}”`))} for ${listify([...new Set(syn.map(h => `“${h.label}”`))])}.` });
-    if (!qh.length && w.ranks && w.ranks.oa_sem !== undefined) reasons.push({ kind: 'semantic', text: 'Found by OpenAlex meaning-based search; it does not use your exact search words.' });
+    if (r.relHits && r.relHits.length) reasons.push({ kind: 'query', text: `Mentions the related term${r.relHits.length > 1 ? 's' : ''} ${listify(r.relHits.map(t => `“${t}”`))}.` });
+    else if (w.ranks && w.ranks.oa_rel !== undefined && Object.keys(w.ranks).length === 1) reasons.push({ kind: 'semantic', text: 'Found through a related term you added.' });
+    if (ctx && ctx.trail) { /* trail results are explained by their link to the starting paper */ }
+    else if (!qh.length && w.ranks && w.ranks.oa_sem !== undefined) reasons.push({ kind: 'semantic', text: 'Found by OpenAlex meaning-based search; it does not use your exact search words.' });
     else if (w.ranks && w.ranks.oa_sem !== undefined && w.ranks.oa_kw === undefined) reasons.push({ kind: 'semantic', text: 'Found only by meaning-based search, not by keyword search.' });
     const ph = (r.pHits || []).slice(0, 3);
     if (ctx && ctx.hasProfile) {
@@ -1304,9 +1360,137 @@ th { font-weight: 600; }
 
   // Slim copy for saving (no derived fields).
   function slim(w) {
-    const keep = ['key', 'openalexId', 'doi', 'title', 'year', 'authors', 'venue', 'abstract', 'abstractFrom', 'oaType', 'crType', 'epmcTypes',
+    const keep = ['key', 'openalexId', 'doi', 'title', 'year', 'date', 'authors', 'venue', 'abstract', 'abstractFrom', 'oaType', 'crType', 'epmcTypes',
       'isOA', 'landing', 'oaUrl', 'pdf', 'oaHost', 'cites', 'topic', 'retracted', 'sources'];
     const o = {}; keep.forEach(k => { o[k] = w[k]; }); o.savedAt = new Date().toISOString(); return o;
+  }
+
+  // ---------------------------------------------------------------- related terms (field-agnostic expansion)
+  // Terms that OpenAlex attaches to many of the top results but that the query does not already contain.
+  function relatedTerms(ranked, analysis, limit = 8) {
+    const qStems = new Set();
+    (analysis.groups || []).forEach(g => g.alts.forEach(a => a.stems.forEach(x => qStems.add(x))));
+    (analysis.related || []).forEach(r => r.stems.forEach(x => qStems.add(x)));
+    const tally = new Map();
+    ranked.slice(0, 30).forEach((w, i) => {
+      const wt = 1 / (1 + i / 10);
+      const seen = new Set();
+      (w.keywords || []).forEach(k => {
+        const st = phraseStems(k);
+        if (!st.length) return;
+        const key = st.join(' ');
+        if (seen.has(key)) return; seen.add(key);
+        if (st.every(x => qStems.has(x))) return;
+        if (st.length === 1 && (GENERIC_SINGLE.has(st[0]) || st[0].length < 4)) return;
+        const t = tally.get(key) || { text: normSpace(k).toLowerCase(), n: 0, score: 0 };
+        t.n++; t.score += wt; tally.set(key, t);
+      });
+    });
+    return [...tally.values()].filter(t => t.n >= 2).sort((a, b) => b.score - a.score).slice(0, limit);
+  }
+
+  // ---------------------------------------------------------------- ORCID and profile from publications
+  function orcidChecksumOk(id) {
+    const d = id.replace(/-/g, '');
+    if (!/^\d{15}[\dX]$/.test(d)) return false;
+    let total = 0;
+    for (let i = 0; i < 15; i++) total = (total + Number(d[i])) * 2;
+    const res = (12 - (total % 11)) % 11;
+    return (res === 10 ? 'X' : String(res)) === d[15];
+  }
+  function normOrcid(s) {
+    const m = String(s || '').trim().match(/(\d{4})-?(\d{4})-?(\d{4})-?(\d{3}[\dXx])/);
+    if (!m) return null;
+    const id = `${m[1]}-${m[2]}-${m[3]}-${m[4].toUpperCase()}`;
+    return orcidChecksumOk(id) ? id : null;
+  }
+  // Build a profile from a researcher's own OpenAlex works (keywords, topics, titles and abstracts).
+  function profileFromWorks(works, meta = {}) {
+    const kw = new Map(); const sub = new Map();
+    let text = '';
+    for (const w of works || []) {
+      const seen = new Set();
+      for (const k of w.keywords || []) {
+        const name = typeof k === 'string' ? k : k && k.display_name;
+        const st = phraseStems(name || '');
+        if (!st.length) continue;
+        const key = st.join(' ');
+        if (seen.has(key)) continue; seen.add(key);
+        const t = kw.get(key) || { text: normSpace(name).toLowerCase(), n: 0, stems: st };
+        t.n++; kw.set(key, t);
+      }
+      const sf = w.primary_topic && w.primary_topic.subfield && w.primary_topic.subfield.display_name;
+      if (sf) sub.set(sf, (sub.get(sf) || 0) + 1);
+      text += `${stripTags(w.display_name || w.title || '')}.\n${reconstructAbstract(w.abstract_inverted_index)}\n\n`;
+    }
+    const fromText = extractProfile(text, { defaultWeight: 2 });
+    const out = { interests: [], methods: [], areas: [], glossary: fromText.glossary || {} };
+    const limits = { interests: 16, methods: 12, areas: 6 };
+    const has = (g, st) => out[g].some(t => { const ts = phraseStems(t.text); return hasPhrase(ts, st) || hasPhrase(st, ts); });
+    const minN = (works || []).length >= 6 ? 2 : 1;
+    [...kw.values()].filter(t => t.n >= minN && !(t.stems.length === 1 && GENERIC_SINGLE.has(t.stems[0]))).sort((a, b) => b.n - a.n).forEach(t => {
+      const g = classifyPhrase(t.stems);
+      if (out[g].length < limits[g] && !has(g, t.stems)) out[g].push({ text: t.text, score: t.n });
+    });
+    for (const g of ['interests', 'methods', 'areas']) {
+      for (const t of fromText[g] || []) if (out[g].length < limits[g] && !has(g, phraseStems(t.text))) out[g].push(t);
+    }
+    [...sub.entries()].sort((a, b) => b[1] - a[1]).filter(([, n]) => n >= minN).slice(0, 4).forEach(([name, n]) => {
+      if (out.areas.length < limits.areas && !has('areas', phraseStems(name))) out.areas.push({ text: name.toLowerCase(), score: n });
+    });
+    return { ...out, createdAt: new Date().toISOString(), source: meta.source || 'publications', orcid: meta.orcid || '' };
+  }
+  function mergeProfiles(a, b) {
+    if (!a) return b; if (!b) return a;
+    const out = { ...a, glossary: { ...(a.glossary || {}), ...(b.glossary || {}) } };
+    for (const g of ['interests', 'methods', 'areas']) {
+      const seen = new Set((a[g] || []).map(t => t.text.toLowerCase()));
+      out[g] = [...(a[g] || []), ...(b[g] || []).filter(t => !seen.has(t.text.toLowerCase()))];
+    }
+    out.source = [a.source, b.source].filter(Boolean).join(' + ');
+    if (b.orcid) out.orcid = b.orcid;
+    return out;
+  }
+
+  // ---------------------------------------------------------------- answer mode helpers (the model is called by the app)
+  function buildAnswerPrompt(question, papers) {
+    const system = 'You help a researcher by answering their question using ONLY the numbered paper abstracts provided. ' +
+      'Cite every factual claim with the number of the abstract it comes from, like [2] or [1, 3]. Do not use outside knowledge. ' +
+      'If the abstracts do not answer the question, say so plainly and say what they do cover. Note disagreements between papers. ' +
+      'Write at most 180 words of plain prose, no headings, no bullet points.';
+    const list = papers.map((w, i) => `[${i + 1}] ${w.title} (${w.year || 'n.d.'}). Abstract: ${w.abstract}`).join('\n\n');
+    return { system, user: `Question: ${question}\n\nAbstracts:\n\n${list}` };
+  }
+  function expandRefs(s) {
+    const out = [];
+    String(s).split(/\s*[,;]\s*/).forEach(part => {
+      const m = part.match(/^(\d+)\s*[–-]\s*(\d+)$/);
+      if (m) { const a = Number(m[1]), b = Number(m[2]); if (b >= a && b - a < 20) for (let i = a; i <= b; i++) out.push(i); }
+      else if (/^\d+$/.test(part)) out.push(Number(part));
+    });
+    return out;
+  }
+  // Checks an AI answer: which sentences cite sources, and whether every citation points to a supplied paper.
+  function checkAnswer(text, n) {
+    const sentences = splitSentences(text).map(sent => {
+      const cites = [...sent.matchAll(/\[(\d+(?:\s*[,;–-]\s*\d+)*)\]/g)].flatMap(m => expandRefs(m[1]));
+      const hedge = /\b(do not|does not|don't|doesn't|cannot|no information|not (address|discuss|mention|cover))\b/i.test(sent);
+      return { text: sent, cites, uncited: !cites.length && sent.split(/\s+/).length > 5 && !hedge, invalid: cites.filter(c => c < 1 || c > n) };
+    });
+    const cited = [...new Set(sentences.flatMap(x => x.cites))].filter(c => c >= 1 && c <= n).sort((a, b) => a - b);
+    return { sentences, uncited: sentences.filter(x => x.uncited).length, invalid: [...new Set(sentences.flatMap(x => x.invalid))], cited };
+  }
+
+  // Sorting that keeps weakly relevant items from jumping to the top when sorting by date or citations.
+  function sortWorks(ranked, how) {
+    if (!how || how === 'best') return ranked;
+    const max = Math.max(0.0001, ...ranked.map(w => (w.rank ? w.rank.qrel : 0)));
+    const relevant = w => (w.rank && w.rank.qrel >= 0.45 * max) || (w.ranks && (w.ranks.oa_sem !== undefined || w.ranks.oa_trail !== undefined));
+    const key = how === 'newest' ? (w => String(w.date || w.year || '')) : (w => String(w.cites || 0).padStart(9, '0'));
+    const cmp = (a, b) => (key(b) > key(a) ? 1 : key(b) < key(a) ? -1 : 0);
+    const top = ranked.filter(relevant).sort(cmp);
+    const rest = ranked.filter(w => !relevant(w)).sort(cmp);
+    return top.concat(rest);
   }
 
   const Core = {
@@ -1314,6 +1498,7 @@ th { font-weight: 600; }
     extractGlossary, extractProfile, profileTerms, profileText, analyzeQuery, assessFieldAmbiguity,
     normOpenAlex, normCrossref, normEPMC, workKey, dedupeInto, classifyType, prepWork, scoreQuery, scoreProfile, rankWorks,
     explain, highlightStems, computeThemes, parseScholarLines, titleSimilarity, compareWithList, toBibTeX, toRIS, toCSV, slim,
+    relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = Core;
@@ -1337,6 +1522,7 @@ th { font-weight: 600; }
     tjs: 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js',
   };
   const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
+  const CHANNEL_NAMES = { oa_kw: 'OpenAlex keyword', oa_sem: 'OpenAlex meaning-based', oa_rel: 'OpenAlex related terms', oa_recent: 'OpenAlex recent', oa_trail: 'OpenAlex citation trail', crossref: 'Crossref', epmc: 'Europe PMC' };
   const CATS = [
     ['research', 'Original articles', 'Labelled "article" by the source and not flagged as a review or commentary'],
     ['review', 'Reviews', 'Includes ones inferred from wording (marked ?)'],
@@ -1367,7 +1553,11 @@ th { font-weight: 600; }
 
   // ---------------------------------------------------------------- state
   const S = {
-    settings: Object.assign({ apiKey: '', crossref: true, epmc: true, semantic: true, rememberProfile: false, ai: false }, store.get('settings', {})),
+    settings: Object.assign({ apiKey: '', crossref: true, epmc: true, semantic: true, rememberProfile: false, ai: false,
+      llmProvider: 'anthropic', llmKey: '', llmModel: 'claude-haiku-5-5', llmBase: 'https://api.openai.com/v1', llmConsent: false }, store.get('settings', {})),
+    sort: 'best',
+    follows: store.get('follows', []) || [],
+    prevSearch: null,
     profile: null,
     saved: new Map(),
     mode: 'all',
@@ -1380,9 +1570,13 @@ th { font-weight: 600; }
   if (S.settings.rememberProfile) S.profile = store.get('profile', null);
   (store.get('saved', []) || []).forEach(w => { if (w && w.key) { C.prepWork(w); S.saved.set(w.key, w); } });
   S.mode = store.get('mode', 'all');
+  S.sort = store.get('sort', 'best');
   function saveSettings() { store.set('settings', S.settings); }
   function persistProfile() { if (S.settings.rememberProfile && S.profile) store.set('profile', S.profile); else store.del('profile'); }
-  function persistSaved() { store.set('saved', [...S.saved.values()].map(C.slim)); }
+  function persistSaved() { return store.set('saved', [...S.saved.values()].map(C.slim)); }
+  function persistFollows() { store.set('follows', S.follows); }
+  const todayISO = () => new Date().toISOString().slice(0, 10);
+  const shortId = id => String(id || '').split('/').pop();
 
   // ---------------------------------------------------------------- network
   async function getJSON(url, { timeout = 20000, retries = 1 } = {}) {
@@ -1425,7 +1619,8 @@ th { font-weight: 600; }
     const view = VIEWS.includes(v) ? v : 'search';
     VIEWS.forEach(x => { $('#view-' + x).hidden = x !== view; });
     document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.view === view ? 'page' : 'false'));
-    if (view === 'saved') renderSaved();
+    if (view === 'saved') { renderSaved(); renderFollows(); }
+    if (view === 'search') renderFollows();
     if (view === 'profile') { renderProfileEditor(); renderAI(); }
     if (view === 'about') renderAbout();
     window.scrollTo(0, 0);
@@ -1435,7 +1630,7 @@ th { font-weight: 600; }
   let searchToken = 0;
   function ctx() {
     const s = S.search;
-    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile() };
+    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile(), trail: s.kind === 'trail' ? s.trail : null };
   }
   function hasProfile() { return !!(S.profile && ((S.profile.interests || []).length + (S.profile.methods || []).length + (S.profile.areas || []).length)); }
 
@@ -1446,13 +1641,12 @@ th { font-weight: 600; }
     const token = ++searchToken;
     const choices = Object.assign({}, opts.choices || {});
     const analysis = C.analyzeQuery(q, S.profile, choices);
-    S.search = { q, analysis, choices, sense: opts.sense || null, senseAuto: false, fieldInfo: null, allFields: !!opts.allFields,
+    S.search = { kind: 'search', q, analysis, choices, sense: opts.sense || null, senseAuto: false, fieldInfo: null, allFields: !!opts.allFields,
       pool: new Map(), ranked: [], themes: null, status: {}, pages: { oa_kw: 1, oa_sem: 1, crossref: 0, epmc: '*' }, exhausted: {},
-      shown: PAGE, cost: 0, serverFilters: opts.serverFilters || null, sem: new Map(), dupes: 0, fetched: 0, compare: null };
-    S.filters.theme = null;
-    $('#start').hidden = true;
-    $('#clarify').innerHTML = ''; $('#interp').innerHTML = ''; $('#map-holder').innerHTML = ''; $('#filterbar').innerHTML = '';
-    $('#results').innerHTML = ''; $('#more').innerHTML = ''; $('#compare-holder').innerHTML = '';
+      shown: PAGE, cost: 0, serverFilters: opts.serverFilters || null, sem: new Map(), dupes: 0, fetched: 0, compare: null,
+      since: opts.since || null, wantRecent: S.sort === 'newest', answer: null, followIndex: opts.followIndex != null ? opts.followIndex : null };
+    S.filters.theme = null; S.prevSearch = null;
+    clearSearchUI();
     if (location.hash && location.hash !== '#search') location.hash = '#search';
 
     if (analysis.question && !opts.skipQuestion) { renderClarify({ kind: 'acronym', ...analysis.question }); return; }
@@ -1476,9 +1670,34 @@ th { font-weight: 600; }
     await fetchBatch(token);
   }
 
+  function clearSearchUI() {
+    $('#start').hidden = true;
+    ['#clarify', '#interp', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
+  }
+
+  // Follow the citation trail from one paper: papers citing it, its references, or OpenAlex's related works.
+  async function runTrail(seed, kind) {
+    if (!seed || !seed.openalexId) return;
+    const token = ++searchToken;
+    const prev = S.search && S.search.kind === 'search' ? S.search : (S.prevSearch || null);
+    const analysis = C.analyzeQuery(seed.title, S.profile, {});
+    S.search = { kind: 'trail', trail: { kind, seed: { key: seed.key, title: seed.title, openalexId: seed.openalexId, cites: seed.cites } },
+      q: seed.title, analysis, choices: {}, sense: null, pool: new Map(), ranked: [], themes: null, status: {}, pages: { oa_trail: 1 }, exhausted: {},
+      shown: PAGE, cost: 0, sem: new Map(), dupes: 0, fetched: 0, compare: null, answer: null };
+    S.prevSearch = prev; S.filters.theme = null;
+    clearSearchUI();
+    window.scrollTo(0, 0);
+    await fetchBatch(token);
+  }
+
   function oaFilter() {
     const s = S.search; const parts = [];
+    if (s.kind === 'trail') {
+      const id = shortId(s.trail.seed.openalexId);
+      parts.push({ cites: `cites:${id}`, refs: `cited_by:${id}`, related: `related_to:${id}` }[s.trail.kind]);
+    }
     if (s.sense) parts.push(`primary_topic.domain.id:${s.sense.id}`);
+    if (s.since) parts.push(`from_publication_date:${s.since}`);
     const f = s.serverFilters;
     if (f) {
       if (f.yearFrom || f.yearTo) parts.push(`publication_year:${f.yearFrom || 1500}-${f.yearTo || new Date().getFullYear() + 1}`);
@@ -1488,39 +1707,53 @@ th { font-weight: 600; }
     return parts.join(',');
   }
 
-  async function fetchBatch(token) {
+  async function fetchBatch(token, opts = {}) {
     const s = S.search; const a = s.analysis;
     setLoading(s.fetched ? 'Getting more results…' : 'Searching OpenAlex' + (S.settings.crossref ? ', Crossref' : '') + (S.settings.epmc ? ' and Europe PMC' : '') + '…');
     const filter = oaFilter();
     const jobs = [];
-    if (!s.exhausted.oa_kw) jobs.push(['oa_kw', 'OpenAlex keyword search', getJSON(oaURL({ search: a.keywordQuery, filter, per_page: 40, page: s.pages.oa_kw, select: OA_SELECT }))]);
-    if (S.settings.semantic && !s.exhausted.oa_sem) jobs.push(['oa_sem', 'OpenAlex meaning-based search', getJSON(oaURL({ 'search.semantic': a.semanticQuery, filter, per_page: 25, page: s.pages.oa_sem, select: OA_SELECT }))]);
+    if (s.kind === 'trail') {
+      const label = { cites: 'Papers citing it', refs: 'Its references', related: 'Related papers' }[s.trail.kind];
+      if (!s.exhausted.oa_trail) jobs.push(['oa_trail', `OpenAlex: ${label.toLowerCase()}`, () => getJSON(oaURL({ filter, per_page: 50, page: s.pages.oa_trail, select: OA_SELECT, sort: s.trail.kind === 'related' ? '' : 'cited_by_count:desc' })), 50]);
+    } else {
+    if (!s.exhausted.oa_kw) jobs.push(['oa_kw', 'OpenAlex keyword search', () => getJSON(oaURL({ search: a.keywordQuery, filter, per_page: 40, page: s.pages.oa_kw, select: OA_SELECT })), 40]);
+    if (S.settings.semantic && !s.exhausted.oa_sem) jobs.push(['oa_sem', 'OpenAlex meaning-based search', () => getJSON(oaURL({ 'search.semantic': a.semanticQuery, filter, per_page: 25, page: s.pages.oa_sem, select: OA_SELECT })), 25]);
     else if (!S.settings.semantic) s.status.oa_sem = { skip: true, label: 'OpenAlex meaning-based search', msg: 'off in Settings' };
-    const sf = s.serverFilters || {};
+    if (a.related.length && !s.exhausted.oa_rel) jobs.push(['oa_rel', 'OpenAlex related terms', () => getJSON(oaURL({ search: a.relatedQuery, filter, per_page: 25, page: 1, select: OA_SELECT })), 25]);
+    if (s.wantRecent && !s.since && !s.exhausted.oa_recent) {
+      const from = `${new Date().getFullYear() - 3}-01-01`;
+      jobs.push(['oa_recent', 'OpenAlex recent papers', () => getJSON(oaURL({ search: a.keywordQuery, filter: [filter, `from_publication_date:${from}`].filter(Boolean).join(','), per_page: 25, page: 1, select: OA_SELECT })), 25]);
+    }
+    const sf = Object.assign({}, s.serverFilters || {});
+    if (s.since) sf.sinceDate = s.since;
     if (S.settings.crossref && !s.exhausted.crossref) {
       const p = new URLSearchParams({ 'query.bibliographic': a.semanticQuery, rows: 20, offset: s.pages.crossref, select: 'DOI,title,abstract,type,issued,published,container-title,author,is-referenced-by-count,URL' });
-      const cf = []; if (sf.yearFrom) cf.push(`from-pub-date:${sf.yearFrom}`); if (sf.yearTo) cf.push(`until-pub-date:${sf.yearTo}`); if (cf.length) p.set('filter', cf.join(','));
-      jobs.push(['crossref', 'Crossref', getJSON(`${CR}/works?${p}`, { timeout: 15000 })]);
+      const cf = []; if (sf.sinceDate) cf.push(`from-pub-date:${sf.sinceDate}`); else if (sf.yearFrom) cf.push(`from-pub-date:${sf.yearFrom}`); if (sf.yearTo) cf.push(`until-pub-date:${sf.yearTo}`); if (cf.length) p.set('filter', cf.join(','));
+      jobs.push(['crossref', 'Crossref', () => getJSON(`${CR}/works?${p}`, { timeout: 15000 })]);
     } else if (!S.settings.crossref) s.status.crossref = { skip: true, label: 'Crossref', msg: 'off in Settings' };
     if (S.settings.epmc && !s.exhausted.epmc) {
       let query = a.keywordQuery;
-      if (sf.yearFrom || sf.yearTo) query += ` AND PUB_YEAR:[${sf.yearFrom || 1800} TO ${sf.yearTo || new Date().getFullYear() + 1}]`;
+      if (sf.sinceDate) query += ` AND PUB_YEAR:[${sf.sinceDate.slice(0, 4)} TO ${new Date().getFullYear() + 1}]`;
+      else if (sf.yearFrom || sf.yearTo) query += ` AND PUB_YEAR:[${sf.yearFrom || 1800} TO ${sf.yearTo || new Date().getFullYear() + 1}]`;
       if (sf.oaOnly) query += ' AND OPEN_ACCESS:y';
       if (sf.type === 'review') query += ' AND PUB_TYPE:"review"';
       const p = new URLSearchParams({ query, format: 'json', resultType: 'core', pageSize: 20, cursorMark: s.pages.epmc });
-      jobs.push(['epmc', 'Europe PMC', getJSON(`${EP}/search?${p}`, { timeout: 15000 })]);
+      jobs.push(['epmc', 'Europe PMC', () => getJSON(`${EP}/search?${p}`, { timeout: 15000 })]);
     } else if (!S.settings.epmc) s.status.epmc = { skip: true, label: 'Europe PMC', msg: 'off in Settings' };
+    }
 
-    const results = await Promise.all(jobs.map(j => j[2]));
+    if (opts.only) { for (let k = jobs.length - 1; k >= 0; k--) if (!opts.only.includes(jobs[k][0])) jobs.splice(k, 1); }
+    const results = await Promise.all(jobs.map(j => j[2]()));
     if (token !== searchToken) return;
     const before = s.pool.size; let incoming = 0;
     results.forEach((r, i) => {
       const [ch, label] = jobs[i];
       if (!r.ok) { s.status[ch] = { ok: false, label, msg: failText(label, r) }; s.exhausted[ch] = true; return; }
       let items = [];
-      if (ch === 'oa_kw' || ch === 'oa_sem') {
+      if (ch.startsWith('oa_')) {
         addCost(r);
-        const per = ch === 'oa_kw' ? 40 : 25;
+        const per = jobs[i][3];
+        s.pages[ch] = s.pages[ch] || 1;
         const off = (s.pages[ch] - 1) * per;
         const res = r.data.results || [];
         items = res.map((w, k) => C.normOpenAlex(w, ch, off + k + 1));
@@ -1528,7 +1761,7 @@ th { font-weight: 600; }
         const prev = s.status[ch] && s.status[ch].n || 0;
         s.status[ch] = { ok: true, label, n: prev + res.length, total };
         s.pages[ch]++;
-        if (res.length < per || off + res.length >= total || (ch === 'oa_sem' && s.pages[ch] > 2)) s.exhausted[ch] = true;
+        if (res.length < per || off + res.length >= total || (ch === 'oa_sem' && s.pages[ch] > 2) || ch === 'oa_rel' || ch === 'oa_recent') s.exhausted[ch] = true;
       } else if (ch === 'crossref') {
         const res = (r.data.message && r.data.message.items) || [];
         const off = s.pages.crossref;
@@ -1540,7 +1773,7 @@ th { font-weight: 600; }
       } else if (ch === 'epmc') {
         const res = (r.data.resultList && r.data.resultList.result) || [];
         const prevN = s.status[ch] && s.status[ch].n || 0;
-        items = res.map((it, k) => C.normEPMC(it, prevN + k + 1));
+        items = res.map((it, k) => C.normEPMC(it, prevN + k + 1)).filter(w => !s.since || !w.date || w.date >= s.since);
         s.status[ch] = { ok: true, label, n: prevN + res.length, total: r.data.hitCount };
         if (!res.length || !r.data.nextCursorMark || r.data.nextCursorMark === s.pages.epmc) s.exhausted.epmc = true;
         s.pages.epmc = r.data.nextCursorMark;
@@ -1554,6 +1787,7 @@ th { font-weight: 600; }
     setLoading(null);
     rerank();
     renderAll();
+    if (s.since && s.followIndex != null && S.follows[s.followIndex]) { S.follows[s.followIndex].lastChecked = todayISO(); S.follows[s.followIndex].lastNew = s.pool.size; persistFollows(); }
     if (S.ai.status === 'ready') embedPool();
     else if (S.settings.ai && S.ai.status === 'off') loadAI(true);
   }
@@ -1569,7 +1803,7 @@ th { font-weight: 600; }
     const f = S.filters;
     const theme = f.theme && s.themes ? s.themes.themes.find(t => t.id === f.theme) : null;
     const tkeys = theme ? new Set(theme.keys) : null;
-    return s.ranked.filter(w => {
+    return C.sortWorks(s.ranked, S.sort).filter(w => {
       const ti = w.typeInfo;
       if (!f.cats.has(ti.cat)) return false;
       if (f.hideInferred && ti.conf === 'inferred') return false;
@@ -1634,13 +1868,40 @@ th { font-weight: 600; }
     }
   }
 
-  function renderInterp() {
+  function renderTrailHeader() {
+    const s = S.search; const t = s.trail;
+    const what = { cites: 'Papers that cite', refs: 'Papers cited by', related: 'Papers related to' }[t.kind];
+    const st = s.status.oa_trail;
+    const failed = st && st.ok === false;
+    $('#interp').innerHTML = `${failed ? `<div class="panel warn" role="alert"><strong>Could not follow this trail.</strong> ${esc(st.msg)}</div>` : ''}
+      <div class="panel trail-head"><p class="small muted" style="margin:0">Following the citation trail</p>
+      <h3 style="margin:.2em 0 .4em">${esc(what)} “${esc(t.seed.title)}”</h3>
+      <p class="tiny" style="margin:0">${st && st.ok ? `${fmt(st.n)} fetched${st.total != null ? ` of ${fmt(st.total)}` : ''}. ` : ''}Ranked by overlap with that paper’s title and your profile; sort by date or citations below. OpenAlex cost: $${s.cost.toFixed(4)}.</p>
+      <div class="row" style="margin-top:8px">${S.prevSearch ? `<button type="button" class="btn small" id="trail-back">Back to “${esc(S.prevSearch.q.length > 40 ? S.prevSearch.q.slice(0, 38) + '…' : S.prevSearch.q)}”</button>` : ''}
+      ${['cites', 'refs', 'related'].filter(k => k !== t.kind).map(k => `<button type="button" class="btn small" data-trail-switch="${k}">${{ cites: 'Citing papers', refs: 'References', related: 'Similar papers' }[k]}</button>`).join('')}</div></div>`;
+  }
+
+  function renderRelated() {
     const s = S.search; const a = s.analysis;
+    if (s.kind !== 'search' || !s.ranked.length) return '';
+    const sugg = C.relatedTerms(s.ranked, a, 8);
+    const active = a.related.map(r => `<li class="chip on">+ ${esc(r.text)} <button type="button" data-related-rm="${esc(r.text)}" aria-label="Stop searching ${esc(r.text)}">×</button></li>`).join('');
+    if (!sugg.length && !active) return '';
+    return `<div class="related"><p class="small" style="margin:0"><strong>Related terms in these results</strong> <span class="tiny">Tap one to search it as well</span></p>
+      <ul class="chips">${active}${sugg.map(t => `<li><button type="button" class="chip add" data-related-add="${esc(t.text)}">${esc(t.text)} <span class="tiny">${t.n}</span></button></li>`).join('')}</ul></div>`;
+  }
+
+  function followIndex(s) { return S.follows.findIndex(f => f.q === s.q && JSON.stringify(f.choices || {}) === JSON.stringify(s.choices || {}) && ((f.sense && f.sense.id) || null) === ((s.sense && s.sense.id) || null)); }
+
+  function renderInterp() {
+    const s = S.search;
+    if (s.kind === 'trail') { renderTrailHeader(); return; }
+    const a = s.analysis;
     const bits = [];
     bits.push(`<p>Keyword search: <code>${esc(a.keywordQuery)}</code></p>`);
     const chips = [];
     a.acronyms.forEach(x => chips.push(`<li class="chip">${esc(x.acr)} = ${esc(x.long)} <span class="tiny">(${esc(x.how)})</span> <button type="button" title="Search ${esc(x.acr)} as typed" aria-label="Remove meaning for ${esc(x.acr)}" data-unacr="${esc(x.acr)}">×</button></li>`));
-    a.expansions.forEach(x => chips.push(`<li class="chip toggle ${x.on ? '' : 'off'}" role="button" tabindex="0" aria-pressed="${x.on}" data-exp="${esc(x.text)}" title="${x.on ? 'Tap to stop searching this related term' : 'Tap to include this related term'}">${x.on ? '+' : ''} ${esc(x.text)} <span class="tiny">for ${esc(x.for)}</span></li>`));
+    a.expansions.forEach(x => chips.push(`<li><button type="button" class="chip toggle ${x.on ? '' : 'off'}" aria-pressed="${x.on}" data-exp="${esc(x.text)}" title="${x.on ? 'Tap to stop searching this synonym' : 'Tap to include this synonym'}">${x.on ? '+' : ''} ${esc(x.text)} <span class="tiny">for ${esc(x.for)}</span></button></li>`));
     if (s.sense) chips.push(`<li class="chip">Limited to ${esc(s.sense.name)} ${s.senseAuto ? '<span class="tiny">(picked from your profile)</span>' : ''} <button type="button" data-unfield="1" aria-label="Search all fields instead">×</button></li>`);
     if (chips.length) bits.push(`<ul class="chips" aria-label="How your search was interpreted">${chips.join('')}</ul>`);
     if (S.settings.semantic) bits.push(`<p class="small">Also searched by meaning: <code>${esc(a.semanticQuery)}</code></p>`);
@@ -1655,7 +1916,10 @@ th { font-weight: 600; }
     bits.push(`<p class="tiny">${fmt(s.pool.size)} unique papers after merging ${fmt(s.dupes)} duplicates. OpenAlex cost for this search: $${s.cost.toFixed(3)} (session $${S.sessionCost.toFixed(3)}; free allowance $${S.settings.apiKey ? '1.00' : '0.10'} a day${S.settings.apiKey ? ' with your key' : ' without a key'}).${S.ai.status === 'ready' ? ' Re-ranked with the on-device model.' : ''}</p>`);
     const failed = Object.values(st).filter(x => x && x.ok === false);
     const warn = failed.length ? `<div class="panel warn" role="alert"><strong>These results are incomplete.</strong> ${failed.map(x => esc(x.msg)).join(' ')}</div>` : '';
-    $('#interp').innerHTML = `${warn}<details class="panel interp" ${s.fetched && s.fetched < 30 ? 'open' : ''}><summary class="small"><strong>How this was searched</strong></summary>${bits.join('')}</details>`;
+    const fi = followIndex(s);
+    const since = s.since ? `<div class="panel since"><strong>Papers published since ${esc(s.since)}</strong> for “${esc(s.q)}”. ${s.pool.size ? '' : 'Nothing new yet.'} <span class="tiny">Uses publication dates, so papers indexed late with older dates can be missed.</span></div>` : '';
+    const follow = `<div class="row follow-row"><button type="button" class="btn small" id="follow-toggle" aria-pressed="${fi >= 0}">${fi >= 0 ? 'Following this search' : 'Follow this search'}</button><span class="tiny">${fi >= 0 ? 'Check it for new papers from the Saved tab.' : 'Keep it on this device and check later for new papers.'}</span></div>`;
+    $('#interp').innerHTML = `${warn}${since}${renderRelated()}<details class="panel interp"><summary class="small"><strong>How this was searched</strong></summary>${bits.join('')}</details>${follow}`;
   }
 
   function renderMap() {
@@ -1717,6 +1981,7 @@ th { font-weight: 600; }
     if (f.oaOnly) chips.push(`<li class="chip">Open access <button data-clear="oaOnly" aria-label="Clear">×</button></li>`);
     if (f.theme && s.themes) { const t = s.themes.themes.find(x => x.id === f.theme); if (t) chips.push(`<li class="chip">Theme: ${esc(t.name)} <button data-clear="theme" aria-label="Clear theme">×</button></li>`); }
     $('#filterbar').innerHTML = `<div class="filterbar"><button type="button" class="btn small" id="open-filters">Filters${filtersActive() ? ' (on)' : ''}</button>
+      <label class="sortsel"><span class="sr-only">Sort results</span><select id="sort"><option value="best" ${S.sort === 'best' ? 'selected' : ''}>Best match</option><option value="newest" ${S.sort === 'newest' ? 'selected' : ''}>Newest first</option><option value="cited" ${S.sort === 'cited' ? 'selected' : ''}>Most cited</option></select></label>
       <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${Math.min(s.shown, vis.length)} of ${vis.length} shown</span></div>`;
   }
 
@@ -1744,7 +2009,7 @@ th { font-weight: 600; }
     const ev = ex.evidence ? `<blockquote>“${highlight(ex.evidence.text, hset)}${ex.evidence.truncated ? '…' : ''}”<cite>From the abstract (${esc(ex.evidence.from)})</cite></blockquote>` : '';
     const sem = w.rank.sem ? `; model similarity to query ${w.rank.sem.q.toFixed(2)}${w.rank.sem.p != null ? `, to profile ${w.rank.sem.p.toFixed(2)}` : ''}` : '';
     return `<li class="paper ${closeCls}" data-key="${esc(w.key)}">
-      <div class="badges"><span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}${w.cites ? `<span class="badge">Cited by ${fmt(w.cites)}</span>` : ''}</div>
+      <div class="badges">${S.search && S.search.since && w.date && w.date >= S.search.since ? '<span class="badge new">New</span>' : ''}<span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}${w.cites ? `<span class="badge">Cited by ${fmt(w.cites)}</span>` : ''}</div>
       <h3>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
       <p class="byline">${esc(authors)}${authors ? '. ' : ''}${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
       <div class="why"><ul>${reasons}</ul>${ev}${ex.note ? `<p class="note">${esc(ex.note)}</p>` : ''}</div>
@@ -1755,11 +2020,12 @@ th { font-weight: 600; }
         ${pdf && pdf !== free ? `<a href="${esc(pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}
         <button type="button" class="btn link" data-details="${esc(w.key)}" aria-expanded="${open}">Details</button>
       </div>
+      ${w.openalexId ? `<div class="trail"><span class="tiny">Explore:</span>${w.cites ? `<button type="button" class="btn link" data-trail="cites" data-key="${esc(w.key)}">Cited by ${fmt(w.cites)}</button>` : ''}<button type="button" class="btn link" data-trail="refs" data-key="${esc(w.key)}">References</button><button type="button" class="btn link" data-trail="related" data-key="${esc(w.key)}">Similar</button></div>` : ''}
       <div class="details" ${open ? '' : 'hidden'}><dl>
         <dt>Type</dt><dd>${esc(ti.label)}: ${esc(ti.why)}</dd>
         ${w.topic ? `<dt>Topic</dt><dd>${esc(w.topic.name)} (${esc(w.topic.field || '')})</dd>` : ''}
         ${w.doi ? `<dt>DOI</dt><dd><a href="https://doi.org/${esc(w.doi)}" target="_blank" rel="noopener">${esc(w.doi)}</a></dd>` : ''}
-        <dt>Found by</dt><dd>${esc(Object.keys(w.ranks).map(k => ({ oa_kw: 'OpenAlex keyword', oa_sem: 'OpenAlex meaning-based', crossref: 'Crossref', epmc: 'Europe PMC' }[k] + ` #${w.ranks[k]}`)).join(', '))}</dd>
+        <dt>Found by</dt><dd>${esc(Object.keys(w.ranks).map(k => ((CHANNEL_NAMES[k] || k) + ` #${w.ranks[k]}`)).join(', '))}</dd>
         ${w.openalexId ? `<dt>Record</dt><dd><a href="${esc(safeUrl(w.openalexId))}" target="_blank" rel="noopener">OpenAlex</a></dd>` : ''}
         <dt>Score</dt><dd>${w.rank.score.toFixed(2)} (search match ${w.rank.q.toFixed(2)}, source rank ${w.rank.rrf.toFixed(2)}${hp ? `, profile ${w.rank.prof.toFixed(2)}` : ''}${sem})</dd>
       </dl></div>
@@ -1783,11 +2049,12 @@ th { font-weight: 600; }
     const more = [];
     if (vis.length > s.shown) more.push(`<button type="button" class="btn" id="show-more">Show ${Math.min(PAGE, vis.length - s.shown)} more</button>`);
     else if (s.ranked.length) {
-      const canFetch = ['oa_kw', 'oa_sem', 'crossref', 'epmc'].some(k => !s.exhausted[k] && (k !== 'oa_sem' || S.settings.semantic) && (k !== 'crossref' || S.settings.crossref) && (k !== 'epmc' || S.settings.epmc));
-      if (canFetch) more.push(`<button type="button" class="btn" id="fetch-more">Get more results from the databases</button><span class="tiny">Uses about $0.002 of the OpenAlex free allowance.</span>`);
+      const chans = s.kind === 'trail' ? ['oa_trail'] : ['oa_kw', 'oa_sem', 'crossref', 'epmc'];
+      const canFetch = chans.some(k => !s.exhausted[k] && (k !== 'oa_sem' || S.settings.semantic) && (k !== 'crossref' || S.settings.crossref) && (k !== 'epmc' || S.settings.epmc));
+      if (canFetch) more.push(`<button type="button" class="btn" id="fetch-more">Get more results from the databases</button><span class="tiny">${s.kind === 'trail' ? 'A citation lookup costs very little (about $0.0001).' : 'Uses about $0.002 of the OpenAlex free allowance.'}</span>`);
       else more.push(`<span class="small muted">That is everything these sources returned for this search.</span>`);
     }
-    if (filtersActive() && vis.length < 8 && s.ranked.length && !s.serverFilters) more.push(serverFilterButton());
+    if (s.kind === 'search' && filtersActive() && vis.length < 8 && s.ranked.length && !s.serverFilters) more.push(serverFilterButton());
     $('#more').innerHTML = more.join('');
   }
   function serverFilterButton() {
@@ -1798,7 +2065,7 @@ th { font-weight: 600; }
 
   function renderCompare() {
     const s = S.search;
-    if (!s.ranked.length) { $('#compare-holder').innerHTML = ''; return; }
+    if (!s.ranked.length || s.kind !== 'search') { $('#compare-holder').innerHTML = ''; return; }
     const gs = `https://scholar.google.com/scholar?q=${encodeURIComponent(s.q)}`;
     const cmp = s.compare;
     let out = '';
@@ -1816,7 +2083,7 @@ th { font-weight: 600; }
 
   function renderAll() {
     if (!S.search) return;
-    renderModes(); renderInterp(); renderMap(); renderResults(); renderCompare();
+    renderModes(); renderInterp(); renderMap(); renderAnswer(); renderResults(); renderCompare();
   }
 
   // ---------------------------------------------------------------- filters sheet
@@ -2040,9 +2307,145 @@ th { font-weight: 600; }
     rerank(); renderAll();
   }
 
+  // ---------------------------------------------------------------- answer mode (user's own AI key)
+  function llmReady() {
+    const st = S.settings;
+    if (!st.llmConsent) return false;
+    return st.llmProvider === 'anthropic' ? !!st.llmKey : !!(st.llmBase && st.llmModel);
+  }
+  function answerPapers() { return visibleWorks().filter(w => w.abstract && w.abstract.length > 80).slice(0, 8); }
+  function renderAnswer() {
+    const s = S.search; const el = $('#answer-holder');
+    if (!s || !s.ranked.length || s.kind !== 'search') { el.innerHTML = ''; return; }
+    const a = s.answer;
+    if (!a) {
+      const n = answerPapers().length;
+      el.innerHTML = `<div class="panel answer"><div class="row"><button type="button" class="btn" id="answer-run" ${llmReady() && n >= 2 ? '' : 'disabled'}>Write a short answer from the top papers</button></div>
+        <p class="tiny" style="margin:6px 0 0">${llmReady() ? `Sends your search and the abstracts of the top ${n} papers to ${S.settings.llmProvider === 'anthropic' ? 'Anthropic' : esc(S.settings.llmBase)}, billed to your account. Your CV and profile are not sent.` : 'Optional. Uses an AI model with your own key; set it up in <a href="#about">About › Settings</a>. Off by default.'}</p></div>`;
+      return;
+    }
+    if (a.loading) { el.innerHTML = `<div class="panel answer loading"><span class="spinner" aria-hidden="true"></span> Writing an answer from ${a.papers.length} abstracts…</div>`; return; }
+    if (a.error) { el.innerHTML = `<div class="panel warn answer" role="alert"><strong>No answer.</strong> ${esc(a.error)} <button type="button" class="btn small" id="answer-run">Try again</button></div>`; return; }
+    const chk = a.check;
+    const body = chk.sentences.map(x => {
+      const t = esc(x.text).replace(/\[(\d+(?:\s*[,;–-]\s*\d+)*)\]/g, (m, refs) => '[' + C.expandRefs(refs).map(r => r >= 1 && r <= a.papers.length ? `<a href="#ans-src-${r}">${r}</a>` : `<span class="bad-ref">${r}?</span>`).join(', ') + ']');
+      return x.uncited ? `<span class="uncited" title="No source cited for this sentence">${t}</span>` : t;
+    }).join(' ');
+    const warns = [];
+    if (chk.uncited) warns.push(`${chk.uncited} sentence${chk.uncited > 1 ? 's cite' : ' cites'} no source (underlined); treat ${chk.uncited > 1 ? 'them' : 'it'} with care.`);
+    if (chk.invalid.length) warns.push(`It cited paper number${chk.invalid.length > 1 ? 's' : ''} ${chk.invalid.join(', ')}, which ${chk.invalid.length > 1 ? 'were' : 'was'} not supplied.`);
+    el.innerHTML = `<div class="panel answer"><p class="small muted" style="margin:0 0 6px">AI-written from the abstracts listed below. Check each claim against its source.</p>
+      <p class="answer-text">${body}</p>
+      ${warns.length ? `<p class="small" style="color:var(--warn)">${esc(warns.join(' '))}</p>` : ''}
+      <ol class="ans-src">${a.papers.map((w, i) => `<li id="ans-src-${i + 1}"><a href="${esc(primaryLink(w))}" target="_blank" rel="noopener">${esc(w.title)}</a> <span class="tiny">(${w.year || 'n.d.'}${chk.cited.includes(i + 1) ? '' : ', not cited'})</span></li>`).join('')}</ol>
+      <p class="tiny">Model: ${esc(a.model)}. ${a.usage ? `Tokens: ${esc(a.usage)}, billed to your account.` : ''} <button type="button" class="btn link" id="answer-clear">Hide</button></p></div>`;
+  }
+  async function callLLM(system, user) {
+    const st = S.settings;
+    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 60000);
+    try {
+      if (st.llmProvider === 'anthropic') {
+        const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ctl.signal,
+          headers: { 'content-type': 'application/json', 'x-api-key': st.llmKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+          body: JSON.stringify({ model: st.llmModel || 'claude-haiku-5-5', max_tokens: 700, system, messages: [{ role: 'user', content: user }] }) });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((data && data.error && data.error.message) || `The provider returned HTTP ${res.status}.`);
+        return { text: (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'), usage: data.usage ? `${data.usage.input_tokens} in, ${data.usage.output_tokens} out` : '' };
+      }
+      const base = String(st.llmBase || '').replace(/\/+$/, '');
+      const headers = { 'content-type': 'application/json' };
+      if (st.llmKey) headers.authorization = `Bearer ${st.llmKey}`;
+      const send = async lenKey => {
+        const body = { model: st.llmModel, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] };
+        body[lenKey] = 700;
+        const res = await fetch(`${base}/chat/completions`, { method: 'POST', signal: ctl.signal, headers, body: JSON.stringify(body) });
+        const data = await res.json().catch(() => null);
+        return { res, data };
+      };
+      let { res, data } = await send('max_tokens');
+      if (!res.ok && data && JSON.stringify(data).includes('max_completion_tokens')) ({ res, data } = await send('max_completion_tokens'));
+      if (!res.ok) throw new Error((data && data.error && (data.error.message || data.error)) || `The provider returned HTTP ${res.status}.`);
+      const u = data.usage;
+      return { text: (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '', usage: u ? `${u.prompt_tokens} in, ${u.completion_tokens} out` : '' };
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error('The provider took too long (over 60 s).');
+      if (e instanceof TypeError) throw new Error('Could not reach the provider. Check the address, your connection, and that it allows requests from web pages (CORS).');
+      throw e;
+    } finally { clearTimeout(timer); }
+  }
+  async function runAnswer() {
+    const s = S.search; if (!s || !llmReady()) return;
+    const papers = answerPapers();
+    if (papers.length < 2) { toast('Need at least two papers with abstracts'); return; }
+    const token = searchToken;
+    s.answer = { loading: true, papers }; renderAnswer();
+    const { system, user } = C.buildAnswerPrompt(s.q, papers);
+    try {
+      const out = await callLLM(system, user);
+      if (token !== searchToken) return;
+      if (!out.text.trim()) throw new Error('The model returned an empty answer.');
+      s.answer = { papers, text: out.text, usage: out.usage, model: S.settings.llmModel || 'claude-haiku-5-5', check: C.checkAnswer(out.text, papers.length) };
+    } catch (e) {
+      if (token !== searchToken) return;
+      s.answer = { papers, error: e.message || String(e) };
+    }
+    renderAnswer();
+  }
+
+  // ---------------------------------------------------------------- followed searches
+  function followsHTML() {
+    if (!S.follows.length) return '';
+    return `<div class="follows"><h3>Searches you follow</h3><ul class="saved-list">${S.follows.map((f, i) => `<li><strong>${esc(f.q)}</strong>${f.sense ? ` <span class="tiny">(${esc(f.sense.name)})</span>` : ''}<br>
+      <span class="tiny">Last checked ${esc(f.lastChecked)}</span>
+      <div class="actions"><button type="button" class="save" data-check-follow="${i}">Check for new papers</button><button type="button" class="btn link" data-open-follow="${i}">Run full search</button><button type="button" class="btn link" data-unfollow="${i}">Unfollow</button></div></li>`).join('')}</ul></div>`;
+  }
+  function renderFollows() {
+    const html = followsHTML();
+    const a = $('#follows-start'); if (a) a.innerHTML = html;
+    const b = $('#follows-saved'); if (b) b.innerHTML = html;
+  }
+  function toggleFollow() {
+    const s = S.search; const i = followIndex(s);
+    if (i >= 0) { S.follows.splice(i, 1); toast('Stopped following'); }
+    else { S.follows.push({ q: s.q, choices: s.choices || {}, sense: s.sense || null, created: todayISO(), lastChecked: todayISO() }); toast('Following. Check it later from the Saved tab'); }
+    persistFollows(); renderFollows(); renderInterp();
+  }
+
+  // ---------------------------------------------------------------- ORCID import
+  async function importOrcid(raw) {
+    const status = $('#orcid-status');
+    const id = C.normOrcid(raw);
+    if (!id) { status.textContent = 'That is not a valid ORCID iD. It has 16 digits in four groups, and the last can be X.'; return; }
+    status.textContent = 'Finding you in OpenAlex…';
+    const keyQ = S.settings.apiKey ? `?api_key=${encodeURIComponent(S.settings.apiKey.trim())}` : '';
+    const a = await getJSON(`${OA}/authors/orcid:${id}${keyQ}`);
+    if (!a.ok) { status.textContent = a.status === 404 ? `OpenAlex has no author linked to ORCID ${id} yet. Try uploading your CV instead.` : failText('OpenAlex', a); return; }
+    const author = a.data;
+    status.textContent = `Found ${author.display_name || 'you'} (${fmt(author.works_count)} works). Reading your publications…`;
+    const w = await getJSON(oaURL({ filter: `author.id:${shortId(author.id)}`, per_page: 100, sort: 'publication_date:desc', select: 'id,display_name,publication_year,keywords,primary_topic,abstract_inverted_index' }));
+    addCost(w);
+    if (!w.ok) { status.textContent = failText('OpenAlex', w); return; }
+    const works = w.data.results || [];
+    if (!works.length) { status.textContent = 'No publications are linked to this ORCID iD in OpenAlex.'; return; }
+    const p = C.profileFromWorks(works, { source: `ORCID ${id} (${works.length} works in OpenAlex)`, orcid: id });
+    const had = !!S.profile;
+    S.profile = C.mergeProfiles(S.profile, p);
+    persistProfile();
+    const n = p.interests.length + p.methods.length + p.areas.length;
+    status.textContent = `${had ? 'Added terms from' : 'Built your profile from'} ${works.length} of your publications (${n} terms). Check the list below.`;
+    renderProfileEditor(); renderModes();
+    if (S.search) { rerank(); renderAll(); }
+  }
+
   // ---------------------------------------------------------------- About
   const FEATURES = [
     ['Profile from CV or statement', 'ok', 'Rule-based extraction in the browser (PDF, .docx, text). Editable. Works best on English CVs with section headings.'],
+    ['Profile from ORCID', 'ok', 'Reads your publications in OpenAlex: their keywords, topics, titles and abstracts.'],
+    ['Related terms from the results', 'ok', 'Works in any field: terms OpenAlex attaches to many top results. Tap to search them too.'],
+    ['Citation trail', 'ok', 'Citing papers, references and similar papers for any result.'],
+    ['Sort by best match, newest or most cited', 'ok', 'Newest first also fetches recent papers (last 3 years).'],
+    ['Follow a search', 'ok', 'Saved on this device; “Check for new papers” shows what was published since your last check. No emails yet.'],
+    ['Answers written from top abstracts', 'proto', 'Optional and off by default. Uses your own Anthropic key, or an OpenAI-compatible service or local model. Sentences without a citation are flagged.'],
     ['Acronym and field questions', 'ok', 'Asks when an acronym has several meanings or a short query spans unrelated fields; uses your profile to answer when it can.'],
     ['Synonym and related-term expansion', 'ok', 'A small curated synonym list plus OpenAlex meaning-based search. Not a full thesaurus.'],
     ['Search OpenAlex, Crossref, Europe PMC; merge duplicates', 'ok', 'By DOI, then by title and year.'],
@@ -2052,7 +2455,8 @@ th { font-weight: 600; }
     ['Save and export (BibTeX, RIS, CSV)', 'ok', 'Stored in this browser only; no sync between devices.'],
     ['On-device relevance model', 'proto', 'Optional. Tested in desktop Chrome (about 0.8 s for 24 papers); not yet measured on a phone.'],
     ['Google Scholar comparison', 'proto', 'Manual: paste titles from Scholar. Automated comparison is not possible (Scholar blocks automated access).'],
-    ['AI-written summaries of papers', 'plan', 'Not built. Small generative models that run on a phone (hundreds of MB) are slow and can invent claims; quoting the abstract is safer.'],
+    ['Answers without your own key', 'plan', 'Would need a paid server-side model; planned for a Pro tier.'],
+    ['Email alerts and jobs matched to your CV', 'plan', 'Need a small server; next step.'],
     ['Accounts and sync', 'plan', 'Not built; would need a server.'],
   ];
   const LIMITS = [
@@ -2068,6 +2472,9 @@ th { font-weight: 600; }
     $('#version').textContent = VERSION;
     $('#api-key').value = S.settings.apiKey || '';
     $('#set-semantic').checked = S.settings.semantic; $('#set-crossref').checked = S.settings.crossref; $('#set-epmc').checked = S.settings.epmc;
+    $('#llm-provider').value = S.settings.llmProvider; $('#llm-key').value = S.settings.llmKey || ''; $('#llm-model').value = S.settings.llmModel || '';
+    $('#llm-base').value = S.settings.llmBase || ''; $('#llm-consent').checked = !!S.settings.llmConsent;
+    $('#llm-base-field').hidden = S.settings.llmProvider === 'anthropic';
     const lab = { ok: ['Working', 'status-ok'], proto: ['Prototype', 'status-proto'], plan: ['Planned', 'status-plan'] };
     $('#feature-table tbody').innerHTML = FEATURES.map(([f, s, n]) => `<tr><td>${esc(f)}</td><td class="${lab[s][1]}">${lab[s][0]}</td><td>${esc(n)}</td></tr>`).join('');
     $('#limits').innerHTML = LIMITS.map(l => `<li>${esc(l)}</li>`).join('');
@@ -2128,6 +2535,33 @@ th { font-weight: 600; }
       if (S.filters.theme) $('#filterbar').scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
+    if (d.trail && d.key) { const w = S.search && S.search.pool.get(d.key); if (w) runTrail(w, d.trail); return; }
+    if (d.trailSwitch) { runTrail(S.search.trail.seed, d.trailSwitch); return; }
+    if (t.id === 'trail-back' && S.prevSearch) {
+      searchToken++; S.search = S.prevSearch; S.prevSearch = null; $('#q').value = S.search.q; clearSearchUI(); rerank(); renderAll(); window.scrollTo(0, 0); return;
+    }
+    if (d.relatedAdd !== undefined || d.relatedRm !== undefined) {
+      const s = S.search; const cur = (s.choices.related || []).slice();
+      if (d.relatedAdd !== undefined) { if (!cur.includes(d.relatedAdd)) cur.push(d.relatedAdd); while (cur.length > 3) cur.shift(); }
+      else cur.splice(cur.indexOf(d.relatedRm), 1);
+      s.choices = { ...s.choices, related: cur };
+      s.analysis = C.analyzeQuery(s.q, S.profile, s.choices);
+      s.exhausted.oa_rel = false; s.answer = null;
+      if (d.relatedAdd !== undefined) fetchBatch(searchToken, { only: ['oa_rel'] });
+      else { rerank(); renderAll(); }
+      return;
+    }
+    if (t.id === 'follow-toggle') { toggleFollow(); return; }
+    if (d.checkFollow !== undefined) {
+      const i = Number(d.checkFollow); const f = S.follows[i]; if (!f) return;
+      location.hash = '#search';
+      runSearch(f.q, { choices: f.choices, sense: f.sense, allFields: !f.sense, skipQuestion: true, since: f.lastChecked, followIndex: i });
+      return;
+    }
+    if (d.openFollow !== undefined) { const f = S.follows[Number(d.openFollow)]; if (f) { location.hash = '#search'; runSearch(f.q, { choices: f.choices, sense: f.sense, allFields: !f.sense, skipQuestion: true }); } return; }
+    if (d.unfollow !== undefined) { S.follows.splice(Number(d.unfollow), 1); persistFollows(); renderFollows(); if (S.search && S.search.kind === 'search') renderInterp(); return; }
+    if (t.id === 'answer-run') { runAnswer(); return; }
+    if (t.id === 'answer-clear') { S.search.answer = null; renderAnswer(); return; }
     if (t.id === 'open-filters') { openFilters(); return; }
     if (d.closeSheet !== undefined) { closeSheet(); return; }
     if (t.id === 'apply-filters') { applyFilters(); return; }
@@ -2176,6 +2610,7 @@ th { font-weight: 600; }
     e.preventDefault();
     const f = e.target;
     if (f.id === 'search-form') { runSearch($('#q').value); $('#q').blur(); return; }
+    if (f.id === 'orcid-form') { importOrcid($('#orcid').value); return; }
     if (f.dataset.acrForm) { const v = $('input', f).value.trim(); if (v) runSearch(S.search.q, { choices: { ...S.search.choices, [f.dataset.acrForm]: v } }); return; }
     if (f.dataset.addterm) {
       const v = $('input', f).value.trim(); if (!v) return;
@@ -2192,6 +2627,21 @@ th { font-weight: 600; }
     if (t.id === 'set-semantic') { S.settings.semantic = t.checked; saveSettings(); }
     if (t.id === 'set-crossref') { S.settings.crossref = t.checked; saveSettings(); }
     if (t.id === 'set-epmc') { S.settings.epmc = t.checked; saveSettings(); }
+    if (t.id === 'sort') {
+      S.sort = t.value; store.set('sort', S.sort);
+      const s = S.search; if (!s) return;
+      s.shown = PAGE;
+      if (S.sort === 'newest' && s.kind === 'search' && !s.wantRecent && !s.since) { s.wantRecent = true; fetchBatch(searchToken, { only: ['oa_recent'] }); }
+      else renderResults();
+    }
+    if (t.id === 'llm-provider') {
+      const was = S.settings.llmProvider; S.settings.llmProvider = t.value;
+      if (t.value === 'anthropic' && (!S.settings.llmModel || was !== 'anthropic')) S.settings.llmModel = 'claude-haiku-5-5';
+      if (t.value !== 'anthropic' && was === 'anthropic') S.settings.llmModel = '';
+      saveSettings(); renderAbout(); if (S.search) renderAnswer();
+    }
+    if (['llm-key', 'llm-model', 'llm-base'].includes(t.id)) { S.settings[{ 'llm-key': 'llmKey', 'llm-model': 'llmModel', 'llm-base': 'llmBase' }[t.id]] = t.value.trim(); saveSettings(); if (S.search) renderAnswer(); }
+    if (t.id === 'llm-consent') { S.settings.llmConsent = t.checked; saveSettings(); if (S.search) renderAnswer(); }
   });
   const drop = $('#drop');
   ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
@@ -2200,7 +2650,7 @@ th { font-weight: 600; }
   window.addEventListener('hashchange', route);
 
   // ---------------------------------------------------------------- init
-  updateSavedCount(); renderModes(); route();
+  updateSavedCount(); renderModes(); route(); renderFollows();
   if (S.settings.ai) loadAI(true);
   window.Paperscope = { S, runSearch, version: VERSION }; // for debugging and tests
 })();

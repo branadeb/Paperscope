@@ -107,3 +107,16 @@ Automated access to Google Scholar is not permitted, so this has to be done in a
 | | | | | | |
 
 Expect lower overlap for broad queries, books, theses and non-English work. Scholar's ranking weights citations heavily, and it indexes sources these databases do not.
+
+## Step 1 additions (13 November 2026)
+
+New: profile from ORCID, related terms from the results, citation trail (citing papers, references, similar), sorting by date or citations, followed searches with "new since last check", and optional answers written from the top abstracts with the user's own AI key.
+
+**Tested:** 41/41 unit tests and 32/32 new browser checks (plus the original 43/43) pass. They cover the exact OpenAlex requests each feature makes, ORCID checksum validation, building a profile from publications, related-term suggestions and their effect on ranking, date and citation sorting, the citation-trail requests and "Back", followed searches and New badges, both AI providers' request formats, what the answer request contains (the question and numbered abstracts, never the profile), and flagging of uncited sentences and citations to papers that were not supplied. axe-core found no WCAG 2 A/AA violations.
+
+**Not yet verified against the live services** (my web-fetch tool needed your approval while you were away). These follow OpenAlex's and Anthropic's documented APIs as I know them, and each shows a clear message if the service refuses:
+
+- OpenAlex filters `cites:`, `cited_by:`, `related_to:`, `author.id:` and `from_publication_date:`, and author lookup by ORCID (`/authors/orcid:…`).
+- Anthropic's browser access (the `anthropic-dangerous-direct-browser-access` header) and the model name `claude-haiku-5-5`.
+- OpenAI-compatible services and local model servers, which must allow requests from web pages (CORS); many local servers need a setting for this.
+- "Check for new papers" uses publication dates, so papers indexed late with an older date can be missed.
