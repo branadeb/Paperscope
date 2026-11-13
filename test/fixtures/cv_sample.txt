@@ -1,0 +1,39 @@
+Dana K. Whitfield
+Department of Chemistry, Lakeshore University, Evanston, IL 60208 | dana.whitfield@example.edu
+
+RESEARCH INTERESTS
+Exciton migration and charge transport in organic semiconductor crystals; vibronic coupling and coherence in
+molecular aggregates; ion transport in nanoconfined polymer membranes; open quantum systems theory for
+energy transfer.
+
+EXPERTISE
+Ultrafast spectroscopy: broadband transient absorption (TA), two-dimensional electronic spectroscopy (2DES),
+two-dimensional infrared spectroscopy (2DIR), time-resolved infrared (TRIR)
+Theory and simulation: hierarchical equations of motion (HEOM), Redfield theory, density functional theory (DFT)
+Electrochemistry: electrochemical impedance spectroscopy (EIS)
+
+EDUCATION
+Ph.D. Chemistry, Northbridge University, 2023. Thesis: Vibrational probes of ion transport in nanoconfined membranes
+M.Sc. Chemistry, Central Institute of Science, 2017
+B.Sc. Chemistry, Riverside College, 2015
+
+RESEARCH EXPERIENCE
+Postdoctoral Fellow, Lakeshore University (2023-present)
+- Resolved exciton migration in perylene diimide crystals with transient absorption microscopy
+- Built Redfield and HEOM models of vibronic coupling in molecular aggregates
+Graduate Researcher, Northbridge University (2017-2023)
+- Used 2DIR spectroscopy to follow ion transport in nanoconfined membranes
+- Measured ionic conductivity with electrochemical impedance spectroscopy
+
+SELECTED PUBLICATIONS
+1. Whitfield, D. K.; Ortega, M. Exciton migration in perylene diimide crystal polymorphs. J. Phys. Chem. Lett. 2025, 16, 101.
+2. Whitfield, D. K.; Chen, L.; Ortega, M. Vibronic coherence in molecular aggregates by 2DES. J. Chem. Phys. 2024, 160, 204.
+3. Whitfield, D. K.; Park, S. Correlated ion hopping in nanoconfined polymer membranes. Nat. Commun. 2023, 14, 5521.
+4. Whitfield, D. K.; Park, S. Ion transport and spectral diffusion in nanoconfined membranes. J. Am. Chem. Soc. 2022, 144, 990.
+
+AWARDS
+Graduate Fellowship, Northbridge University, 2019
+Best Poster Award, American Chemical Society National Meeting, 2021
+
+TEACHING
+Teaching Assistant, Physical Chemistry Laboratory, 2018-2020

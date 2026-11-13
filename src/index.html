@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Free research discovery: search OpenAlex, Crossref and Europe PMC, ranked against your own research profile, which never leaves your device.">
+<title>Paperscope: find papers that fit your research</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='none' stroke='%230e6b7b' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='7.5' fill='none' stroke='%23a2650f' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%2313202f'/%3E%3C/svg%3E">
+<style>/*@@CSS@@*/</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="var(--close)" stroke-width="2.5"/><circle cx="16" cy="16" r="7.5" fill="none" stroke="var(--adj)" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="var(--ink)"/></svg>
+      <span>Paperscope</span>
+    </div>
+  </div>
+</header>
+<div class="tabbar">
+    <nav class="tabs" aria-label="Sections">
+      <a href="#search" data-view="search">Search</a>
+      <a href="#profile" data-view="profile">Profile</a>
+      <a href="#saved" data-view="saved">Saved <span class="count" id="saved-count"></span></a>
+      <a href="#about" data-view="about">About</a>
+    </nav>
+</div>
+
+<main>
+  <!-- SEARCH -->
+  <section id="view-search" aria-labelledby="search-h">
+    <h1 id="search-h" class="sr-only">Search</h1>
+    <form id="search-form" class="searchbar" role="search">
+      <label for="q" class="sr-only">Search terms or research question</label>
+      <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Keywords, a phrase or a question">
+      <button class="btn primary" type="submit">Search</button>
+    </form>
+    <p class="profile-line" id="profile-line"></p>
+    <div class="modes" role="radiogroup" aria-label="Which papers to favour" id="modes">
+      <button type="button" role="radio" data-mode="close" aria-checked="false">Close to my work</button>
+      <button type="button" role="radio" data-mode="all" aria-checked="true">Everything</button>
+      <button type="button" role="radio" data-mode="adjacent" aria-checked="false">Adjacent &amp; emerging</button>
+    </div>
+    <p class="mode-hint" id="mode-hint"></p>
+
+    <div id="start">
+      <p class="lede">Search open scholarly databases and see, for each paper, why it may matter to your own research.</p>
+      <p class="muted small">Add a profile first for personalised ranking, or just try a search:</p>
+      <ul class="examples" id="examples">
+        <li><button type="button">exciton migration in molecular crystals</button></li>
+        <li><button type="button">coherence</button></li>
+        <li><button type="button">How do ion channels drive confined cancer cell migration?</button></li>
+        <li><button type="button">MD simulations of polymer electrolytes</button></li>
+      </ul>
+    </div>
+
+    <div id="clarify"></div>
+    <div id="interp"></div>
+    <div id="map-holder"></div>
+    <div id="filterbar"></div>
+    <div id="loading" class="loading" hidden><span class="spinner" aria-hidden="true"></span><span id="loading-text">Searching…</span></div>
+    <ol class="results" id="results" aria-live="polite"></ol>
+    <div class="more" id="more"></div>
+    <div id="compare-holder"></div>
+  </section>
+
+  <!-- PROFILE -->
+  <section id="view-profile" aria-labelledby="profile-h" hidden>
+    <h2 id="profile-h">Your research profile</h2>
+    <p class="lede">Upload a CV or paste a research statement. Paperscope reads it in this browser and lists your interests, methods and areas. Nothing from it is uploaded.</p>
+    <div class="drop" id="drop">
+      <p><label class="btn" for="cv-file">Choose a file</label> <span class="muted small">or drop it here: PDF, Word (.docx) or plain text</span></p>
+      <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" class="sr-only">
+      <p class="tiny" id="file-note">Opening a PDF or Word file downloads a free reader library (pdf.js or mammoth.js, about 1 MB) from jsDelivr. Your file itself stays on this device.</p>
+    </div>
+    <p class="muted small" style="margin-top:14px">Or paste text:</p>
+    <label for="cv-text" class="sr-only">CV or research statement text</label>
+    <textarea id="cv-text" placeholder="Paste a CV, research statement or a few sentences about your work"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn primary" id="read-text" type="button">Read profile</button><span id="parse-status" class="small muted" role="status"></span></div>
+    <div id="profile-editor"></div>
+
+    <h2>On-device relevance model <span class="tiny">(optional)</span></h2>
+    <div class="panel" id="ai-panel"></div>
+  </section>
+
+  <!-- SAVED -->
+  <section id="view-saved" aria-labelledby="saved-h" hidden>
+    <h2 id="saved-h">Saved papers</h2>
+    <div id="saved-body"></div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="view-about" aria-labelledby="about-h" hidden>
+    <h2 id="about-h">About Paperscope</h2>
+    <p>Paperscope searches free scholarly databases, merges the results and ranks them against your query and, if you add one, your research profile. It is not Google Scholar and does not search the same sources or reproduce its ranking. It is free to use and needs no paid AI service.</p>
+
+    <h3>What leaves your device</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Information</th><th>Sent to</th></tr></thead>
+      <tbody>
+        <tr><td>Your CV or statement, and the profile made from it</td><td>Nowhere. Read and stored only in this browser (stored only if you turn on “Remember”).</td></tr>
+        <tr><td>Your search words, any acronym meaning you pick, the field you choose, and filters</td><td>OpenAlex (api.openalex.org), plus Crossref (api.crossref.org) and Europe PMC (ebi.ac.uk) if those sources are on.</td></tr>
+        <tr><td>Your OpenAlex API key, if you add one</td><td>OpenAlex only, with each request.</td></tr>
+        <tr><td>Titles you paste into “Compare with Google Scholar”</td><td>Nowhere, unless you tap “Check OpenAlex”; then the missing titles go to OpenAlex.</td></tr>
+        <tr><td>Saved papers</td><td>Nowhere. Kept in this browser.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted">Code libraries are downloaded only when needed: pdf.js or mammoth.js from jsDelivr when you open a PDF or Word file, and the optional relevance model from jsDelivr and Hugging Face. These downloads do not include your data. Each service sees your IP address, as with any website.</p>
+
+    <h3>Cost and limits</h3>
+    <p class="small">OpenAlex now meters its free API. Without a key you get about $0.10 of free use a day (roughly 30 searches here); with a free key, $1 a day (roughly 300). Paperscope shows what each search used. When the allowance runs out, OpenAlex refuses requests until midnight UTC; it does not bill you unless you have bought prepaid credit on openalex.org. Crossref and Europe PMC are free and need no key, but may slow down busy users.</p>
+
+    <h3>Settings</h3>
+    <div class="field">
+      <label for="api-key">OpenAlex API key (free, optional)</label>
+      <input id="api-key" type="password" autocomplete="off" placeholder="Paste key from openalex.org/settings/api">
+      <span class="tiny">Get one free at <a href="https://openalex.org/settings/api" target="_blank" rel="noopener">openalex.org/settings/api</a>. Kept in this browser only.</span>
+    </div>
+    <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
+    <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
+    <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>
+
+    <h3>Feature status</h3>
+    <div class="table-wrap"><table id="feature-table">
+      <thead><tr><th>Feature</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+
+    <h3>Known limitations</h3>
+    <ul class="small" id="limits"></ul>
+
+    <h3>Credits</h3>
+    <p class="small muted">Metadata from <a href="https://openalex.org" target="_blank" rel="noopener">OpenAlex</a> (CC0), <a href="https://www.crossref.org" target="_blank" rel="noopener">Crossref</a> and <a href="https://europepmc.org" target="_blank" rel="noopener">Europe PMC</a>. Optional model: all-MiniLM-L6-v2 (Apache 2.0) run with Transformers.js and ONNX Runtime Web. PDF reading by pdf.js; Word reading by mammoth.js. Version <span id="version"></span>.</p>
+  </section>
+</main>
+
+<div id="sheet-root"></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script>/*@@CORE@@*/</script>
+<script>/*@@APP@@*/</script>
+</body>
+</html>

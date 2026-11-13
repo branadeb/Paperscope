@@ -1,0 +1,2209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Free research discovery: search OpenAlex, Crossref and Europe PMC, ranked against your own research profile, which never leaves your device.">
+<title>Paperscope: find papers that fit your research</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='none' stroke='%230e6b7b' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='7.5' fill='none' stroke='%23a2650f' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%2313202f'/%3E%3C/svg%3E">
+<style>:root {
+  --bg: #f2f5f8; --surface: #ffffff; --ink: #13202f; --ink-2: #4a5a6b; --ink-3: #5c6b7b; --rule: #d4dde6;
+  --close: #0e6b7b; --close-soft: #dcedf0; --adj: #935b0c; --adj-soft: #f5e8d3; --neutral: #8696a7;
+  --focus: #2a58c2; --warn: #a3352b; --warn-soft: #f7e1de; --ok: #2f6b3a; --mark: #fff1b8;
+  --serif: "Charter", "Bitstream Charter", "Sitka Text", "Iowan Old Style", Cambria, Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --radius: 10px;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1620; --surface: #15202c; --ink: #e3eaf1; --ink-2: #a3b3c3; --ink-3: #8293a5; --rule: #2a3746;
+    --close: #4fb2c1; --close-soft: #12333a; --adj: #e0a44a; --adj-soft: #3a2b13; --neutral: #6f8193;
+    --focus: #8fb0ff; --warn: #f08b7f; --warn-soft: #3b1e1b; --ok: #7cc58a; --mark: #4a4120;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--sans); }
+a { color: var(--focus); text-underline-offset: 2px; }
+button, input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[hidden] { display: none !important; }
+
+/* header */
+.top { padding: env(safe-area-inset-top) 0 0; }
+.top-inner { max-width: 760px; margin: 0 auto; padding: 12px 16px 0; }
+.brand { display: flex; align-items: center; gap: 9px; font: 600 1.2rem/1 var(--serif); letter-spacing: .005em; }
+.brand svg { width: 22px; height: 22px; flex: none; }
+.tabbar { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--rule); }
+.tabs { display: flex; gap: 2px; max-width: 760px; margin: 0 auto; padding: 0 10px; overflow-x: auto; scrollbar-width: none; }
+.tabs a { padding: 8px 12px 10px; text-decoration: none; color: var(--ink-2); border-bottom: 2px solid transparent; white-space: nowrap; font-size: .95rem; }
+.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+.tabs .count { font-variant-numeric: tabular-nums; color: var(--ink-3); font-weight: 400; }
+
+main { max-width: 760px; margin: 0 auto; padding: 18px 16px 80px; }
+h1, h2, h3 { font-family: var(--serif); line-height: 1.25; }
+h2 { font-size: 1.35rem; margin: 1.6em 0 .5em; font-weight: 600; }
+h3 { font-size: 1.08rem; margin: 1.2em 0 .4em; }
+p { margin: .5em 0; }
+.lede { font: 1.12rem/1.5 var(--serif); color: var(--ink-2); margin: 4px 0 14px; max-width: 60ch; }
+.muted { color: var(--ink-2); }
+.small { font-size: .875rem; }
+.tiny { font-size: .8rem; color: var(--ink-3); }
+
+/* search form */
+.searchbar { display: flex; gap: 8px; }
+.searchbar input { flex: 1; min-width: 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); font-size: 1.05rem; }
+.btn { appearance: none; border: 1px solid var(--rule); background: var(--surface); padding: 9px 14px; border-radius: var(--radius); cursor: pointer; line-height: 1.2; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 600; }
+.btn.small { padding: 6px 10px; font-size: .875rem; }
+.btn.link { border: 0; background: none; padding: 4px 2px; color: var(--focus); text-decoration: underline; text-underline-offset: 2px; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.profile-line { margin: 10px 0 0; font-size: .9rem; color: var(--ink-2); }
+
+/* mode control */
+.modes { display: grid; grid-template-columns: repeat(3, 1fr); margin: 14px 0 4px; border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.modes button { appearance: none; border: 0; background: none; padding: 9px 6px; font-size: .88rem; line-height: 1.2; cursor: pointer; color: var(--ink-2); border-left: 1px solid var(--rule); }
+.modes button:first-child { border-left: 0; }
+.modes button[aria-checked="true"] { color: var(--ink); font-weight: 600; box-shadow: inset 0 -3px 0 var(--mode-color, var(--ink)); }
+.modes button[data-mode="close"] { --mode-color: var(--close); }
+.modes button[data-mode="adjacent"] { --mode-color: var(--adj); }
+.modes button[disabled] { color: var(--ink-3); cursor: not-allowed; }
+.mode-hint { font-size: .82rem; color: var(--ink-3); margin: 2px 0 0; }
+
+/* panels */
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: 14px 16px; margin: 14px 0; }
+.panel.ask { border-color: var(--focus); }
+.panel.ask h3 { margin-top: 0; }
+.panel.warn { border-color: var(--warn); background: var(--warn-soft); }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.choices .btn { text-align: left; }
+.choices .share { color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: .85em; }
+
+.interp { font-size: .9rem; color: var(--ink-2); }
+.interp code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85em; background: var(--bg); padding: 1px 5px; border-radius: 4px; word-break: break-word; color: var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: .85rem; line-height: 1.35; }
+.chip button { appearance: none; border: 0; background: none; padding: 0 2px; cursor: pointer; color: var(--ink-3); font-size: 1rem; line-height: 1; }
+.chip.off { text-decoration: line-through; color: var(--ink-3); }
+.chip.toggle { cursor: pointer; }
+.sources { list-style: none; padding: 0; margin: 8px 0 0; font-size: .85rem; display: grid; gap: 2px; }
+.sources li::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--ok); vertical-align: 1px; }
+.sources li.fail::before { background: var(--warn); }
+.sources li.skip::before { background: var(--neutral); }
+.sources li.fail { color: var(--warn); }
+
+/* theme map */
+details.map { margin: 14px 0; }
+details.map > summary, details.compare > summary { cursor: pointer; font: 600 1.05rem var(--serif); padding: 4px 0; }
+.map-svg { width: 100%; height: auto; display: block; max-width: 520px; margin: 4px auto 0; touch-action: manipulation; }
+.map-svg .ring { fill: none; stroke: var(--rule); stroke-dasharray: 2 4; }
+.map-svg .hub { fill: var(--ink); }
+.map-svg .hub-label { fill: var(--bg); font: 600 10px var(--sans); text-anchor: middle; }
+.map-svg .node { cursor: pointer; }
+.map-svg .node circle.b { stroke: var(--surface); stroke-width: 2; }
+.map-svg .node.close circle.b { fill: var(--close); }
+.map-svg .node.adj circle.b { fill: var(--adj); }
+.map-svg .node.dim { opacity: .28; }
+.map-svg .node.sel circle.b { stroke: var(--ink); stroke-width: 3; }
+.map-svg .node circle.emerge { fill: none; stroke: var(--ink); stroke-width: 1.2; stroke-dasharray: 3 2.5; }
+.map-svg .node text { font: 11px var(--sans); fill: var(--ink); text-anchor: middle; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; }
+.map-svg .node text.n { fill: #fff; stroke: none; font-weight: 700; font-size: 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .82rem; color: var(--ink-2); margin: 6px 0; justify-content: center; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.legend .e { background: none; border: 1.2px dashed var(--ink); }
+.theme-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 2px; }
+.theme-list button { appearance: none; width: 100%; text-align: left; border: 0; background: none; padding: 7px 8px; border-radius: 6px; cursor: pointer; display: flex; gap: 10px; align-items: baseline; font-size: .92rem; line-height: 1.35; }
+.theme-list .tl { display: grid; }
+.theme-list button:hover, .theme-list button[aria-pressed="true"] { background: var(--bg); }
+.theme-list .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; transform: translateY(-1px); }
+.theme-list .dot.close { background: var(--close); } .theme-list .dot.adj { background: var(--adj); }
+.theme-list .meta { color: var(--ink-3); font-size: .8rem; font-variant-numeric: tabular-nums; }
+
+/* filters */
+.filterbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 18px 0 4px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.filterbar .count { margin-left: auto; font-size: .85rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sheet-backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / .35); z-index: 40; }
+.sheet { position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; max-height: 86vh; overflow: auto; background: var(--surface); border-radius: 16px 16px 0 0;
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px rgb(0 0 0 / .18); max-width: 760px; margin: 0 auto; }
+.sheet h3 { margin-top: 0; }
+.sheet fieldset { border: 0; padding: 0; margin: 0 0 16px; }
+.sheet legend { font-weight: 600; margin-bottom: 6px; }
+.check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }
+.check input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--ink); }
+.check span small { display: block; color: var(--ink-3); }
+.years { display: flex; gap: 10px; align-items: center; }
+.years input { width: 6.5em; padding: 8px; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); }
+
+/* results */
+.results { list-style: none; padding: 0; margin: 6px 0 0; }
+.paper { position: relative; padding: 16px 0 16px 16px; border-bottom: 1px solid var(--rule); }
+.paper::before { content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 3px; border-radius: 2px; background: var(--neutral); opacity: .55; }
+.paper.close::before { background: var(--close); opacity: 1; }
+.paper.adj::before { background: var(--adj); opacity: 1; }
+.paper h3 { font: 600 1.1rem/1.32 var(--serif); margin: 4px 0 4px; }
+.paper h3 a { color: var(--ink); text-decoration: none; }
+.paper h3 a:hover { text-decoration: underline; }
+.byline { margin: 0; font-size: .88rem; color: var(--ink-2); }
+.byline .venue { font-style: italic; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; font-size: .78rem; }
+.badge { border: 1px solid var(--ink-3); color: var(--ink-2); border-radius: 4px; padding: 0 6px; line-height: 1.55; }
+.badge.inferred, .badge.unverified { border-style: dashed; }
+.badge.oa { border-color: var(--ok); color: var(--ok); }
+.badge.warn { border-color: var(--warn); color: var(--warn); font-weight: 600; }
+.why { margin: 8px 0 0; font-size: .9rem; }
+.why ul { margin: 0; padding-left: 1.1em; color: var(--ink-2); }
+.why li { margin: 1px 0; }
+.why li.profile { color: var(--close); }
+.why li.adjacent { color: var(--adj); }
+.why li.warning { color: var(--warn); font-weight: 600; }
+.why blockquote { margin: 8px 0 0; padding: 6px 0 6px 12px; border-left: 2px solid var(--rule); font: .93rem/1.5 var(--serif); color: var(--ink); }
+.why blockquote cite { display: block; font: .75rem var(--sans); color: var(--ink-3); font-style: normal; margin-top: 2px; }
+.why .note { color: var(--ink-3); font-size: .84rem; font-style: italic; }
+mark { background: var(--mark); color: inherit; padding: 0 1px; border-radius: 2px; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: .88rem; align-items: center; }
+.actions .save { appearance: none; border: 1px solid var(--rule); background: var(--surface); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.actions .save[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.details { margin-top: 10px; font-size: .84rem; color: var(--ink-2); background: var(--bg); border-radius: 8px; padding: 10px 12px; }
+.details dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; }
+.details dt { color: var(--ink-3); }
+.details dd { margin: 0; word-break: break-word; }
+
+.more { margin: 18px 0; display: grid; gap: 8px; justify-items: start; }
+.loading { padding: 24px 0; color: var(--ink-2); display: flex; gap: 10px; align-items: center; }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--rule); border-top-color: var(--ink); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+#start { margin-top: 22px; }
+.examples { list-style: none; padding: 0; display: grid; gap: 6px; margin: 10px 0; }
+.examples button { appearance: none; border: 0; background: none; padding: 2px 0; color: var(--focus); cursor: pointer; text-align: left; font: 1rem/1.4 var(--serif); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--focus) 40%, transparent); }
+
+/* profile */
+.drop { border: 1.5px dashed var(--ink-3); border-radius: var(--radius); padding: 18px; text-align: center; background: var(--surface); }
+.drop.over { border-color: var(--focus); background: color-mix(in srgb, var(--focus) 8%, var(--surface)); }
+textarea { width: 100%; min-height: 120px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); resize: vertical; }
+.term-group { margin: 14px 0; }
+.term-group h3 { display: flex; align-items: baseline; gap: 8px; }
+.term-group h3 small { font: .8rem var(--sans); color: var(--ink-3); }
+.add-term { display: flex; gap: 6px; margin-top: 8px; }
+.add-term input { flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--rule); border-radius: 999px; background: var(--surface); font-size: .88rem; }
+.switch { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; }
+.switch input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--ink); flex: none; }
+.progress { height: 6px; background: var(--rule); border-radius: 3px; overflow: hidden; margin: 8px 0; }
+.progress i { display: block; height: 100%; background: var(--close); width: 0; transition: width .2s; }
+
+/* tables in About */
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; margin: 8px 0; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--rule); }
+th { font-weight: 600; }
+.status-ok { color: var(--ok); font-weight: 600; }
+.status-proto { color: var(--adj); font-weight: 600; }
+.status-plan { color: var(--ink-3); font-weight: 600; }
+.field { display: grid; gap: 4px; margin: 10px 0; }
+.field input[type="text"], .field input[type="password"] { padding: 9px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+
+.saved-list { list-style: none; padding: 0; margin: 0; }
+.saved-list li { padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.saved-list h3 { margin: 0 0 2px; font-size: 1rem; }
+
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-size: .9rem; z-index: 60; max-width: 90vw; }
+.compare textarea { min-height: 110px; font-size: .88rem; }
+.compare ul { padding-left: 1.1em; font-size: .88rem; }
+.compare .found { color: var(--ok); } .compare .missing { color: var(--warn); }
+
+@media (min-width: 640px) {
+  .paper { padding-left: 20px; }
+  .sheet { left: 50%; right: auto; transform: translateX(-50%); width: min(560px, 100vw); bottom: auto; top: 10vh; border-radius: 16px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="var(--close)" stroke-width="2.5"/><circle cx="16" cy="16" r="7.5" fill="none" stroke="var(--adj)" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="var(--ink)"/></svg>
+      <span>Paperscope</span>
+    </div>
+  </div>
+</header>
+<div class="tabbar">
+    <nav class="tabs" aria-label="Sections">
+      <a href="#search" data-view="search">Search</a>
+      <a href="#profile" data-view="profile">Profile</a>
+      <a href="#saved" data-view="saved">Saved <span class="count" id="saved-count"></span></a>
+      <a href="#about" data-view="about">About</a>
+    </nav>
+</div>
+
+<main>
+  <!-- SEARCH -->
+  <section id="view-search" aria-labelledby="search-h">
+    <h1 id="search-h" class="sr-only">Search</h1>
+    <form id="search-form" class="searchbar" role="search">
+      <label for="q" class="sr-only">Search terms or research question</label>
+      <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Keywords, a phrase or a question">
+      <button class="btn primary" type="submit">Search</button>
+    </form>
+    <p class="profile-line" id="profile-line"></p>
+    <div class="modes" role="radiogroup" aria-label="Which papers to favour" id="modes">
+      <button type="button" role="radio" data-mode="close" aria-checked="false">Close to my work</button>
+      <button type="button" role="radio" data-mode="all" aria-checked="true">Everything</button>
+      <button type="button" role="radio" data-mode="adjacent" aria-checked="false">Adjacent &amp; emerging</button>
+    </div>
+    <p class="mode-hint" id="mode-hint"></p>
+
+    <div id="start">
+      <p class="lede">Search open scholarly databases and see, for each paper, why it may matter to your own research.</p>
+      <p class="muted small">Add a profile first for personalised ranking, or just try a search:</p>
+      <ul class="examples" id="examples">
+        <li><button type="button">exciton migration in molecular crystals</button></li>
+        <li><button type="button">coherence</button></li>
+        <li><button type="button">How do ion channels drive confined cancer cell migration?</button></li>
+        <li><button type="button">MD simulations of polymer electrolytes</button></li>
+      </ul>
+    </div>
+
+    <div id="clarify"></div>
+    <div id="interp"></div>
+    <div id="map-holder"></div>
+    <div id="filterbar"></div>
+    <div id="loading" class="loading" hidden><span class="spinner" aria-hidden="true"></span><span id="loading-text">Searching…</span></div>
+    <ol class="results" id="results" aria-live="polite"></ol>
+    <div class="more" id="more"></div>
+    <div id="compare-holder"></div>
+  </section>
+
+  <!-- PROFILE -->
+  <section id="view-profile" aria-labelledby="profile-h" hidden>
+    <h2 id="profile-h">Your research profile</h2>
+    <p class="lede">Upload a CV or paste a research statement. Paperscope reads it in this browser and lists your interests, methods and areas. Nothing from it is uploaded.</p>
+    <div class="drop" id="drop">
+      <p><label class="btn" for="cv-file">Choose a file</label> <span class="muted small">or drop it here: PDF, Word (.docx) or plain text</span></p>
+      <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" class="sr-only">
+      <p class="tiny" id="file-note">Opening a PDF or Word file downloads a free reader library (pdf.js or mammoth.js, about 1 MB) from jsDelivr. Your file itself stays on this device.</p>
+    </div>
+    <p class="muted small" style="margin-top:14px">Or paste text:</p>
+    <label for="cv-text" class="sr-only">CV or research statement text</label>
+    <textarea id="cv-text" placeholder="Paste a CV, research statement or a few sentences about your work"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn primary" id="read-text" type="button">Read profile</button><span id="parse-status" class="small muted" role="status"></span></div>
+    <div id="profile-editor"></div>
+
+    <h2>On-device relevance model <span class="tiny">(optional)</span></h2>
+    <div class="panel" id="ai-panel"></div>
+  </section>
+
+  <!-- SAVED -->
+  <section id="view-saved" aria-labelledby="saved-h" hidden>
+    <h2 id="saved-h">Saved papers</h2>
+    <div id="saved-body"></div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="view-about" aria-labelledby="about-h" hidden>
+    <h2 id="about-h">About Paperscope</h2>
+    <p>Paperscope searches free scholarly databases, merges the results and ranks them against your query and, if you add one, your research profile. It is not Google Scholar and does not search the same sources or reproduce its ranking. It is free to use and needs no paid AI service.</p>
+
+    <h3>What leaves your device</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Information</th><th>Sent to</th></tr></thead>
+      <tbody>
+        <tr><td>Your CV or statement, and the profile made from it</td><td>Nowhere. Read and stored only in this browser (stored only if you turn on “Remember”).</td></tr>
+        <tr><td>Your search words, any acronym meaning you pick, the field you choose, and filters</td><td>OpenAlex (api.openalex.org), plus Crossref (api.crossref.org) and Europe PMC (ebi.ac.uk) if those sources are on.</td></tr>
+        <tr><td>Your OpenAlex API key, if you add one</td><td>OpenAlex only, with each request.</td></tr>
+        <tr><td>Titles you paste into “Compare with Google Scholar”</td><td>Nowhere, unless you tap “Check OpenAlex”; then the missing titles go to OpenAlex.</td></tr>
+        <tr><td>Saved papers</td><td>Nowhere. Kept in this browser.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted">Code libraries are downloaded only when needed: pdf.js or mammoth.js from jsDelivr when you open a PDF or Word file, and the optional relevance model from jsDelivr and Hugging Face. These downloads do not include your data. Each service sees your IP address, as with any website.</p>
+
+    <h3>Cost and limits</h3>
+    <p class="small">OpenAlex now meters its free API. Without a key you get about $0.10 of free use a day (roughly 30 searches here); with a free key, $1 a day (roughly 300). Paperscope shows what each search used. When the allowance runs out, OpenAlex refuses requests until midnight UTC; it does not bill you unless you have bought prepaid credit on openalex.org. Crossref and Europe PMC are free and need no key, but may slow down busy users.</p>
+
+    <h3>Settings</h3>
+    <div class="field">
+      <label for="api-key">OpenAlex API key (free, optional)</label>
+      <input id="api-key" type="password" autocomplete="off" placeholder="Paste key from openalex.org/settings/api">
+      <span class="tiny">Get one free at <a href="https://openalex.org/settings/api" target="_blank" rel="noopener">openalex.org/settings/api</a>. Kept in this browser only.</span>
+    </div>
+    <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
+    <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
+    <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>
+
+    <h3>Feature status</h3>
+    <div class="table-wrap"><table id="feature-table">
+      <thead><tr><th>Feature</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+
+    <h3>Known limitations</h3>
+    <ul class="small" id="limits"></ul>
+
+    <h3>Credits</h3>
+    <p class="small muted">Metadata from <a href="https://openalex.org" target="_blank" rel="noopener">OpenAlex</a> (CC0), <a href="https://www.crossref.org" target="_blank" rel="noopener">Crossref</a> and <a href="https://europepmc.org" target="_blank" rel="noopener">Europe PMC</a>. Optional model: all-MiniLM-L6-v2 (Apache 2.0) run with Transformers.js and ONNX Runtime Web. PDF reading by pdf.js; Word reading by mammoth.js. Version <span id="version"></span>.</p>
+  </section>
+</main>
+
+<div id="sheet-root"></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script>/* Paperscope core logic: text processing, profile extraction, query analysis,
+ * source normalisation, de-duplication, ranking, explanations and themes.
+ * No DOM and no network access here, so everything can be unit-tested in Node. */
+(function (root) {
+  'use strict';
+
+  // ---------------------------------------------------------------- text utils
+  const STOP = new Set(('a about above after again against all also am an and any are as at be because been before being below ' +
+    'between both but by can could did do does doing down during each either et etc few for from further had has have having he ' +
+    'her here hers him his how however i if in into is it its itself just may me might more most must my no nor not now of off on ' +
+    'once only or other our ours out over own per same she should so some such than that the their theirs them then there these ' +
+    'they this those through thus to too under until up upon us very via was we were what when where which while who whom why will ' +
+    'with within without would you your yours vs versus toward towards among amongst whether i.e e.g ie eg').split(/\s+/));
+
+  // Words that carry no research content in a CV (treated as phrase delimiters).
+  const CV_NOISE = new Set(('university universities department dept institute institution college school faculty laboratory ' +
+    'center centre email e-mail mail phone tel fax address street road avenue suite usa u.s.a india china germany japan korea uk ' +
+    'england france canada italy spain january february march april june july august september october november december jan feb ' +
+    'mar apr jun jul aug sep sept oct nov dec present current phd ph.d ph d bsc msc ms ma ba bs mphil postdoc postdoctoral fellow ' +
+    'fellowship fellowships award awards awarded prize grant grants scholarship scholar honors honours advisor adviser advisors ' +
+    'supervisor supervisors mentor mentors mentoring mentee teaching assistant instructor course courses curriculum vitae cv resume ' +
+    'references reference publications publication manuscript manuscripts submitted preparation press accepted journal journals ' +
+    'conference conferences symposium meeting meetings poster posters talk talks invited oral presentation presentations seminar ' +
+    'seminars workshop workshops society american national international annual proceedings vol volume pp page pages issue doi ' +
+    'http https www org edu com al editor editors reviewer reviewers service committee member membership skills languages english ' +
+    'citizen citizenship gpa grade thesis dissertation title year years month months research experience education employment ' +
+    'position positions summary objective profile contact interests interest selected peer-reviewed peer reviewed first author ' +
+    'corresponding co-author coauthor authors author highlights cited citations h-index google orcid linkedin github website ' +
+    'nature communications letters reports advances acs rsc wiley elsevier springer chem phys lett commun rev sci mater angew ' +
+    'chemie jacs nat proc pnas usa physical review j. et inc ltd llc co project projects responsible responsibilities led lead ' +
+    'developed develop developing work worked working various several including include includes currently recent recently ' +
+    'student students undergraduate graduate visiting assistant associate professor lecturer dr prof mr ms mrs').split(/\s+/));
+
+  // Generic verbs and framing words that end a research phrase ("we combine X", "my lab studies Y").
+  const VERB_STOP = new Set(('study studies studying studied combine combines combining combined investigate investigates investigating ' +
+    'explore explores exploring examine examines examining use uses using apply applies applying develop develops focus focuses ' +
+    'focusing aim aims seek seeks understand understanding reveal reveals show shows sense senses lab group team interested ' +
+    'employ employs employing measure measures leverage leverages enable enables address addresses probe probes elucidate ' +
+    'elucidates characterize characterise determine determines design designs').split(/\s+/));
+
+  // Single words that are too generic to stand alone as a research interest.
+  const GENERIC_SINGLE = new Set(('physical chemical biological molecular material materials science sciences engineering ' +
+    'applied advanced high low large small single multiple various different novel new state states dynamics properties property ' +
+    'system systems structure structures study studies analysis method methods technique techniques approach approaches model ' +
+    'models design data results result effect effects role function functions process processes control based using application ' +
+    'applications development understanding mechanism mechanisms theory experimental experiments experiment level levels type types ' +
+    'order energy time field fields phase rate rates use high-throughput insights insight towards first part').split(/\s+/));
+
+  const NUMWORDS = { one: '1', two: '2', three: '3', four: '4', five: '5' };
+
+  const WORD_RE = /[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu;
+
+  function normSpace(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+
+  function stem(w) {
+    let s = String(w).toLowerCase().replace(/[’']/g, '');
+    if (s.length > 4 && s.endsWith('ies')) s = s.slice(0, -3) + 'y';
+    else if (s.endsWith('sses')) s = s.slice(0, -2);
+    else if (s.length > 3 && s.endsWith('s') && !/(ss|us|is|ys)$/.test(s)) s = s.slice(0, -1);
+    if (s.length > 5 && s.endsWith('ing')) s = s.slice(0, -3);
+    else if (s.length > 4 && s.endsWith('ed') && !s.endsWith('eed')) s = s.slice(0, -2);
+    // British/American spelling variants that matter for matching
+    s = s.replace(/isation$/, 'ization').replace(/ise$/, 'ize').replace(/our$/, 'or').replace(/lling$/, 'ling').replace(/lled$/, 'led');
+    if (s === 'modell') s = 'model';
+    return s;
+  }
+
+  function words(text) { return String(text || '').match(WORD_RE) || []; }
+  function stems(text) { return words(text).map(stem); }
+  function contentStems(text) { return words(text).filter(w => !STOP.has(w.toLowerCase())).map(stem); }
+  // Stems of a phrase with leading/trailing stop words removed (inner ones kept, e.g. "equations of motion").
+  function phraseStems(text) {
+    const ws = words(text);
+    while (ws.length && STOP.has(ws[0].toLowerCase())) ws.shift();
+    while (ws.length && STOP.has(ws[ws.length - 1].toLowerCase())) ws.pop();
+    return ws.map(stem);
+  }
+
+  // Find a stemmed phrase (array) inside a stemmed token array.
+  function hasPhrase(hay, needle) {
+    if (!needle.length || needle.length > hay.length) return false;
+    outer: for (let i = 0; i <= hay.length - needle.length; i++) {
+      for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer;
+      return true;
+    }
+    return false;
+  }
+  function hasAll(haySet, needle) { return needle.every(t => haySet.has(t)); }
+
+  function splitSentences(text) {
+    const t = normSpace(text);
+    if (!t) return [];
+    // Split on sentence-final punctuation followed by space + capital/digit; keep abbreviations reasonably intact.
+    const parts = t.split(/(?<=[.!?])\s+(?=[A-Z0-9(“"])/);
+    return parts.map(s => s.trim()).filter(Boolean);
+  }
+
+  function cleanDoi(d) {
+    if (!d) return '';
+    return String(d).trim().replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').replace(/^doi:/i, '').toLowerCase();
+  }
+
+  function normTitle(t) {
+    return String(t || '').toLowerCase().replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ')
+      .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
+  function stripTags(s) {
+    if (!s) return '';
+    return normSpace(String(s).replace(/<jats:title>[^<]*<\/jats:title>/gi, ' ').replace(/<[^>]+>/g, ' ')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'"));
+  }
+
+  function reconstructAbstract(inv) {
+    if (!inv || typeof inv !== 'object') return '';
+    const arr = [];
+    for (const [w, pos] of Object.entries(inv)) for (const p of pos) arr[p] = w;
+    let s = normSpace(arr.filter(x => x !== undefined).join(' '));
+    s = s.replace(/^(abstract|summary)\s*[:.]?\s+/i, '');
+    return s;
+  }
+
+  // ---------------------------------------------------------------- vocabularies
+  const METHOD_STEMS = new Set(['spectroscopy', 'spectroscopie', 'spectrometry', 'microscopy', 'crystallography', 'diffraction',
+    'scattering', 'imag', 'tomography', 'interferometry', 'calorimetry', 'chromatography', 'electrophoresi', 'sequenc', 'assay',
+    'simulation', 'model', 'modeling', 'calculation', 'theory', 'theoretical', 'computational', 'computation', 'dft', 'tddft', 'nmr',
+    'epr', 'esr', 'xrd', 'xp', 'xps', 'ftir', 'raman', 'pcr', 'qpcr', 'crispr', 'elisa', 'cytometry', 'regression', 'survey', 'interview',
+    'ethnography', 'meta-analysi', 'statistic', 'statistical', 'bayesian', 'learn', 'algorithm', 'optimization', 'fabrication',
+    'synthesi', 'lithography', 'deposition', 'voltammetry', 'impedance', 'pump-probe', 'time-resolv', 'ultrafast', 'femtosecond',
+    'picosecond', '2dir', '2d-ir', '2de', '2dev', 'trir', 'heom', 'redfield', 'dynamics-simulation', 'photoluminescence', 'fluorescence',
+    'microfluidic', 'electrochemical', 'patch-clamp', 'afm', 'stm', 'tem', 'sem', 'neural', 'network', 'monte', 'carlo', 'ab', 'initio',
+    'ab-initio', 'spectroelectrochemistry', 'magnetometry', 'rheology', 'ellipsometry', 'metabolomic', 'proteomic', 'transcriptomic',
+    'genomic', 'kinetic', 'quantum-chemical', 'measurement', 'characterization', 'transient', 'absorption-spectroscopy']);
+  const METHOD_PHRASES = [['machine', 'learn'], ['deep', 'learn'], ['molecular', 'dynamic'], ['density', 'functional'],
+    ['transient', 'absorption'], ['mass', 'spectrometry'], ['flow', 'cytometry'], ['open', 'quantum', 'system'],
+    ['quantum', 'chemistry'], ['electronic', 'structure'], ['equation', 'of', 'motion'], ['single', 'molecule'], ['x-ray']];
+
+  const AREAS = ['chemistry', 'physics', 'biology', 'biochemistry', 'biophysics', 'physical chemistry', 'chemical physics',
+    'materials science', 'condensed matter physics', 'condensed matter', 'photochemistry', 'photophysics', 'nanoscience',
+    'nanotechnology', 'neuroscience', 'immunology', 'genetics', 'genomics', 'ecology', 'epidemiology', 'economics', 'psychology',
+    'sociology', 'linguistics', 'public health', 'medicine', 'oncology', 'cancer biology', 'cell biology', 'molecular biology',
+    'structural biology', 'computational chemistry', 'theoretical chemistry', 'quantum information', 'quantum information science',
+    'polymer science', 'soft matter', 'organic chemistry', 'inorganic chemistry', 'analytical chemistry', 'catalysis',
+    'environmental science', 'climate science', 'computer science', 'data science', 'mathematics', 'chemical engineering',
+    'electrical engineering', 'mechanical engineering', 'bioengineering', 'biomedical engineering', 'pharmacology',
+    'microbiology', 'virology', 'cognitive science', 'political science', 'anthropology', 'philosophy', 'astrophysics', 'optics',
+    'photonics', 'spin chemistry', 'electrochemistry', 'materials chemistry', 'surface science', 'statistical mechanics',
+    'quantum optics', 'atomic physics', 'plasma physics', 'geochemistry', 'geophysics', 'oceanography', 'education research',
+    'organic electronics', 'energy storage', 'energy science', 'chemical biology', 'bioinformatics', 'systems biology']
+    .map(a => stems(a));
+
+  // Curated near-synonyms and spelling variants (deterministic, small, transparent to the user).
+  const SYNONYMS = [
+    ['migration', 'diffusion', 'transport'], ['mechanism', 'pathway'], ['synthesis', 'fabrication', 'preparation'],
+    ['degradation', 'decomposition'], ['modeling', 'modelling', 'simulation'], ['behavior', 'behaviour'], ['color', 'colour'],
+    ['tumor', 'tumour', 'cancer'], ['metastasis', 'metastatic'], ['heart attack', 'myocardial infarction'],
+    ['elderly', 'older adults'], ['children', 'pediatric', 'paediatric'], ['solar cell', 'photovoltaic'],
+    ['ultrafast', 'femtosecond', 'time-resolved'], ['global warming', 'climate change'],
+    ['covid-19', 'sars-cov-2'], ['nanoconfinement', 'nanoconfined', 'nanochannel'], ['photocatalysis', 'photocatalytic'],
+    ['well-being', 'wellbeing'], ['socioeconomic', 'socio-economic'], ['students', 'learners'], ['teacher', 'educator'],
+    ['conductivity', 'conductance'], ['fiber', 'fibre'], ['center', 'centre'],
+    ['anemia', 'anaemia'], ['estrogen', 'oestrogen'], ['optimization', 'optimisation'], ['ionization', 'ionisation'],
+    ['crystallization', 'crystallisation'], ['polarization', 'polarisation'], ['aluminum', 'aluminium'], ['sulfur', 'sulphur'],
+    ['charge separation', 'charge transfer'], ['excitation energy transfer', 'energy transfer'], ['qubit', 'quantum bit'],
+    ['decoherence', 'dephasing'], ['vibronic coupling', 'electron-vibration coupling'], ['drug delivery', 'drug carrier'],
+    ['wastewater', 'waste water'], ['deep learning', 'neural network'], ['large language model', 'llm'],
+    ['crystal', 'crystalline'], ['catalyst', 'catalysis', 'catalytic'],
+  ].map(g => g.map(t => ({ text: t, stems: stems(t) })));
+  // Some synonym groups only make sense in a physical-science context ("cell migration" is not "cell diffusion").
+  const SYN_GUARD = new Map([['migration', ['exciton', 'ion', 'charge', 'energy', 'electron', 'hole', 'proton', 'polaron', 'lithium', 'sodium', 'molecular', 'molecule', 'atom', 'defect', 'vacancy', 'triplet', 'singlet']]]);
+
+  // Acronyms with their common senses. Ambiguous ones (more than one sense) trigger a short question.
+  const ACRONYMS = {
+    TA: ['transient absorption', 'teaching assistant', 'tannic acid', 'thermal analysis'],
+    MD: ['molecular dynamics', 'muscular dystrophy'], ML: ['machine learning', 'monolayer'],
+    PL: ['photoluminescence', 'programming language'], CT: ['charge transfer', 'computed tomography'],
+    PD: ["Parkinson's disease", 'photodetector'], AD: ["Alzheimer's disease", 'atopic dermatitis'],
+    SF: ['singlet fission', 'science fiction'], PDI: ['perylene diimide', 'polydispersity index', 'protein disulfide isomerase'],
+    PBI: ['perylene bisimide', 'polybenzimidazole'], DFT: ['density functional theory', 'discrete Fourier transform'],
+    MS: ['mass spectrometry', 'multiple sclerosis'], PET: ['positron emission tomography', 'polyethylene terephthalate'],
+    SEM: ['scanning electron microscopy', 'structural equation modeling'], CI: ['conical intersection', 'confidence interval', 'configuration interaction'],
+    PES: ['potential energy surface', 'photoelectron spectroscopy'], ICT: ['intramolecular charge transfer', 'information and communication technology'],
+    RL: ['reinforcement learning'], EET: ['excitation energy transfer'], CNT: ['carbon nanotube'], QD: ['quantum dot'],
+    NMR: ['nuclear magnetic resonance'], EIS: ['electrochemical impedance spectroscopy'], MOF: ['metal-organic framework'],
+    COF: ['covalent organic framework'], LLM: ['large language model'], NLP: ['natural language processing'],
+    CNN: ['convolutional neural network'], GNN: ['graph neural network'], PCR: ['polymerase chain reaction'],
+    PEG: ['polyethylene glycol'], SEI: ['solid electrolyte interphase'], OPV: ['organic photovoltaic'],
+    OLED: ['organic light-emitting diode'], AFM: ['atomic force microscopy'], TEM: ['transmission electron microscopy'],
+    XRD: ['X-ray diffraction'], EPR: ['electron paramagnetic resonance'], TADF: ['thermally activated delayed fluorescence'],
+    '2DES': ['two-dimensional electronic spectroscopy'], '2DIR': ['two-dimensional infrared spectroscopy'],
+    '2D-IR': ['two-dimensional infrared spectroscopy'], HEOM: ['hierarchical equations of motion'],
+    FRET: ['Förster resonance energy transfer'], TCSPC: ['time-correlated single photon counting'],
+    STM: ['scanning tunneling microscopy'], XPS: ['X-ray photoelectron spectroscopy'], SNR: ['signal-to-noise ratio'],
+    RNA: ['ribonucleic acid'], DNA: ['deoxyribonucleic acid'],
+  };
+  const NO_EXPAND = new Set(['RNA', 'DNA']); // so common that expansion only adds noise
+
+  // OpenAlex fields (ASJC-based) and their domains.
+  const FIELD_DOMAIN = { 11: 'Life', 13: 'Life', 24: 'Life', 28: 'Life', 30: 'Life', 12: 'Social', 14: 'Social', 18: 'Social',
+    20: 'Social', 32: 'Social', 33: 'Social', 15: 'Physical', 16: 'Physical', 17: 'Physical', 19: 'Physical', 21: 'Physical',
+    22: 'Physical', 23: 'Physical', 25: 'Physical', 26: 'Physical', 31: 'Physical', 27: 'Health', 29: 'Health', 34: 'Health',
+    35: 'Health', 36: 'Health' };
+  // Words that suggest a profile belongs to a field (used only to resolve ambiguous queries).
+  const FIELD_HINTS = {
+    16: 'chemistry chemical molecule molecular spectroscopy synthesis catalysis photochemistry electrochemistry crystal polymer organic inorganic redox solvent',
+    31: 'physics quantum optical optics laser photon spectroscopy coherence spin condensed ultrafast exciton photonics semiconductor magnetic',
+    25: 'materials semiconductor crystal polymer thin film nanomaterial device membrane electrolyte perovskite',
+    22: 'engineering device fabrication sensor circuit mechanical electrical',
+    13: 'protein gene genetic cell molecular biology biochemistry enzyme dna rna genome',
+    11: 'plant ecology agriculture animal species biodiversity',
+    24: 'immune immunology microbiology bacteria virus infection pathogen',
+    28: 'neuroscience neuron brain neural synaptic cognitive',
+    27: 'clinical patient medicine disease cancer tumor therapy hospital diagnosis',
+    30: 'drug pharmacology toxicology pharmaceutical',
+    17: 'computer algorithm software machine learning neural network data computing',
+    26: 'mathematics theorem algebra topology equation proof',
+    32: 'psychology cognitive behavior behaviour emotion mental',
+    33: 'social sociology policy education society political communication',
+    12: 'history philosophy literature art language linguistics',
+    14: 'business management marketing accounting organization',
+    20: 'economics finance market econometric',
+    19: 'earth geology climate atmosphere ocean planetary',
+    23: 'environmental pollution water ecosystem sustainability',
+    21: 'energy battery fuel solar power storage',
+    15: 'chemical engineering reactor process separation',
+  };
+
+  // ---------------------------------------------------------------- profile extraction
+  const SECTION_RE = /^(research\s+)?(interests?|areas of (research|expertise)|expertise|research summary|summary|profile|research statement|statement|research focus|focus|research experience|experience|projects?|technical skills|skills|techniques|methods|expertise and skills|publications?|selected publications|papers|education|awards?|honou?rs?|teaching|service|presentations?|talks|grants?|funding|references|patents?|employment|appointments?|professional experience|mentoring|outreach|languages|contact|leadership|memberships?|affiliations?)\b/i;
+  function sectionWeight(h) {
+    const s = h.toLowerCase();
+    if (/interest|expertise|summary|profile|statement|focus/.test(s)) return 3;
+    if (/skill|technique|method/.test(s)) return 2.5;
+    if (/experience|project/.test(s)) return 2;
+    if (/publication|paper|patent|presentation|talk/.test(s)) return 1.2;
+    if (/education/.test(s)) return 0.8;
+    return 0.3; // awards, teaching, service, references, contact …
+  }
+
+  function initialsOf(word) {
+    const w = word.toLowerCase();
+    if (w === 'two-dimensional') return ['2d', 'td'];
+    if (w === 'three-dimensional') return ['3d', 'td'];
+    if (w === 'infrared') return ['i', 'ir'];
+    if (w === 'ultraviolet') return ['u', 'uv'];
+    const parts = w.split(/[-–]/).filter(Boolean);
+    const opts = new Set();
+    opts.add((NUMWORDS[parts[0]] || parts[0][0]));
+    if (parts.length > 1) opts.add(parts.map(p => NUMWORDS[p] || p[0]).join(''));
+    return [...opts];
+  }
+
+  // Finds "long form (ACR)" definitions in free text.
+  function extractGlossary(text) {
+    const out = {};
+    const re = /\(([A-Z0-9][A-Za-z0-9-]{1,7})\)/g;
+    let m;
+    while ((m = re.exec(text))) {
+      const acr = m[1];
+      if (!/[A-Z]/.test(acr) || acr.replace(/[^A-Z0-9]/g, '').length < 2) continue;
+      const t0 = acr.toLowerCase().replace(/-/g, '');
+      const targets = new Set([t0, t0.replace(/s$/, '')]);
+      const before = text.slice(Math.max(0, m.index - 120), m.index).replace(/\s+$/, '');
+      const ws = before.match(WORD_RE) || [];
+      for (let n = 1; n <= Math.min(8, ws.length); n++) {
+        const span = ws.slice(ws.length - n);
+        if (STOP.has(span[0].toLowerCase())) continue;
+        // build all initial-combinations (small)
+        let combos = [''];
+        for (const w of span) {
+          const ini = initialsOf(w);
+          const next = [];
+          if (STOP.has(w.toLowerCase()) && w.length <= 3) next.push(...combos); // e.g. "of" may or may not appear in the acronym
+          for (const c of combos) for (const i of ini) next.push(c + i);
+          combos = next.slice(0, 64);
+        }
+        // the acronym often leaves out a trailing head noun: "two-dimensional infrared spectroscopy (2DIR)"
+        let alt = [];
+        const lastLo = span[span.length - 1].toLowerCase();
+        if (span.length > 1 && /^(spectroscopy|microscopy|spectrometry|method|technique|theory|model|analysis|measurements?|experiments?)$/.test(lastLo)) {
+          alt = [''];
+          for (const w of span.slice(0, -1)) {
+            const ini = initialsOf(w); const next = [];
+            if (STOP.has(w.toLowerCase()) && w.length <= 3) next.push(...alt);
+            for (const c of alt) for (const i of ini) next.push(c + i);
+            alt = next.slice(0, 64);
+          }
+        }
+        if (combos.some(c => targets.has(c)) || alt.some(c => targets.has(c))) {
+          const long = span.join(' ');
+          if (!out[acr] && long.length > acr.length) out[acr] = long.replace(/^[A-Z][a-z]/, s => s.toLowerCase());
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  function classifyPhrase(st) {
+    const joined = st.join(' ');
+    for (const a of AREAS) if (a.length && (joined === a.join(' ') || (st.length > a.length && joined.endsWith(' ' + a.join(' '))))) return 'areas';
+    if (st.some(t => METHOD_STEMS.has(t))) return 'methods';
+    for (const p of METHOD_PHRASES) if (hasPhrase(st, p)) return 'methods';
+    return 'interests';
+  }
+
+  function extractProfile(rawText, opts = {}) {
+    const text = String(rawText || '')
+      .replace(/\u00ad/g, '').replace(/[ﬁ]/g, 'fi').replace(/[ﬂ]/g, 'fl').replace(/(\w)-\n(\w)/g, '$1$2')
+      .replace(/\r/g, '');
+    const glossary = extractGlossary(text.replace(/\n(?=[a-z(])/g, ' '));
+    // Re-join lines that were wrapped mid-phrase (common in PDF text): no closing punctuation, next line starts lower-case.
+    const rawLines = text.split('\n');
+    const lines = [];
+    for (const l of rawLines) {
+      const prev = lines[lines.length - 1];
+      if (prev !== undefined && prev.trim() && !/[.;:!?]\s*$/.test(prev) && /^\s*[a-z(]/.test(l) && !SECTION_RE.test(prev.trim())) lines[lines.length - 1] = prev.replace(/-$/, '') + (prev.endsWith('-') ? '' : ' ') + l.trim();
+      else lines.push(l);
+    }
+    // Name tokens: first non-empty short line is usually the person's name.
+    const nameTokens = new Set();
+    const firstLine = lines.find(l => l.trim());
+    if (firstLine && words(firstLine).length <= 6) words(firstLine).forEach(w => nameTokens.add(w.toLowerCase()));
+    (opts.excludeNames || []).forEach(n => words(n).forEach(w => nameTokens.add(w.toLowerCase())));
+
+    const cand = new Map(); // key -> {stems, surfaces: Map, score, count}
+    // A pasted research statement has no CV headings: treat all of it as describing research interests.
+    const hasHeadings = lines.some(l => { const tr = l.trim(); return tr && words(tr).length <= 6 && SECTION_RE.test(tr.replace(/^[^\p{L}]+/u, '')); });
+    let weight = opts.defaultWeight || (hasHeadings ? 2 : 3);
+    const add = (seq, w) => {
+      const st = seq.map(stem);
+      const key = st.join(' ');
+      let c = cand.get(key);
+      if (!c) { c = { stems: st, surfaces: new Map(), score: 0, count: 0, maxW: 0 }; cand.set(key, c); }
+      const surf = seq.map(x => (/^[A-Z0-9-]{2,}$/.test(x) && /[A-Z]/.test(x)) || /\d/.test(x) && /[A-Za-z]/.test(x) ? x : x.toLowerCase()).join(' ');
+      c.surfaces.set(surf, (c.surfaces.get(surf) || 0) + 1);
+      if (seq.length === 1) { if (/^\p{Lu}\p{Ll}/u.test(seq[0])) c.cap = (c.cap || 0) + 1; else c.lower = (c.lower || 0) + 1; }
+      const bonus = seq.length === 1 ? 1 : seq.length === 2 ? 1.6 : seq.length === 3 ? 1.9 : 2;
+      c.score += w * bonus; c.count += 1; c.maxW = Math.max(c.maxW, w);
+    };
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const lw = words(trimmed);
+      if (lw.length <= 6 && SECTION_RE.test(trimmed.replace(/^[^\p{L}]+/u, ''))) { weight = sectionWeight(trimmed); continue; }
+      // tokenise keeping punctuation as delimiters
+      const toks = trimmed.match(/[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*|[^\s\p{L}\p{N}]/gu) || [];
+      let seq = [];
+      const flush = () => {
+        if (seq.length) {
+          if (seq.length <= 4) add(seq, weight);
+          else for (let n = 2; n <= 3; n++) for (let i = 0; i + n <= seq.length; i++) add(seq.slice(i, i + n), weight * 0.6);
+        }
+        seq = [];
+      };
+      for (let k = 0; k < toks.length; k++) {
+        const t = toks[k];
+        const lo = t.toLowerCase();
+        const isWord = /[\p{L}\p{N}]/u.test(t);
+        if (lo === 'of' && seq.length && seq.length < 3) {
+          const nx = toks[k + 1] || '';
+          const nlo = nx.toLowerCase();
+          if (/[\p{L}]/u.test(nx) && !STOP.has(nlo) && !CV_NOISE.has(nlo) && !nameTokens.has(nlo) && nx[0] === nx[0].toLowerCase()) { seq.push(t); continue; }
+        }
+        const isYearOrNum = /^\d+([.,]\d+)?$/.test(t);
+        const tooShort = t.length < 2 && !/\d/.test(t);
+        if (!isWord || STOP.has(lo) || CV_NOISE.has(lo) || VERB_STOP.has(lo) || isYearOrNum || tooShort || nameTokens.has(lo) || /@|\.(com|edu|org)$/.test(lo)) { flush(); continue; }
+        seq.push(t);
+      }
+      flush();
+    }
+
+    let list = [...cand.values()].filter(c => {
+      if (c.stems.length === 1) {
+        const s = c.stems[0];
+        if (GENERIC_SINGLE.has(s) || GENERIC_SINGLE.has(s + 's')) return false;
+        const surf = [...c.surfaces.keys()][0];
+        const isAcr = /^[A-Z0-9-]{2,}$/.test(surf) && /[A-Z]/.test(surf);
+        if (isAcr) return !!glossary[surf] || METHOD_STEMS.has(s) || !!ACRONYMS[surf];
+        if (s.length < 4) return false;
+        // Words only ever seen capitalised are usually names of people, places or institutions.
+        if ((c.cap || 0) > 0 && !(c.lower || 0) && classifyPhrase(c.stems) === 'interests') return false;
+        return c.count >= 3 || c.maxW >= 2.5;
+      }
+      if (c.stems.every(s => GENERIC_SINGLE.has(s))) return false;
+      return c.count >= 2 || c.maxW >= 2.5;
+    });
+    list.sort((a, b) => b.score - a.score);
+    // Drop sub-phrases mostly explained by a longer phrase.
+    const kept = [];
+    for (const c of list) {
+      const dominated = kept.some(k => k.stems.length > c.stems.length && hasPhrase(k.stems, c.stems) && c.count <= 1.25 * k.count);
+      if (!dominated) kept.push(c);
+    }
+    const groups = { interests: [], methods: [], areas: [] };
+    const limits = { interests: 16, methods: 12, areas: 8 };
+    const keptStems = kept.map(k => k.stems);
+    for (const c of kept) {
+      const surface = [...c.surfaces.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      const isAcr = /^[A-Z0-9-]{2,8}$/.test(surface) && /[A-Z]/.test(surface);
+      const expansion = isAcr ? (glossary[surface] || ((ACRONYMS[surface] || []).length === 1 ? ACRONYMS[surface][0] : '')) : '';
+      if (isAcr && expansion) {
+        const es = phraseStems(expansion);
+        if (keptStems.some(k => k !== c.stems && hasPhrase(k, es))) continue; // spelled-out form already listed
+      }
+      const g = classifyPhrase(expansion ? phraseStems(expansion) : c.stems);
+      if (groups[g].length >= limits[g]) continue;
+      const term = { text: surface, score: Math.round(c.score * 10) / 10 };
+      if (expansion) term.expansion = expansion;
+      groups[g].push(term);
+    }
+    return { ...groups, glossary, createdAt: new Date().toISOString() };
+  }
+
+  // Profile -> weighted stemmed terms used for matching.
+  function profileTerms(profile) {
+    if (!profile) return [];
+    const out = [];
+    const push = (t, kind, w) => {
+      const st = phraseStems(t);
+      if (st.length) out.push({ text: t, stems: st, kind, weight: w });
+    };
+    (profile.interests || []).forEach(t => { push(t.text, 'interest', 1); if (t.expansion) push(t.expansion, 'interest', 1); });
+    (profile.methods || []).forEach(t => { push(t.text, 'method', 0.8); if (t.expansion) push(t.expansion, 'method', 0.8); });
+    (profile.areas || []).forEach(t => push(t.text, 'area', 0.5));
+    return out;
+  }
+
+  function profileText(profile) {
+    if (!profile) return '';
+    const g = k => (profile[k] || []).map(t => t.expansion ? `${t.text} (${t.expansion})` : t.text).join(', ');
+    return `Research interests: ${g('interests')}. Methods: ${g('methods')}. Areas: ${g('areas')}.`;
+  }
+
+  // ---------------------------------------------------------------- query analysis
+  function analyzeQuery(q, profile, choices = {}) {
+    const raw = normSpace(q);
+    const expert = /["()]|\b(AND|OR|NOT)\b/.test(raw);
+    const toks = raw.match(/[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu) || [];
+    const content = toks.filter(t => !STOP.has(t.toLowerCase()));
+    const glossary = (profile && profile.glossary) || {};
+    const pTerms = profileTerms(profile);
+    const acronyms = [];
+    let question = null;
+    for (const t of toks) {
+      const isAcr = /^[A-Z0-9][A-Z0-9-]{1,6}$/.test(t) && /[A-Z]/.test(t) && t.length <= 7;
+      if (!isAcr) continue;
+      if (NO_EXPAND.has(t)) continue;
+      if (choices[t] !== undefined) { if (choices[t]) acronyms.push({ acr: t, long: choices[t], how: 'you chose' }); continue; }
+      if (glossary[t]) { acronyms.push({ acr: t, long: glossary[t], how: 'from your profile' }); continue; }
+      const senses = ACRONYMS[t] || ACRONYMS[t.replace(/-/g, '')];
+      if (!senses) continue;
+      if (senses.length === 1) { acronyms.push({ acr: t, long: senses[0], how: 'common meaning' }); continue; }
+      // Pick a sense that appears in the profile, if any.
+      const hit = senses.find(s => { const st = phraseStems(s); return pTerms.some(p => hasPhrase(p.stems, st) || hasPhrase(st, p.stems) && p.stems.length > 1); });
+      if (hit) { acronyms.push({ acr: t, long: hit, how: 'matches your profile' }); continue; }
+      if (!question) question = { kind: 'acronym', acr: t, options: senses };
+    }
+
+    // Query term groups (for matching) and OpenAlex boolean expansion.
+    const groups = [];
+    const expansions = [];
+    const usedSyn = new Set();
+    const disabled = new Set(choices.disabledExpansions || []);
+    let i = 0;
+    const lowerToks = toks.map(t => t.toLowerCase());
+    const stemToks = toks.map(stem);
+    const pieces = []; // for boolean query
+    while (i < toks.length) {
+      const t = toks[i];
+      const lo = lowerToks[i];
+      const acr = acronyms.find(a => a.acr === t);
+      if (acr) {
+        groups.push({ label: t, alts: [{ text: t, stems: [stem(t)], weight: 1 }, { text: acr.long, stems: phraseStems(acr.long), weight: 1 }] });
+        pieces.push(`(${t} OR "${acr.long.replace(/"/g, '')}")`);
+        i++; continue;
+      }
+      if (STOP.has(lo)) { i++; continue; }
+      // multiword synonym match (longest first)
+      let matched = null;
+      for (const g of SYNONYMS) {
+        const guard = SYN_GUARD.get(g[0].text);
+        if (guard && !guard.some(x => stemToks.slice(Math.max(0, i - 2), i).includes(stem(x)))) continue;
+        for (const alt of g) {
+          const n = alt.stems.length;
+          if (n && hasPhrase(stemToks.slice(i, i + n), alt.stems) && stemToks.slice(i, i + n).length === n) {
+            if (!matched || n > matched.n) matched = { g, alt, n };
+          }
+        }
+      }
+      if (matched && !expert) {
+        const seenSt = new Set([matched.alt.stems.join(' ')]);
+        const others = matched.g.filter(a => { const k = a.stems.join(' '); if (seenSt.has(k)) return false; seenSt.add(k); return true; });
+        const active = others.filter(a => !disabled.has(a.text));
+        const surf = toks.slice(i, i + matched.n).join(' ');
+        groups.push({ label: surf, alts: [{ text: surf, stems: stemToks.slice(i, i + matched.n), weight: 1 }, ...active.map(a => ({ text: a.text, stems: a.stems, weight: 0.8 }))] });
+        others.forEach(a => { if (!usedSyn.has(a.text)) { usedSyn.add(a.text); expansions.push({ for: surf, text: a.text, on: !disabled.has(a.text) }); } });
+        const q1 = matched.n > 1 ? `"${surf}"` : surf;
+        pieces.push(active.length ? `(${[q1, ...active.map(a => a.stems.length > 1 || /[-\s]/.test(a.text) ? `"${a.text}"` : a.text)].join(' OR ')})` : q1);
+        i += matched.n; continue;
+      }
+      groups.push({ label: t, alts: [{ text: t, stems: [stemToks[i]], weight: 1 }] });
+      pieces.push(t);
+      i++;
+    }
+    const keywordQuery = expert ? raw : pieces.join(' ');
+    let semanticQuery = raw;
+    for (const a of acronyms) semanticQuery = semanticQuery.replace(new RegExp(`\\b${a.acr.replace(/[-]/g, '\\-')}\\b`), `${a.long} (${a.acr})`);
+    const phrase = expert ? [] : content.map(stem);
+    return { raw, expert, tokens: toks, content, groups, phrase, acronyms, expansions, keywordQuery, semanticQuery,
+      shortQuery: content.length <= 3, question };
+  }
+
+  // Decide whether a query spans unrelated domains, using OpenAlex group_by counts per field.
+  // Options are offered at domain level (life / social / physical / health sciences), which is
+  // where real ambiguity lies ("relaxation" in medicine vs physics); finer choices are left to ranking.
+  const DOMAINS = { Life: { id: 1, name: 'Life sciences' }, Social: { id: 2, name: 'Social sciences and humanities' },
+    Physical: { id: 3, name: 'Physical sciences and engineering' }, Health: { id: 4, name: 'Health sciences' } };
+  function assessFieldAmbiguity(groupBy, profile) {
+    const rows = (groupBy || []).filter(r => r && r.key && r.count > 0).map(r => {
+      const id = Number(String(r.key).split('/').pop());
+      return { id, name: r.key_display_name, count: r.count, domain: FIELD_DOMAIN[id] || 'Other' };
+    });
+    const total = rows.reduce((s, r) => s + r.count, 0);
+    if (!total) return { ambiguous: false, fields: [], options: [] };
+    rows.forEach(r => { r.share = r.count / total; });
+    const dom = {};
+    rows.forEach(r => {
+      if (!DOMAINS[r.domain]) return;
+      const d = dom[r.domain] || (dom[r.domain] = { key: r.domain, id: DOMAINS[r.domain].id, name: DOMAINS[r.domain].name, share: 0, fields: [], fieldIds: [] });
+      d.share += r.share; d.fields.push(r.name); d.fieldIds.push(r.id);
+    });
+    const options = Object.values(dom).sort((a, b) => b.share - a.share).filter(d => d.share >= 0.08);
+    const ambiguous = options.length > 1 && options[0].share < 0.65 && options[1].share >= 0.15;
+    let autoPick = null;
+    if (ambiguous && profile) {
+      const pStems = new Set(profileTerms(profile).flatMap(t => t.stems));
+      const scored = options.map(o => {
+        const hints = new Set(o.fieldIds.flatMap(id => contentStems(FIELD_HINTS[id] || '')).concat(o.fields.flatMap(f => contentStems(f))));
+        let hits = 0; hints.forEach(h => { if (pStems.has(h)) hits++; });
+        return { o, hits };
+      }).sort((a, b) => b.hits - a.hits);
+      if (scored.length && scored[0].hits >= 2 && scored[0].hits >= 2 * ((scored[1] && scored[1].hits) || 0)) autoPick = scored[0].o;
+    }
+    return { ambiguous, fields: rows, options, autoPick };
+  }
+
+  // ---------------------------------------------------------------- source normalisers
+  function normOpenAlex(w, channel, rank) {
+    const pt = w.primary_topic;
+    const fieldId = pt && pt.field ? Number(String(pt.field.id).split('/').pop()) : null;
+    const best = w.best_oa_location || null;
+    const prim = w.primary_location || {};
+    const pct = w.citation_normalized_percentile || null;
+    return {
+      key: '', openalexId: w.id || '', doi: cleanDoi(w.doi), title: stripTags(w.display_name || w.title || ''),
+      year: w.publication_year || null, date: w.publication_date || '',
+      authors: (w.authorships || []).map(a => a && a.author && a.author.display_name).filter(Boolean),
+      venue: (prim.source && prim.source.display_name) || '',
+      abstract: reconstructAbstract(w.abstract_inverted_index), abstractFrom: w.abstract_inverted_index ? 'OpenAlex' : '',
+      oaType: w.type || '', crType: prim.raw_type || '', epmcTypes: [],
+      isOA: !!(w.open_access && w.open_access.is_oa), oaStatus: (w.open_access && w.open_access.oa_status) || '',
+      landing: prim.landing_page_url || (w.doi || ''), oaUrl: (best && (best.landing_page_url || best.pdf_url)) || (w.open_access && w.open_access.oa_url) || '',
+      pdf: (best && best.pdf_url) || '', oaHost: best && best.source ? best.source.display_name : '',
+      cites: w.cited_by_count || 0, pct: pct ? pct.value : null, top1: !!(pct && pct.is_in_top_1_percent), top10: !!(pct && pct.is_in_top_10_percent),
+      topic: pt ? { id: pt.id, name: pt.display_name, subfield: pt.subfield && pt.subfield.display_name, field: pt.field && pt.field.display_name, fieldId, domain: pt.domain && pt.domain.display_name } : null,
+      keywords: (w.keywords || []).map(k => k.display_name).filter(Boolean),
+      retracted: !!w.is_retracted,
+      sources: ['OpenAlex'], ranks: { [channel]: rank },
+    };
+  }
+
+  function normCrossref(it, rank) {
+    const dp = (it.issued && it.issued['date-parts'] && it.issued['date-parts'][0]) || (it.published && it.published['date-parts'] && it.published['date-parts'][0]) || [];
+    const abs = stripTags(it.abstract || '').replace(/^(abstract|summary)\s*[:.]?\s+/i, '');
+    return {
+      key: '', openalexId: '', doi: cleanDoi(it.DOI), title: stripTags((it.title && it.title[0]) || ''), year: dp[0] || null, date: dp.join('-'),
+      authors: (it.author || []).map(a => normSpace([a.given, a.family].filter(Boolean).join(' ')) || a.name).filter(Boolean),
+      venue: (it['container-title'] && it['container-title'][0]) || '', abstract: abs, abstractFrom: abs ? 'Crossref' : '',
+      oaType: '', crType: it.type || '', epmcTypes: [], isOA: false, oaStatus: '',
+      landing: it.URL || (it.DOI ? `https://doi.org/${it.DOI}` : ''), oaUrl: '', pdf: '', oaHost: '',
+      cites: it['is-referenced-by-count'] || 0, pct: null, top1: false, top10: false, topic: null, keywords: (it.subject || []).slice(0, 5), retracted: false,
+      sources: ['Crossref'], ranks: { crossref: rank },
+    };
+  }
+
+  function normEPMC(r, rank) {
+    const types = (r.pubTypeList && r.pubTypeList.pubType) || [];
+    const ft = (r.fullTextUrlList && r.fullTextUrlList.fullTextUrl) || [];
+    const free = ft.find(u => /free|open/i.test(u.availability || '') && /html|pdf/i.test(u.documentStyle || ''));
+    const abs = stripTags(r.abstractText || '');
+    return {
+      key: '', openalexId: '', doi: cleanDoi(r.doi), title: stripTags(r.title || '').replace(/\.$/, ''), year: r.pubYear ? Number(r.pubYear) : null,
+      date: r.firstPublicationDate || '', authors: r.authorString ? r.authorString.replace(/\.$/, '').split(/,\s*/) : [],
+      venue: (r.journalInfo && r.journalInfo.journal && r.journalInfo.journal.title) || (r.bookOrReportDetails && r.bookOrReportDetails.publisher) || '',
+      abstract: abs, abstractFrom: abs ? 'Europe PMC' : '', oaType: '', crType: r.source === 'PPR' ? 'posted-content' : '',
+      epmcTypes: Array.isArray(types) ? types : [types], isOA: r.isOpenAccess === 'Y', oaStatus: r.isOpenAccess === 'Y' ? 'open' : '',
+      landing: `https://europepmc.org/article/${r.source}/${r.id}`, oaUrl: free ? free.url : '', pdf: '', oaHost: free ? 'Europe PMC' : '',
+      cites: r.citedByCount || 0, pct: null, top1: false, top10: false, topic: null, keywords: [], retracted: false,
+      sources: ['Europe PMC'], ranks: { epmc: rank },
+    };
+  }
+
+  function workKey(w) { return w.doi ? 'doi:' + w.doi : 't:' + normTitle(w.title) + ':' + (w.year || ''); }
+
+  function mergeInto(a, b) {
+    for (const s of b.sources) if (!a.sources.includes(s)) a.sources.push(s);
+    Object.assign(a.ranks, Object.fromEntries(Object.entries(b.ranks).filter(([k]) => a.ranks[k] === undefined)));
+    if (!a.abstract && b.abstract) { a.abstract = b.abstract; a.abstractFrom = b.abstractFrom; }
+    if (!a.doi && b.doi) a.doi = b.doi;
+    if (b.epmcTypes && b.epmcTypes.length) a.epmcTypes = [...new Set([...a.epmcTypes, ...b.epmcTypes])];
+    if (!a.crType && b.crType) a.crType = b.crType;
+    if (!a.isOA && b.isOA) { a.isOA = true; a.oaStatus = a.oaStatus || b.oaStatus; }
+    if (!a.oaUrl && b.oaUrl) { a.oaUrl = b.oaUrl; a.oaHost = b.oaHost; }
+    if (!a.venue && b.venue) a.venue = b.venue;
+    if (!a.authors.length && b.authors.length) a.authors = b.authors;
+    if (!a.year && b.year) a.year = b.year;
+    a.cites = Math.max(a.cites || 0, b.cites || 0);
+    if (!a.topic && b.topic) a.topic = b.topic;
+    if (!a.openalexId && b.openalexId) a.openalexId = b.openalexId;
+    return a;
+  }
+
+  // Merge new records into an existing pool (Map key -> work). Returns number of new items.
+  function dedupeInto(pool, items) {
+    let added = 0;
+    const titleIndex = new Map();
+    for (const w of pool.values()) titleIndex.set(normTitle(w.title) + ':' + (w.year || ''), w);
+    for (const it of items) {
+      if (!it || !it.title) continue;
+      it.key = workKey(it);
+      const tkey = normTitle(it.title) + ':' + (it.year || '');
+      // Same title and year but two different DOIs: treat as different papers (e.g. a comment and its reply).
+      const byTitle = w => (w && it.doi && w.doi && w.doi !== it.doi ? null : w);
+      let existing = pool.get(it.key) || byTitle(titleIndex.get(tkey));
+      // also tolerate off-by-one years between sources when titles are long and identical
+      if (!existing && normTitle(it.title).length > 40) {
+        existing = byTitle(titleIndex.get(normTitle(it.title) + ':' + ((it.year || 0) - 1))) || byTitle(titleIndex.get(normTitle(it.title) + ':' + ((it.year || 0) + 1)));
+      }
+      if (existing) mergeInto(existing, it);
+      else { pool.set(it.key, it); titleIndex.set(tkey, it); added++; }
+    }
+    return added;
+  }
+
+  // ---------------------------------------------------------------- publication type
+  const REVIEW_TITLE = [/\breview\b(?!er)/i, /\badvances in\b/i, /\brecent (advances|progress|developments|trends)\b/i, /\bprogress in\b/i,
+    /\boverview\b/i, /\bstate[- ]of[- ]the[- ]art\b/i, /\btutorial\b/i, /\bmeta-analysis\b/i, /\bsystematic review\b/i, /\ba decade of\b/i];
+  const REVIEW_ABSTRACT = [/\b(this|the present|our|in this) (mini-?|critical |comprehensive |systematic |short |brief )?review\b/i,
+    /\bwe review\b/i, /\b(are|is) reviewed\b/i, /\bthis article reviews\b/i, /\bwe summari[sz]e (the )?(recent|current)\b/i,
+    /\bhere,? we (survey|summari[sz]e)\b/i];
+  const PERSPECTIVE_TITLE = [/^(perspective|outlook|viewpoint|commentary|comment|opinion|essay|editorial)\b/i,
+    /:\s*(a |an |the )?(perspective|outlook|viewpoint)s?\b/i, /\bperspectives? on\b/i, /\boutlook\b/i,
+    /\bnews (and|&) views\b/i, /\b(opportunities and challenges|challenges and opportunities)\b/i, /\broadmap\b/i];
+  const PERSPECTIVE_ABSTRACT = [/\b(in )?this (perspective|commentary|essay|viewpoint|outlook)\b/i, /\bwe offer (our|a) perspective\b/i, /\bwe provide (our|a) perspective\b/i];
+  const REVIEW_VENUE = /\b(reviews?|annual review|accounts of|trends in|current opinion)\b/i;
+
+  // Returns {cat: research|review|perspective|preprint|other, label, conf: labelled|inferred|unverified, why}
+  function classifyType(w) {
+    const t = w.title || '', a = w.abstract || '', oa = (w.oaType || '').toLowerCase(), cr = (w.crType || '').toLowerCase();
+    const ep = (w.epmcTypes || []).map(x => String(x).toLowerCase());
+    const OTHER = ['book-review', 'reference-entry', 'libguides', 'grant', 'software', 'dataset', 'paratext', 'erratum', 'retraction', 'peer-review', 'supplementary-materials', 'standard', 'report', 'dissertation', 'book', 'book-chapter', 'other'];
+    const nice = x => x.replace(/-/g, ' ').replace(/^./, c => c.toUpperCase());
+    if (OTHER.includes(oa) && oa !== 'book-chapter' && oa !== 'book') return { cat: 'other', label: nice(oa), conf: 'labelled', why: `Labelled "${oa}" by OpenAlex.` };
+    if (oa === 'preprint' || cr === 'posted-content' || ep.includes('preprint')) return { cat: 'preprint', label: 'Preprint', conf: 'labelled', why: 'Labelled as a preprint by the source.' };
+    if (oa === 'review' || ep.some(x => /(^|[^-])review/.test(x) && !/peer/.test(x)) || /systematic-review/.test(ep.join(' '))) {
+      return { cat: 'review', label: 'Review', conf: 'labelled', why: oa === 'review' ? 'OpenAlex labels this a review.' : 'PubMed/Europe PMC labels this a review.' };
+    }
+    if (['editorial', 'letter'].includes(oa) || ep.some(x => /editorial|comment|letter|news/.test(x))) {
+      if (oa === 'editorial' || ep.some(x => /editorial|comment|news/.test(x))) return { cat: 'perspective', label: 'Editorial/commentary', conf: 'labelled', why: 'Labelled as an editorial or commentary by the source.' };
+      if (oa === 'letter' || ep.some(x => /letter/.test(x))) return { cat: 'other', label: 'Letter', conf: 'labelled', why: 'Labelled "letter": this can mean correspondence or a short research report, depending on the journal.' };
+      return { cat: 'other', label: oa.charAt(0).toUpperCase() + oa.slice(1), conf: 'labelled', why: `Labelled "${oa}" by OpenAlex.` };
+    }
+    if (REVIEW_TITLE.some(r => r.test(t)) || REVIEW_ABSTRACT.some(r => r.test(a))) {
+      return { cat: 'review', label: 'Review?', conf: 'inferred', why: 'Inferred from wording in the title or abstract; the source does not label it a review.' };
+    }
+    if (PERSPECTIVE_TITLE.some(r => r.test(t)) || PERSPECTIVE_ABSTRACT.some(r => r.test(a))) {
+      return { cat: 'perspective', label: 'Perspective?', conf: 'inferred', why: 'Inferred from wording in the title or abstract; the source does not label it a perspective.' };
+    }
+    if (REVIEW_VENUE.test(w.venue || '')) return { cat: 'review', label: 'Review?', conf: 'inferred', why: `Inferred from the venue (${w.venue}), which mainly publishes reviews.` };
+    if (['book', 'book-chapter', 'dissertation', 'dataset', 'report', 'standard', 'other', 'supplementary-materials'].includes(oa) || /book|dissertation|dataset|report|monograph/.test(cr)) {
+      return { cat: 'other', label: nice(oa || cr), conf: 'labelled', why: 'Labelled by the source.' };
+    }
+    if (oa === 'article' || /journal-article|proceedings-article|article/.test(cr) || !oa) {
+      return { cat: 'research', label: 'Article', conf: 'unverified', why: 'The source says "article", a label that covers original research but also some reviews and commentaries. Not verified.' };
+    }
+    return { cat: 'other', label: nice(oa), conf: 'labelled', why: 'Labelled by the source.' };
+  }
+
+  // ---------------------------------------------------------------- matching & ranking
+  function prepWork(w) {
+    if (w._prep) return w._prep;
+    const titleSt = stems(w.title);
+    const absSt = stems(w.abstract);
+    const kwText = [...(w.keywords || []), w.topic ? w.topic.name : '', w.topic ? w.topic.subfield : ''].join(' ; ');
+    const kwSt = stems(kwText);
+    w._prep = { titleSt, absSt, kwSt, titleSet: new Set(titleSt), absSet: new Set(absSt), kwSet: new Set(kwSt) };
+    w.typeInfo = classifyType(w);
+    return w._prep;
+  }
+
+  function matchTerm(p, st) {
+    // phrase in title > phrase in abstract > phrase in keywords/topic > all words in title/abstract
+    if (hasPhrase(p.titleSt, st)) return { s: 1, where: 'title' };
+    if (hasPhrase(p.absSt, st)) return { s: 0.7, where: 'abstract' };
+    if (hasPhrase(p.kwSt, st)) return { s: 0.45, where: 'keywords' };
+    if (st.length > 1 && hasAll(p.titleSet, st)) return { s: 0.6, where: 'title' };
+    if (st.length > 1 && hasAll(p.absSet, st)) return { s: 0.4, where: 'abstract' };
+    return null;
+  }
+
+  function scoreQuery(w, analysis) {
+    const p = prepWork(w);
+    const hits = [];
+    let sum = 0;
+    const groups = analysis.groups.length ? analysis.groups : [];
+    for (const g of groups) {
+      let best = null;
+      for (const alt of g.alts) {
+        if (!alt.stems.length) continue;
+        const m = matchTerm(p, alt.stems);
+        if (m) { const s = m.s * alt.weight; if (!best || s > best.s) best = { s, where: m.where, text: alt.text, original: alt.weight === 1 && alt.text === g.label, label: g.label }; }
+      }
+      if (best) { sum += best.s; hits.push(best); }
+    }
+    let score = groups.length ? sum / groups.length : 0;
+    if (analysis.phrase.length > 1 && hasPhrase(p.titleSt, analysis.phrase)) score = Math.min(1, score + 0.15);
+    return { score, hits };
+  }
+
+  function scoreProfile(w, pTerms) {
+    if (!pTerms.length) return { score: 0, hits: [] };
+    const p = prepWork(w);
+    const hits = [];
+    let sum = 0;
+    for (const t of pTerms) {
+      const m = matchTerm(p, t.stems);
+      if (m) {
+        // single generic words count less
+        const s = m.s * t.weight * (t.stems.length > 1 ? 1 : 0.6);
+        sum += s;
+        if (!hits.some(h => h.text === t.text)) hits.push({ text: t.text, where: m.where, kind: t.kind, s });
+      }
+    }
+    hits.sort((a, b) => b.s - a.s);
+    return { score: Math.min(1, sum / 2.5), hits };
+  }
+
+  // ctx: {analysis, profile, mode, nowYear, sem: Map(key -> {q, p})}
+  function rankWorks(works, ctx) {
+    const pTerms = profileTerms(ctx.profile);
+    const nowYear = ctx.nowYear || new Date().getFullYear();
+    const hasProfile = pTerms.length > 0;
+    const mode = hasProfile ? (ctx.mode || 'all') : 'all';
+    // reciprocal-rank fusion across retrieval channels
+    const K = 20;
+    let maxRrf = 0;
+    for (const w of works) {
+      let r = 0;
+      for (const [ch, rank] of Object.entries(w.ranks || {})) r += (ch === 'oa_kw' || ch === 'oa_sem' ? 1 : 0.6) / (K + rank);
+      w._rrf = r; if (r > maxRrf) maxRrf = r;
+    }
+    for (const w of works) {
+      const q = scoreQuery(w, ctx.analysis);
+      const pr = scoreProfile(w, pTerms);
+      const rrf = maxRrf ? w._rrf / maxRrf : 0;
+      const age = w.year ? Math.max(0, nowYear - w.year) : 10;
+      const recency = Math.max(0, Math.min(1, 1 - (age - 2) / 13));
+      const impact = w.pct != null ? w.pct : Math.min(1, Math.log1p(w.cites || 0) / Math.log1p(1000));
+      const sem = ctx.sem && ctx.sem.get(w.key);
+      let qrel = 0.55 * q.score + 0.45 * rrf;
+      let prof = pr.score;
+      if (sem) {
+        const sq = Math.max(0, Math.min(1, (sem.q - 0.15) / 0.55));
+        qrel = 0.35 * q.score + 0.3 * rrf + 0.35 * sq;
+        if (sem.p != null) prof = 0.5 * prof + 0.5 * Math.max(0, Math.min(1, (sem.p - 0.1) / 0.5));
+      }
+      let score;
+      if (mode === 'close') score = 0.62 * qrel + 0.28 * prof + 0.07 * impact + 0.03 * recency;
+      else if (mode === 'adjacent') score = 0.6 * qrel + 0.2 * (1 - prof) + 0.14 * recency + 0.06 * impact;
+      else score = 0.78 * qrel + 0.08 * prof + 0.1 * impact + 0.04 * recency;
+      if (w.retracted) score -= 0.5;
+      if (/^(dataset|software|book-review|paratext|erratum|grant|libguides|reference-entry|peer-review|supplementary-materials)$/.test(w.oaType || '')) score -= 0.12;
+      if (!q.hits.length && !(w.ranks && (w.ranks.oa_sem !== undefined))) score -= 0.15; // nothing matched and not a meaning-based hit
+      w.rank = { score, qrel, q: q.score, rrf, prof, profRaw: pr.score, impact, recency, qHits: q.hits, pHits: pr.hits, sem: sem || null };
+    }
+    return works.slice().sort((a, b) => b.rank.score - a.rank.score);
+  }
+
+  // ---------------------------------------------------------------- explanations (grounded)
+  function explain(w, ctx) {
+    const r = w.rank || {};
+    const reasons = [];
+    const qh = (r.qHits || []);
+    const inTitle = qh.filter(h => h.where === 'title').map(h => h.text);
+    const inAbs = qh.filter(h => h.where === 'abstract').map(h => h.text);
+    const inKw = qh.filter(h => h.where === 'keywords').map(h => h.text);
+    const syn = qh.filter(h => h.text.toLowerCase() !== String(h.label).toLowerCase());
+    if (inTitle.length) reasons.push({ kind: 'query', text: `Title mentions ${listify(inTitle)}.` });
+    if (inAbs.length) reasons.push({ kind: 'query', text: `Abstract mentions ${listify(inAbs)}.` });
+    if (inKw.length && !inTitle.length && !inAbs.length) reasons.push({ kind: 'query', text: `Tagged by OpenAlex with ${listify(inKw)}.` });
+    if (syn.length) reasons.push({ kind: 'synonym', text: `Uses ${listify(syn.map(h => `“${h.text}”`))} for ${listify([...new Set(syn.map(h => `“${h.label}”`))])}.` });
+    if (!qh.length && w.ranks && w.ranks.oa_sem !== undefined) reasons.push({ kind: 'semantic', text: 'Found by OpenAlex meaning-based search; it does not use your exact search words.' });
+    else if (w.ranks && w.ranks.oa_sem !== undefined && w.ranks.oa_kw === undefined) reasons.push({ kind: 'semantic', text: 'Found only by meaning-based search, not by keyword search.' });
+    const ph = (r.pHits || []).slice(0, 3);
+    if (ctx && ctx.hasProfile) {
+      if (ph.length) reasons.push({ kind: 'profile', text: `Overlaps your profile: ${listify(ph.map(h => h.text))}.` });
+      else if (w.topic) reasons.push({ kind: 'adjacent', text: `Outside your listed areas (OpenAlex topic: ${w.topic.name}).` });
+    }
+    if (w.top1) reasons.push({ kind: 'impact', text: 'Among the top 1% most-cited papers for its field and year (OpenAlex).' });
+    else if (w.top10) reasons.push({ kind: 'impact', text: 'Among the top 10% most-cited papers for its field and year (OpenAlex).' });
+    if (w.retracted) reasons.unshift({ kind: 'warning', text: 'OpenAlex marks this paper as retracted.' });
+
+    // Evidence: the abstract sentence that best covers the query (and profile) terms — quoted verbatim.
+    let evidence = null;
+    if (w.abstract) {
+      const sents = splitSentences(w.abstract);
+      const qAlts = (ctx && ctx.analysis ? ctx.analysis.groups : []).map(g => g.alts.map(a => a.stems));
+      const pTerms = ctx && ctx.profile ? profileTerms(ctx.profile) : [];
+      let best = null;
+      sents.forEach((s, idx) => {
+        const st = stems(s);
+        let sc = 0;
+        for (const alts of qAlts) if (alts.some(a => a.length && hasPhrase(st, a))) sc += 2;
+        for (const t of pTerms) if (hasPhrase(st, t.stems)) sc += t.stems.length > 1 ? 1 : 0.4;
+        if (sc > 0 && (!best || sc > best.sc)) best = { sc, s, idx };
+      });
+      if (best) {
+        let text = best.s;
+        const ws = text.split(' ');
+        let truncated = false;
+        if (ws.length > 45) { text = ws.slice(0, 45).join(' '); truncated = true; }
+        evidence = { text, truncated, from: w.abstractFrom || 'abstract' };
+      }
+    }
+    const note = w.abstract ? (evidence ? '' : 'The abstract does not use your search terms directly.') : 'No abstract was available from the sources searched, so this is judged from the title and metadata only.';
+    return { reasons, evidence, note };
+  }
+
+  function listify(arr) {
+    const a = [...new Set(arr)];
+    if (a.length <= 1) return a.join('');
+    if (a.length === 2) return `${a[0]} and ${a[1]}`;
+    return `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`;
+  }
+
+  // Terms (stems) to highlight in the evidence sentence.
+  function highlightStems(ctx) {
+    const set = new Set();
+    if (ctx && ctx.analysis) ctx.analysis.groups.forEach(g => g.alts.forEach(a => a.stems.forEach(s => set.add(s))));
+    if (ctx && ctx.profile) profileTerms(ctx.profile).forEach(t => { if (t.stems.length > 1) t.stems.forEach(s => set.add(s)); });
+    STOP.forEach(s => set.delete(s));
+    return set;
+  }
+
+  // ---------------------------------------------------------------- themes (for the map)
+  function computeThemes(works, ctx) {
+    const nowYear = ctx.nowYear || new Date().getFullYear();
+    const hasProfile = profileTerms(ctx.profile).length > 0;
+    const pTerms = profileTerms(ctx.profile);
+    const by = new Map();
+    for (const w of works) {
+      const id = w.topic ? w.topic.id : 'none';
+      let t = by.get(id);
+      if (!t) { t = { id, name: w.topic ? w.topic.name : 'Not classified', field: w.topic ? w.topic.field : '', subfield: w.topic ? w.topic.subfield : '', works: [] }; by.set(id, t); }
+      t.works.push(w);
+    }
+    const poolRecent = works.filter(w => w.year && w.year >= nowYear - 2).length / Math.max(1, works.length);
+    const top10 = works.slice(0, 10).map(w => w.key);
+    const themes = [...by.values()].map(t => {
+      const n = t.works.length;
+      const recentShare = t.works.filter(w => w.year && w.year >= nowYear - 2).length / n;
+      const meanProf = t.works.reduce((s, w) => s + ((w.rank && w.rank.prof) || 0), 0) / n;
+      const shareClose = t.works.filter(w => w.rank && w.rank.prof >= 0.25).length / n;
+      // profile overlap with the topic name itself
+      const nameSt = stems(t.name + ' ' + (t.subfield || ''));
+      const nameHit = pTerms.some(p => hasPhrase(nameSt, p.stems) || (p.stems.length === 1 && nameSt.includes(p.stems[0])));
+      const closeness = Math.min(1, Math.max(meanProf, shareClose) + (nameHit ? 0.3 : 0));
+      const inTop = t.works.filter(w => top10.includes(w.key)).length;
+      const core = inTop >= 2 || (inTop >= 1 && works[0] && t.works.includes(works[0]));
+      return { id: t.id, name: t.name, field: t.field, subfield: t.subfield, count: n, keys: t.works.map(w => w.key),
+        recentShare, emerging: n >= 2 && recentShare >= Math.max(0.4, poolRecent + 0.15), closeness,
+        close: hasProfile ? closeness >= 0.3 : core, core };
+    });
+    themes.sort((a, b) => b.count - a.count);
+    return { themes, hasProfile, poolRecent };
+  }
+
+  // ---------------------------------------------------------------- Google Scholar comparison helper
+  function parseScholarLines(text) {
+    return String(text || '').split(/\n+/).map(l => l.replace(/^\s*(\d+[.)]\s*)?(\[(pdf|html|book|citation|b|c)\]\s*)*/i, '').trim())
+      .filter(l => l.length >= 12);
+  }
+  function titleSimilarity(a, b) {
+    const na = normTitle(a), nb = normTitle(b);
+    if (!na || !nb) return 0;
+    if (na === nb) return 1;
+    if (na.length > 25 && nb.length > 25 && (na.includes(nb) || nb.includes(na))) return 0.95;
+    const A = new Set(na.split(' ')), B = new Set(nb.split(' '));
+    let inter = 0; A.forEach(x => { if (B.has(x)) inter++; });
+    return inter / (A.size + B.size - inter);
+  }
+  function compareWithList(lines, rankedWorks) {
+    return lines.map(line => {
+      let best = null;
+      rankedWorks.forEach((w, i) => { const s = titleSimilarity(line, w.title); if (s >= 0.8 && (!best || s > best.s)) best = { s, i, w }; });
+      return { line, found: !!best, position: best ? best.i + 1 : null, key: best ? best.w.key : null };
+    });
+  }
+
+  // ---------------------------------------------------------------- export
+  function bibKey(w) {
+    const last = (w.authors[0] || 'anon').split(/\s+/).pop().replace(/[^A-Za-z]/g, '') || 'anon';
+    const first = (normTitle(w.title).split(' ').find(x => x.length > 3 && !STOP.has(x)) || 'paper');
+    return `${last}${w.year || ''}${first}`;
+  }
+  const bibEsc = s => String(s || '').replace(/[{}\\]/g, '').replace(/&/g, '\\&').replace(/%/g, '\\%');
+  function toBibTeX(list) {
+    return list.map(w => {
+      const type = w.typeInfo && w.typeInfo.cat === 'preprint' ? 'misc' : (w.oaType === 'book-chapter' ? 'incollection' : 'article');
+      const f = [`  title = {${bibEsc(w.title)}}`, `  author = {${bibEsc(w.authors.join(' and '))}}`];
+      if (w.venue) f.push(`  ${type === 'article' ? 'journal' : 'howpublished'} = {${bibEsc(w.venue)}}`);
+      if (w.year) f.push(`  year = {${w.year}}`);
+      if (w.doi) f.push(`  doi = {${w.doi}}`);
+      const url = w.oaUrl || w.landing; if (url) f.push(`  url = {${url}}`);
+      return `@${type}{${bibKey(w)},\n${f.join(',\n')}\n}`;
+    }).join('\n\n');
+  }
+  function toRIS(list) {
+    return list.map(w => {
+      const L = [`TY  - ${w.typeInfo && w.typeInfo.cat === 'preprint' ? 'UNPB' : 'JOUR'}`, `TI  - ${w.title}`];
+      w.authors.forEach(a => L.push(`AU  - ${a}`));
+      if (w.year) L.push(`PY  - ${w.year}`);
+      if (w.venue) L.push(`JO  - ${w.venue}`);
+      if (w.doi) L.push(`DO  - ${w.doi}`);
+      const url = w.oaUrl || w.landing; if (url) L.push(`UR  - ${url}`);
+      if (w.abstract) L.push(`AB  - ${w.abstract}`);
+      L.push('ER  - ');
+      return L.join('\n');
+    }).join('\n\n');
+  }
+  function toCSV(list) {
+    const esc = s => `"${String(s == null ? '' : s).replace(/"/g, '""')}"`;
+    const rows = [['title', 'authors', 'year', 'venue', 'type', 'type_confidence', 'doi', 'url', 'open_access', 'cited_by'].join(',')];
+    list.forEach(w => rows.push([w.title, w.authors.join('; '), w.year, w.venue, w.typeInfo && w.typeInfo.label, w.typeInfo && w.typeInfo.conf,
+      w.doi, w.oaUrl || w.landing, w.isOA ? 'yes' : 'no', w.cites].map(esc).join(',')));
+    return rows.join('\n');
+  }
+
+  // Slim copy for saving (no derived fields).
+  function slim(w) {
+    const keep = ['key', 'openalexId', 'doi', 'title', 'year', 'authors', 'venue', 'abstract', 'abstractFrom', 'oaType', 'crType', 'epmcTypes',
+      'isOA', 'landing', 'oaUrl', 'pdf', 'oaHost', 'cites', 'topic', 'retracted', 'sources'];
+    const o = {}; keep.forEach(k => { o[k] = w[k]; }); o.savedAt = new Date().toISOString(); return o;
+  }
+
+  const Core = {
+    stem, stems, words, contentStems, phraseStems, hasPhrase, splitSentences, cleanDoi, normTitle, stripTags, reconstructAbstract,
+    extractGlossary, extractProfile, profileTerms, profileText, analyzeQuery, assessFieldAmbiguity,
+    normOpenAlex, normCrossref, normEPMC, workKey, dedupeInto, classifyType, prepWork, scoreQuery, scoreProfile, rankWorks,
+    explain, highlightStems, computeThemes, parseScholarLines, titleSimilarity, compareWithList, toBibTeX, toRIS, toCSV, slim,
+    ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = Core;
+  else root.Core = Core;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>/* Paperscope UI. Depends on window.Core (core.js). */
+(function () {
+  'use strict';
+  const C = window.Core;
+  const VERSION = '0.9.0';
+  const PAGE = 10;
+  const OA = 'https://api.openalex.org';
+  const CR = 'https://api.crossref.org';
+  const EP = 'https://www.ebi.ac.uk/europepmc/webservices/rest';
+  const OA_SELECT = 'id,doi,display_name,publication_year,publication_date,type,cited_by_count,authorships,primary_location,best_oa_location,open_access,primary_topic,keywords,abstract_inverted_index,citation_normalized_percentile,is_retracted';
+  const LIBS = {
+    pdfjs: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.5.438/build/pdf.min.mjs',
+    pdfWorker: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.5.438/build/pdf.worker.min.mjs',
+    mammoth: 'https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js',
+    tjs: 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js',
+  };
+  const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
+  const CATS = [
+    ['research', 'Original articles', 'Labelled "article" by the source and not flagged as a review or commentary'],
+    ['review', 'Reviews', 'Includes ones inferred from wording (marked ?)'],
+    ['perspective', 'Perspectives, editorials and commentary', 'Mostly inferred from wording (marked ?)'],
+    ['preprint', 'Preprints', ''],
+    ['other', 'Other (books, chapters, letters, datasets…)', ''],
+  ];
+
+  // ---------------------------------------------------------------- helpers
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const safeUrl = u => (/^https?:\/\//i.test(String(u || '')) ? String(u) : '');
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const fmt = n => (n == null ? '' : Number(n).toLocaleString());
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('paperscope.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('paperscope.' + k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+    del(k) { try { localStorage.removeItem('paperscope.' + k); } catch (e) { /* ignore */ } },
+  };
+  let toastTimer = null;
+  function toast(msg) {
+    const t = $('#toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+  }
+  function loadScript(src) {
+    return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(s); });
+  }
+
+  // ---------------------------------------------------------------- state
+  const S = {
+    settings: Object.assign({ apiKey: '', crossref: true, epmc: true, semantic: true, rememberProfile: false, ai: false }, store.get('settings', {})),
+    profile: null,
+    saved: new Map(),
+    mode: 'all',
+    filters: { cats: new Set(CATS.map(c => c[0])), hideInferred: false, yearFrom: '', yearTo: '', oaOnly: false, theme: null },
+    search: null,
+    sessionCost: 0,
+    ai: { status: 'off', pipe: null, cache: new Map(), qcache: new Map(), progress: 0, lastRun: null, error: '' },
+    ui: { openDetails: new Set() },
+  };
+  if (S.settings.rememberProfile) S.profile = store.get('profile', null);
+  (store.get('saved', []) || []).forEach(w => { if (w && w.key) { C.prepWork(w); S.saved.set(w.key, w); } });
+  S.mode = store.get('mode', 'all');
+  function saveSettings() { store.set('settings', S.settings); }
+  function persistProfile() { if (S.settings.rememberProfile && S.profile) store.set('profile', S.profile); else store.del('profile'); }
+  function persistSaved() { store.set('saved', [...S.saved.values()].map(C.slim)); }
+
+  // ---------------------------------------------------------------- network
+  async function getJSON(url, { timeout = 20000, retries = 1 } = {}) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), timeout);
+      try {
+        const res = await fetch(url, { signal: ctl.signal });
+        clearTimeout(timer);
+        if (res.status === 429 && attempt < retries) { await sleep(1300 * (attempt + 1)); continue; }
+        if (!res.ok) { let body = ''; try { body = (await res.text()).slice(0, 300); } catch (e) { /* ignore */ } return { ok: false, status: res.status, error: body }; }
+        return { ok: true, status: res.status, data: await res.json() };
+      } catch (e) {
+        clearTimeout(timer);
+        if (attempt < retries) { await sleep(900); continue; }
+        return { ok: false, status: 0, error: e.name === 'AbortError' ? 'timed out' : (e.message || String(e)) };
+      }
+    }
+    return { ok: false, status: 0, error: 'unknown' };
+  }
+  function oaURL(params) {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, v); });
+    if (S.settings.apiKey) p.set('api_key', S.settings.apiKey.trim());
+    return `${OA}/works?${p.toString()}`;
+  }
+  function addCost(r) { if (r && r.ok && r.data && r.data.meta && typeof r.data.meta.cost_usd === 'number') { S.sessionCost += r.data.meta.cost_usd; if (S.search) S.search.cost += r.data.meta.cost_usd; } }
+  function failText(src, r) {
+    if (r.status === 429) return src.startsWith('OpenAlex') ? 'OpenAlex refused the request: the free daily allowance is used up or requests came too fast. It resets at midnight UTC; a free API key (About › Settings) gives 10× more.' : `${src} is limiting requests. Try again in a minute.`;
+    if (r.status === 401 || r.status === 403) return `${src} refused the request (${r.status}). If you added an API key, check it in About › Settings.`;
+    if (r.status === 400) return `${src} could not read this query (400). Try simpler wording.`;
+    if (r.status === 0) return `${src} could not be reached (${r.error}).`;
+    return `${src} returned an error (${r.status}).`;
+  }
+
+  // ---------------------------------------------------------------- routing
+  const VIEWS = ['search', 'profile', 'saved', 'about'];
+  function route() {
+    const v = (location.hash || '#search').slice(1);
+    const view = VIEWS.includes(v) ? v : 'search';
+    VIEWS.forEach(x => { $('#view-' + x).hidden = x !== view; });
+    document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.view === view ? 'page' : 'false'));
+    if (view === 'saved') renderSaved();
+    if (view === 'profile') { renderProfileEditor(); renderAI(); }
+    if (view === 'about') renderAbout();
+    window.scrollTo(0, 0);
+  }
+
+  // ---------------------------------------------------------------- search flow
+  let searchToken = 0;
+  function ctx() {
+    const s = S.search;
+    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile() };
+  }
+  function hasProfile() { return !!(S.profile && ((S.profile.interests || []).length + (S.profile.methods || []).length + (S.profile.areas || []).length)); }
+
+  async function runSearch(q, opts = {}) {
+    q = String(q || '').trim();
+    if (!q) return;
+    $('#q').value = q;
+    const token = ++searchToken;
+    const choices = Object.assign({}, opts.choices || {});
+    const analysis = C.analyzeQuery(q, S.profile, choices);
+    S.search = { q, analysis, choices, sense: opts.sense || null, senseAuto: false, fieldInfo: null, allFields: !!opts.allFields,
+      pool: new Map(), ranked: [], themes: null, status: {}, pages: { oa_kw: 1, oa_sem: 1, crossref: 0, epmc: '*' }, exhausted: {},
+      shown: PAGE, cost: 0, serverFilters: opts.serverFilters || null, sem: new Map(), dupes: 0, fetched: 0, compare: null };
+    S.filters.theme = null;
+    $('#start').hidden = true;
+    $('#clarify').innerHTML = ''; $('#interp').innerHTML = ''; $('#map-holder').innerHTML = ''; $('#filterbar').innerHTML = '';
+    $('#results').innerHTML = ''; $('#more').innerHTML = ''; $('#compare-holder').innerHTML = '';
+    if (location.hash && location.hash !== '#search') location.hash = '#search';
+
+    if (analysis.question && !opts.skipQuestion) { renderClarify({ kind: 'acronym', ...analysis.question }); return; }
+
+    if (!S.search.sense && !S.search.allFields && !analysis.expert && analysis.shortQuery) {
+      setLoading('Checking which research fields use these words…');
+      const r = await getJSON(oaURL({ search: analysis.keywordQuery, group_by: 'primary_topic.field.id', per_page: 30 }));
+      if (token !== searchToken) return;
+      addCost(r);
+      if (r.ok) {
+        const amb = C.assessFieldAmbiguity(r.data.group_by, S.profile);
+        S.search.fieldInfo = amb;
+        if (amb.ambiguous) {
+          if (amb.autoPick) { S.search.sense = { id: amb.autoPick.id, name: amb.autoPick.name }; S.search.senseAuto = true; }
+          else { setLoading(null); renderClarify({ kind: 'field', amb }); return; }
+        }
+      } else {
+        S.search.status.groupby = { ok: false, label: 'OpenAlex field check', msg: failText('OpenAlex', r) };
+      }
+    }
+    await fetchBatch(token);
+  }
+
+  function oaFilter() {
+    const s = S.search; const parts = [];
+    if (s.sense) parts.push(`primary_topic.domain.id:${s.sense.id}`);
+    const f = s.serverFilters;
+    if (f) {
+      if (f.yearFrom || f.yearTo) parts.push(`publication_year:${f.yearFrom || 1500}-${f.yearTo || new Date().getFullYear() + 1}`);
+      if (f.oaOnly) parts.push('is_oa:true');
+      if (f.type) parts.push(`type:${f.type}`);
+    }
+    return parts.join(',');
+  }
+
+  async function fetchBatch(token) {
+    const s = S.search; const a = s.analysis;
+    setLoading(s.fetched ? 'Getting more results…' : 'Searching OpenAlex' + (S.settings.crossref ? ', Crossref' : '') + (S.settings.epmc ? ' and Europe PMC' : '') + '…');
+    const filter = oaFilter();
+    const jobs = [];
+    if (!s.exhausted.oa_kw) jobs.push(['oa_kw', 'OpenAlex keyword search', getJSON(oaURL({ search: a.keywordQuery, filter, per_page: 40, page: s.pages.oa_kw, select: OA_SELECT }))]);
+    if (S.settings.semantic && !s.exhausted.oa_sem) jobs.push(['oa_sem', 'OpenAlex meaning-based search', getJSON(oaURL({ 'search.semantic': a.semanticQuery, filter, per_page: 25, page: s.pages.oa_sem, select: OA_SELECT }))]);
+    else if (!S.settings.semantic) s.status.oa_sem = { skip: true, label: 'OpenAlex meaning-based search', msg: 'off in Settings' };
+    const sf = s.serverFilters || {};
+    if (S.settings.crossref && !s.exhausted.crossref) {
+      const p = new URLSearchParams({ 'query.bibliographic': a.semanticQuery, rows: 20, offset: s.pages.crossref, select: 'DOI,title,abstract,type,issued,published,container-title,author,is-referenced-by-count,URL' });
+      const cf = []; if (sf.yearFrom) cf.push(`from-pub-date:${sf.yearFrom}`); if (sf.yearTo) cf.push(`until-pub-date:${sf.yearTo}`); if (cf.length) p.set('filter', cf.join(','));
+      jobs.push(['crossref', 'Crossref', getJSON(`${CR}/works?${p}`, { timeout: 15000 })]);
+    } else if (!S.settings.crossref) s.status.crossref = { skip: true, label: 'Crossref', msg: 'off in Settings' };
+    if (S.settings.epmc && !s.exhausted.epmc) {
+      let query = a.keywordQuery;
+      if (sf.yearFrom || sf.yearTo) query += ` AND PUB_YEAR:[${sf.yearFrom || 1800} TO ${sf.yearTo || new Date().getFullYear() + 1}]`;
+      if (sf.oaOnly) query += ' AND OPEN_ACCESS:y';
+      if (sf.type === 'review') query += ' AND PUB_TYPE:"review"';
+      const p = new URLSearchParams({ query, format: 'json', resultType: 'core', pageSize: 20, cursorMark: s.pages.epmc });
+      jobs.push(['epmc', 'Europe PMC', getJSON(`${EP}/search?${p}`, { timeout: 15000 })]);
+    } else if (!S.settings.epmc) s.status.epmc = { skip: true, label: 'Europe PMC', msg: 'off in Settings' };
+
+    const results = await Promise.all(jobs.map(j => j[2]));
+    if (token !== searchToken) return;
+    const before = s.pool.size; let incoming = 0;
+    results.forEach((r, i) => {
+      const [ch, label] = jobs[i];
+      if (!r.ok) { s.status[ch] = { ok: false, label, msg: failText(label, r) }; s.exhausted[ch] = true; return; }
+      let items = [];
+      if (ch === 'oa_kw' || ch === 'oa_sem') {
+        addCost(r);
+        const per = ch === 'oa_kw' ? 40 : 25;
+        const off = (s.pages[ch] - 1) * per;
+        const res = r.data.results || [];
+        items = res.map((w, k) => C.normOpenAlex(w, ch, off + k + 1));
+        const total = r.data.meta ? r.data.meta.count : res.length;
+        const prev = s.status[ch] && s.status[ch].n || 0;
+        s.status[ch] = { ok: true, label, n: prev + res.length, total };
+        s.pages[ch]++;
+        if (res.length < per || off + res.length >= total || (ch === 'oa_sem' && s.pages[ch] > 2)) s.exhausted[ch] = true;
+      } else if (ch === 'crossref') {
+        const res = (r.data.message && r.data.message.items) || [];
+        const off = s.pages.crossref;
+        items = res.filter(it => !/^(component|journal-issue|journal-volume|journal|peer-review|grant|database)$/.test(it.type)).map((it, k) => C.normCrossref(it, off + k + 1));
+        const prev = s.status[ch] && s.status[ch].n || 0;
+        s.status[ch] = { ok: true, label, n: prev + res.length, total: r.data.message && r.data.message['total-results'] };
+        s.pages.crossref += 20;
+        if (res.length < 20 || s.pages.crossref >= 100) s.exhausted.crossref = true;
+      } else if (ch === 'epmc') {
+        const res = (r.data.resultList && r.data.resultList.result) || [];
+        const prevN = s.status[ch] && s.status[ch].n || 0;
+        items = res.map((it, k) => C.normEPMC(it, prevN + k + 1));
+        s.status[ch] = { ok: true, label, n: prevN + res.length, total: r.data.hitCount };
+        if (!res.length || !r.data.nextCursorMark || r.data.nextCursorMark === s.pages.epmc) s.exhausted.epmc = true;
+        s.pages.epmc = r.data.nextCursorMark;
+      }
+      incoming += items.length;
+      C.dedupeInto(s.pool, items);
+    });
+    s.fetched += incoming;
+    s.dupes = s.fetched - s.pool.size;
+    s.lastAdded = s.pool.size - before;
+    setLoading(null);
+    rerank();
+    renderAll();
+    if (S.ai.status === 'ready') embedPool();
+    else if (S.settings.ai && S.ai.status === 'off') loadAI(true);
+  }
+
+  function rerank() {
+    const s = S.search; if (!s) return;
+    s.ranked = C.rankWorks([...s.pool.values()], ctx());
+    s.themes = C.computeThemes(s.ranked, ctx());
+  }
+
+  function visibleWorks() {
+    const s = S.search; if (!s) return [];
+    const f = S.filters;
+    const theme = f.theme && s.themes ? s.themes.themes.find(t => t.id === f.theme) : null;
+    const tkeys = theme ? new Set(theme.keys) : null;
+    return s.ranked.filter(w => {
+      const ti = w.typeInfo;
+      if (!f.cats.has(ti.cat)) return false;
+      if (f.hideInferred && ti.conf === 'inferred') return false;
+      if (f.yearFrom && (!w.year || w.year < Number(f.yearFrom))) return false;
+      if (f.yearTo && (!w.year || w.year > Number(f.yearTo))) return false;
+      if (f.oaOnly && !w.isOA) return false;
+      if (tkeys && !tkeys.has(w.key)) return false;
+      return true;
+    });
+  }
+  function filtersActive() {
+    const f = S.filters;
+    return f.cats.size < CATS.length || f.hideInferred || f.yearFrom || f.yearTo || f.oaOnly || f.theme;
+  }
+
+  // ---------------------------------------------------------------- rendering: search
+  function setLoading(text) {
+    const el = $('#loading');
+    if (!text) { el.hidden = true; return; }
+    $('#loading-text').textContent = text; el.hidden = false;
+  }
+
+  function renderModes() {
+    const hp = hasProfile();
+    document.querySelectorAll('#modes button').forEach(b => {
+      const m = b.dataset.mode;
+      b.setAttribute('aria-checked', String((hp ? S.mode : 'all') === m));
+      b.disabled = !hp && m !== 'all';
+    });
+    const hints = {
+      close: 'Favouring papers that overlap your profile.',
+      all: hp ? 'Ranked by match to your search, with a light nudge towards your profile.' : 'Add a profile to separate papers close to your work from adjacent ones.',
+      adjacent: 'Favouring relevant papers outside your listed areas, and recent ones.',
+    };
+    $('#mode-hint').textContent = hints[hp ? S.mode : 'all'];
+    const pl = $('#profile-line');
+    if (hp) {
+      const n = (S.profile.interests || []).length + (S.profile.methods || []).length + (S.profile.areas || []).length;
+      pl.innerHTML = `Ranking with your profile: ${n} terms. <a href="#profile">Edit</a>`;
+    } else pl.innerHTML = `No profile yet. <a href="#profile">Add your CV or a research statement</a> for personalised ranking.`;
+  }
+
+  function renderClarify(c) {
+    const el = $('#clarify');
+    const q = S.search.q;
+    if (c.kind === 'acronym') {
+      el.innerHTML = `<div class="panel ask" role="group" aria-labelledby="ask-h">
+        <h3 id="ask-h">What does “${esc(c.acr)}” mean in your search?</h3>
+        <p class="small muted">It has more than one common meaning. Your answer is used for this search only.</p>
+        <div class="choices">${c.options.map(o => `<button type="button" class="btn" data-acr="${esc(c.acr)}" data-long="${esc(o)}">${esc(o)}</button>`).join('')}
+          <button type="button" class="btn" data-acr="${esc(c.acr)}" data-long="">Search “${esc(c.acr)}” as typed</button></div>
+        <form class="add-term" data-acr-form="${esc(c.acr)}" style="margin-top:10px"><label class="sr-only" for="acr-other">Other meaning</label><input id="acr-other" placeholder="Something else: type the full term"><button class="btn small" type="submit">Use</button></form>
+      </div>`;
+    } else {
+      const amb = c.amb;
+      el.innerHTML = `<div class="panel ask" role="group" aria-labelledby="ask-h">
+        <h3 id="ask-h">“${esc(q)}” is used in quite different fields. Which do you mean?</h3>
+        <p class="small muted">Share of OpenAlex papers using these words. With a profile, Paperscope can usually pick for you.</p>
+        <div class="choices">${amb.options.map(o => `<button type="button" class="btn" data-field="${o.id}" data-fname="${esc(o.name)}">${esc(o.name)} <span class="share">${Math.round(o.share * 100)}%</span><br><span class="tiny">${esc(o.fields.slice(0, 3).join(', '))}</span></button>`).join('')}
+          <button type="button" class="btn" data-field="all">All fields</button></div>
+      </div>`;
+    }
+  }
+
+  function renderInterp() {
+    const s = S.search; const a = s.analysis;
+    const bits = [];
+    bits.push(`<p>Keyword search: <code>${esc(a.keywordQuery)}</code></p>`);
+    const chips = [];
+    a.acronyms.forEach(x => chips.push(`<li class="chip">${esc(x.acr)} = ${esc(x.long)} <span class="tiny">(${esc(x.how)})</span> <button type="button" title="Search ${esc(x.acr)} as typed" aria-label="Remove meaning for ${esc(x.acr)}" data-unacr="${esc(x.acr)}">×</button></li>`));
+    a.expansions.forEach(x => chips.push(`<li class="chip toggle ${x.on ? '' : 'off'}" role="button" tabindex="0" aria-pressed="${x.on}" data-exp="${esc(x.text)}" title="${x.on ? 'Tap to stop searching this related term' : 'Tap to include this related term'}">${x.on ? '+' : ''} ${esc(x.text)} <span class="tiny">for ${esc(x.for)}</span></li>`));
+    if (s.sense) chips.push(`<li class="chip">Limited to ${esc(s.sense.name)} ${s.senseAuto ? '<span class="tiny">(picked from your profile)</span>' : ''} <button type="button" data-unfield="1" aria-label="Search all fields instead">×</button></li>`);
+    if (chips.length) bits.push(`<ul class="chips" aria-label="How your search was interpreted">${chips.join('')}</ul>`);
+    if (S.settings.semantic) bits.push(`<p class="small">Also searched by meaning: <code>${esc(a.semanticQuery)}</code></p>`);
+    const st = s.status;
+    const rows = ['groupby', 'oa_kw', 'oa_sem', 'crossref', 'epmc'].filter(k => st[k]).map(k => {
+      const x = st[k];
+      if (x.skip) return `<li class="skip">${esc(x.label)}: ${esc(x.msg)}</li>`;
+      if (!x.ok) return `<li class="fail">${esc(x.label)}: ${esc(x.msg)}</li>`;
+      return `<li>${esc(x.label)}: ${fmt(x.n)} fetched${x.total != null ? ` of ${fmt(x.total)} matches` : ''}</li>`;
+    });
+    bits.push(`<ul class="sources">${rows.join('')}</ul>`);
+    bits.push(`<p class="tiny">${fmt(s.pool.size)} unique papers after merging ${fmt(s.dupes)} duplicates. OpenAlex cost for this search: $${s.cost.toFixed(3)} (session $${S.sessionCost.toFixed(3)}; free allowance $${S.settings.apiKey ? '1.00' : '0.10'} a day${S.settings.apiKey ? ' with your key' : ' without a key'}).${S.ai.status === 'ready' ? ' Re-ranked with the on-device model.' : ''}</p>`);
+    const failed = Object.values(st).filter(x => x && x.ok === false);
+    const warn = failed.length ? `<div class="panel warn" role="alert"><strong>These results are incomplete.</strong> ${failed.map(x => esc(x.msg)).join(' ')}</div>` : '';
+    $('#interp').innerHTML = `${warn}<details class="panel interp" ${s.fetched && s.fetched < 30 ? 'open' : ''}><summary class="small"><strong>How this was searched</strong></summary>${bits.join('')}</details>`;
+  }
+
+  function renderMap() {
+    const s = S.search;
+    if (!s.themes || !s.ranked.length) { $('#map-holder').innerHTML = ''; return; }
+    const { themes, hasProfile: hp } = s.themes;
+    const top = themes.filter(t => t.id !== 'none').slice(0, 12);
+    if (top.length < 2) { $('#map-holder').innerHTML = ''; return; }
+    const W = 470, H = 330, cx = W / 2, cy = H / 2, R1 = 74, R2 = 132, SQ = 0.82;
+    let inner = top.filter(t => t.close), outer = top.filter(t => !t.close);
+    if (inner.length > 6) { outer = inner.slice(6).concat(outer); inner = inner.slice(0, 6); } // keep the inner ring legible
+    const maxC = Math.max(...top.map(t => t.count));
+    const place = (arr, R, offset) => arr.map((t, i) => {
+      const ang = offset + (2 * Math.PI * i) / Math.max(arr.length, 1);
+      const rr = arr.length === 1 && R === R1 ? R * 0.75 : R;
+      return { t, ang, x: cx + rr * Math.cos(ang), y: cy + rr * Math.sin(ang) * SQ, r: 7 + 14 * Math.sqrt(t.count / maxC) };
+    });
+    const nodes = [...place(inner, R1, -Math.PI / 2 + 0.3), ...place(outer, R2, -Math.PI / 2 + 0.05)];
+    const sel = S.filters.theme;
+    const dimFor = t => (hp && S.mode === 'close' && !t.close) || (hp && S.mode === 'adjacent' && t.close);
+    const short = t => (t.name.length > 20 ? t.name.slice(0, 19).replace(/\s+\S*$/, '') + '…' : t.name);
+    // Label the larger themes only; place each label on the outward side of its bubble.
+    const labelled = new Set(nodes.slice().sort((a, b) => b.t.count - a.t.count).slice(0, 8).map(n => n.t.id));
+    const label = n => {
+      const c = Math.cos(n.ang), sn = Math.sin(n.ang);
+      const lx = n.x + c * (n.r + 5), ly = n.y + sn * (n.r + 5) * SQ + 4;
+      const anchor = Math.abs(c) < 0.35 ? 'middle' : (c > 0 ? 'start' : 'end');
+      const dy = Math.abs(c) < 0.35 ? (sn < 0 ? -4 : 8) : 0;
+      return `<text x="${lx.toFixed(1)}" y="${(ly + dy).toFixed(1)}" style="text-anchor:${anchor}">${esc(short(n.t))}</text>`;
+    };
+    const svg = `<svg class="map-svg" viewBox="0 0 ${W} ${H}" role="group" aria-label="Map of research themes in these results: ${inner.length} ${hp ? 'close to your profile' : 'at the core of your search'}, ${outer.length} ${hp ? 'adjacent' : 'further out'}. The same themes are listed below.">
+      <ellipse class="ring" cx="${cx}" cy="${cy}" rx="${R1}" ry="${R1 * SQ}"/><ellipse class="ring" cx="${cx}" cy="${cy}" rx="${R2}" ry="${R2 * SQ}"/>
+      <circle class="hub" cx="${cx}" cy="${cy}" r="18"/><text class="hub-label" x="${cx}" y="${cy + 3.5}">${hp ? 'you' : 'query'}</text>
+      ${nodes.map(n => {
+        const cls = ['node', n.t.close ? 'close' : 'adj', dimFor(n.t) ? 'dim' : '', sel === n.t.id ? 'sel' : ''].join(' ');
+        return `<g class="${cls}" data-theme="${esc(n.t.id)}" tabindex="0" role="button" aria-label="${esc(n.t.name)}: ${n.t.count} papers${n.t.emerging ? ', emerging' : ''}">
+          <title>${esc(n.t.name)} (${n.t.count} papers${n.t.emerging ? ', many recent' : ''})</title>
+          ${n.t.emerging ? `<circle class="emerge" cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${(n.r + 4).toFixed(1)}"/>` : ''}
+          <circle class="b" cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${n.r.toFixed(1)}"/>
+          ${n.r >= 12 ? `<text class="n" x="${n.x.toFixed(1)}" y="${(n.y + 3.5).toFixed(1)}">${n.t.count}</text>` : ''}
+          ${labelled.has(n.t.id) ? label(n) : ''}
+        </g>`;
+      }).join('')}
+    </svg>`;
+    const legend = `<div class="legend"><span><i style="background:var(--close)"></i>${hp ? 'Close to your profile' : 'Most of the top results'}</span><span><i style="background:var(--adj)"></i>${hp ? 'Adjacent to your profile' : 'Further from the top results'}</span><span><i class="e"></i>Emerging: many papers from the last 3 years</span></div>`;
+    const list = `<ul class="theme-list">${top.map(t => `<li><button type="button" data-theme="${esc(t.id)}" aria-pressed="${sel === t.id}"><span class="dot ${t.close ? 'close' : 'adj'}"></span><span class="tl"><span>${esc(t.name)}</span><span class="meta">${t.count} paper${t.count === 1 ? '' : 's'}${t.field ? `, ${esc(t.field)}` : ''}${t.emerging ? ', emerging' : ''}</span></span></button></li>`).join('')}</ul>`;
+    const wasOpen = $('#map-holder details') ? $('#map-holder details').open : true;
+    $('#map-holder').innerHTML = `<details class="map" ${wasOpen ? 'open' : ''}><summary>Theme map</summary>
+      <p class="small muted">Themes are the OpenAlex topics of the papers found. ${hp ? 'Inner ring: themes that overlap your profile. Outer ring: adjacent themes.' : 'Inner ring: themes holding most of the top results.'} Bigger bubbles hold more papers. Tap a theme to see only its papers.</p>
+      ${svg}${legend}${list}</details>`;
+  }
+
+  function renderFilterbar(vis) {
+    const f = S.filters; const s = S.search;
+    const chips = [];
+    if (f.cats.size < CATS.length) chips.push(`<li class="chip">${[...f.cats].map(c => CATS.find(x => x[0] === c)[1].split(' ')[0]).join(', ')} <button data-clear="cats" aria-label="Clear type filter">×</button></li>`);
+    if (f.hideInferred) chips.push(`<li class="chip">No inferred types <button data-clear="hideInferred" aria-label="Clear">×</button></li>`);
+    if (f.yearFrom || f.yearTo) chips.push(`<li class="chip">${esc(f.yearFrom || '…')}–${esc(f.yearTo || '…')} <button data-clear="years" aria-label="Clear year filter">×</button></li>`);
+    if (f.oaOnly) chips.push(`<li class="chip">Open access <button data-clear="oaOnly" aria-label="Clear">×</button></li>`);
+    if (f.theme && s.themes) { const t = s.themes.themes.find(x => x.id === f.theme); if (t) chips.push(`<li class="chip">Theme: ${esc(t.name)} <button data-clear="theme" aria-label="Clear theme">×</button></li>`); }
+    $('#filterbar').innerHTML = `<div class="filterbar"><button type="button" class="btn small" id="open-filters">Filters${filtersActive() ? ' (on)' : ''}</button>
+      <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${Math.min(s.shown, vis.length)} of ${vis.length} shown</span></div>`;
+  }
+
+  function primaryLink(w) { return safeUrl(w.doi ? `https://doi.org/${w.doi}` : w.landing) || safeUrl(w.oaUrl) || safeUrl(w.openalexId); }
+
+  function highlight(text, hset) {
+    return text.split(/([\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*)/u).map((part, i) => {
+      if (i % 2 === 1 && hset.has(C.stem(part)) && part.length > 2) return `<mark>${esc(part)}</mark>`;
+      return esc(part);
+    }).join('');
+  }
+
+  function paperHTML(w, i, c, hset) {
+    const ex = C.explain(w, c);
+    const ti = w.typeInfo;
+    const hp = c.hasProfile;
+    const closeCls = hp ? (w.rank.prof >= 0.25 ? 'close' : (w.rank.prof < 0.08 ? 'adj' : '')) : '';
+    const authors = w.authors.length > 3 ? `${w.authors.slice(0, 3).join(', ')} et al.` : w.authors.join(', ');
+    const saved = S.saved.has(w.key);
+    const link = primaryLink(w);
+    const free = safeUrl(w.oaUrl) && w.isOA ? safeUrl(w.oaUrl) : '';
+    const pdf = safeUrl(w.pdf);
+    const open = S.ui.openDetails.has(w.key);
+    const reasons = ex.reasons.map(r => `<li class="${esc(r.kind)}">${esc(r.text)}</li>`).join('');
+    const ev = ex.evidence ? `<blockquote>“${highlight(ex.evidence.text, hset)}${ex.evidence.truncated ? '…' : ''}”<cite>From the abstract (${esc(ex.evidence.from)})</cite></blockquote>` : '';
+    const sem = w.rank.sem ? `; model similarity to query ${w.rank.sem.q.toFixed(2)}${w.rank.sem.p != null ? `, to profile ${w.rank.sem.p.toFixed(2)}` : ''}` : '';
+    return `<li class="paper ${closeCls}" data-key="${esc(w.key)}">
+      <div class="badges"><span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}${w.cites ? `<span class="badge">Cited by ${fmt(w.cites)}</span>` : ''}</div>
+      <h3>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
+      <p class="byline">${esc(authors)}${authors ? '. ' : ''}${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
+      <div class="why"><ul>${reasons}</ul>${ev}${ex.note ? `<p class="note">${esc(ex.note)}</p>` : ''}</div>
+      <div class="actions">
+        <button type="button" class="save" data-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>
+        ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${w.doi ? 'Publisher page' : 'Source page'}</a>` : ''}
+        ${free && free !== link ? `<a href="${esc(free)}" target="_blank" rel="noopener">Free full text${w.oaHost ? ` (${esc(w.oaHost)})` : ''}</a>` : ''}
+        ${pdf && pdf !== free ? `<a href="${esc(pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}
+        <button type="button" class="btn link" data-details="${esc(w.key)}" aria-expanded="${open}">Details</button>
+      </div>
+      <div class="details" ${open ? '' : 'hidden'}><dl>
+        <dt>Type</dt><dd>${esc(ti.label)}: ${esc(ti.why)}</dd>
+        ${w.topic ? `<dt>Topic</dt><dd>${esc(w.topic.name)} (${esc(w.topic.field || '')})</dd>` : ''}
+        ${w.doi ? `<dt>DOI</dt><dd><a href="https://doi.org/${esc(w.doi)}" target="_blank" rel="noopener">${esc(w.doi)}</a></dd>` : ''}
+        <dt>Found by</dt><dd>${esc(Object.keys(w.ranks).map(k => ({ oa_kw: 'OpenAlex keyword', oa_sem: 'OpenAlex meaning-based', crossref: 'Crossref', epmc: 'Europe PMC' }[k] + ` #${w.ranks[k]}`)).join(', '))}</dd>
+        ${w.openalexId ? `<dt>Record</dt><dd><a href="${esc(safeUrl(w.openalexId))}" target="_blank" rel="noopener">OpenAlex</a></dd>` : ''}
+        <dt>Score</dt><dd>${w.rank.score.toFixed(2)} (search match ${w.rank.q.toFixed(2)}, source rank ${w.rank.rrf.toFixed(2)}${hp ? `, profile ${w.rank.prof.toFixed(2)}` : ''}${sem})</dd>
+      </dl></div>
+    </li>`;
+  }
+
+  function renderResults() {
+    const s = S.search;
+    const vis = visibleWorks();
+    renderFilterbar(vis);
+    const c = ctx(); const hset = C.highlightStems(c);
+    const list = vis.slice(0, s.shown);
+    if (!s.ranked.length) {
+      const anyFail = Object.values(s.status).some(x => x && x.ok === false);
+      $('#results').innerHTML = `<li class="panel">${anyFail ? 'No results could be fetched. See the messages above.' : 'No papers matched. Try fewer or broader words, or turn off a field restriction.'}</li>`;
+    } else if (!vis.length) {
+      $('#results').innerHTML = `<li class="panel">None of the ${s.ranked.length} papers fetched so far pass your filters. ${serverFilterButton()}</li>`;
+    } else {
+      $('#results').innerHTML = list.map((w, i) => paperHTML(w, i, c, hset)).join('');
+    }
+    const more = [];
+    if (vis.length > s.shown) more.push(`<button type="button" class="btn" id="show-more">Show ${Math.min(PAGE, vis.length - s.shown)} more</button>`);
+    else if (s.ranked.length) {
+      const canFetch = ['oa_kw', 'oa_sem', 'crossref', 'epmc'].some(k => !s.exhausted[k] && (k !== 'oa_sem' || S.settings.semantic) && (k !== 'crossref' || S.settings.crossref) && (k !== 'epmc' || S.settings.epmc));
+      if (canFetch) more.push(`<button type="button" class="btn" id="fetch-more">Get more results from the databases</button><span class="tiny">Uses about $0.002 of the OpenAlex free allowance.</span>`);
+      else more.push(`<span class="small muted">That is everything these sources returned for this search.</span>`);
+    }
+    if (filtersActive() && vis.length < 8 && s.ranked.length && !s.serverFilters) more.push(serverFilterButton());
+    $('#more').innerHTML = more.join('');
+  }
+  function serverFilterButton() {
+    const f = S.filters;
+    const canServer = f.yearFrom || f.yearTo || f.oaOnly || (f.cats.size === 1 && (f.cats.has('review') || f.cats.has('preprint')));
+    return canServer ? `<button type="button" class="btn small" id="server-filter">Search the databases again with these filters</button>` : '';
+  }
+
+  function renderCompare() {
+    const s = S.search;
+    if (!s.ranked.length) { $('#compare-holder').innerHTML = ''; return; }
+    const gs = `https://scholar.google.com/scholar?q=${encodeURIComponent(s.q)}`;
+    const cmp = s.compare;
+    let out = '';
+    if (cmp) {
+      const found = cmp.rows.filter(r => r.found);
+      out = `<p class="small"><strong>${found.length} of ${cmp.rows.length}</strong> pasted titles are in Paperscope’s ${fmt(s.ranked.length)} fetched results${found.length ? ` (positions ${found.map(r => r.position).join(', ')} in the current ranking)` : ''}.</p>
+        <ul>${cmp.rows.map(r => `<li class="${r.found ? 'found' : 'missing'}">${r.found ? `#${r.position}` : (r.oa ? esc(r.oa) : 'Not retrieved')}: ${esc(r.line)}</li>`).join('')}</ul>
+        ${cmp.rows.some(r => !r.found && !r.oa) ? `<button type="button" class="btn small" id="cmp-check">Check OpenAlex for the missing titles</button> <span class="tiny">Sends those titles to OpenAlex; about $0.001 each.</span>` : ''}`;
+    }
+    $('#compare-holder').innerHTML = `<details class="compare panel" ${cmp ? 'open' : ''}><summary>Compare with Google Scholar</summary>
+      <p class="small">Paperscope cannot query Google Scholar. To compare coverage, <a href="${esc(gs)}" target="_blank" rel="noopener">open the same search in Google Scholar</a>, copy the result titles, and paste them here, one per line.</p>
+      <label class="sr-only" for="cmp-text">Titles from Google Scholar</label><textarea id="cmp-text" placeholder="One title per line">${cmp ? esc(cmp.text) : ''}</textarea>
+      <div class="row" style="margin-top:8px"><button type="button" class="btn small" id="cmp-run">Compare</button></div>${out}</details>`;
+  }
+
+  function renderAll() {
+    if (!S.search) return;
+    renderModes(); renderInterp(); renderMap(); renderResults(); renderCompare();
+  }
+
+  // ---------------------------------------------------------------- filters sheet
+  function openFilters() {
+    const f = S.filters;
+    const root = $('#sheet-root');
+    root.innerHTML = `<div class="sheet-backdrop" data-close-sheet></div>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
+        <h3 id="sheet-h">Filter results</h3>
+        <fieldset><legend>Publication type</legend>
+          ${CATS.map(([k, label, sub]) => `<label class="check"><input type="checkbox" name="cat" value="${k}" ${f.cats.has(k) ? 'checked' : ''}><span>${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ''}</span></label>`).join('')}
+          <label class="check"><input type="checkbox" id="f-inferred" ${f.hideInferred ? 'checked' : ''}><span>Hide types that are only inferred<small>Types marked with ? come from title or abstract wording, not from the database.</small></span></label>
+        </fieldset>
+        <fieldset><legend>Year published</legend>
+          <div class="years"><label class="sr-only" for="f-y1">From year</label><input id="f-y1" inputmode="numeric" placeholder="From" value="${esc(f.yearFrom)}"> to <label class="sr-only" for="f-y2">To year</label><input id="f-y2" inputmode="numeric" placeholder="To" value="${esc(f.yearTo)}"></div>
+        </fieldset>
+        <fieldset><legend>Access</legend><label class="check"><input type="checkbox" id="f-oa" ${f.oaOnly ? 'checked' : ''}><span>Open access only</span></label></fieldset>
+        <div class="row"><button type="button" class="btn primary" id="apply-filters">Apply</button><button type="button" class="btn" id="reset-filters">Reset</button><button type="button" class="btn link" data-close-sheet>Cancel</button></div>
+        <p class="tiny" style="margin-top:12px">Filters apply to the papers already fetched. If few remain, you can search the databases again with them.</p>
+      </div>`;
+    $('.sheet input', root).focus();
+  }
+  function closeSheet() { $('#sheet-root').innerHTML = ''; const b = $('#open-filters'); if (b) b.focus(); }
+  function applyFilters() {
+    const f = S.filters;
+    f.cats = new Set([...document.querySelectorAll('.sheet input[name="cat"]:checked')].map(i => i.value));
+    if (!f.cats.size) f.cats = new Set(CATS.map(c => c[0]));
+    f.hideInferred = $('#f-inferred').checked;
+    const y = v => (/^\d{4}$/.test(v.trim()) ? v.trim() : '');
+    f.yearFrom = y($('#f-y1').value); f.yearTo = y($('#f-y2').value);
+    f.oaOnly = $('#f-oa').checked;
+    S.search.shown = PAGE;
+    closeSheet(); renderResults();
+  }
+
+  // ---------------------------------------------------------------- saving
+  function toggleSave(key) {
+    if (S.saved.has(key)) { S.saved.delete(key); toast('Removed from saved'); }
+    else {
+      const w = S.search && S.search.pool.get(key);
+      if (!w) return;
+      const copy = C.slim(w); C.prepWork(copy); S.saved.set(key, copy);
+      toast(store.set('__probe', 1) ? 'Saved on this device' : 'Saved for this session only (browser storage is unavailable)');
+    }
+    persistSaved(); updateSavedCount();
+    document.querySelectorAll(`[data-save="${CSS.escape(key)}"]`).forEach(b => { const on = S.saved.has(key); b.setAttribute('aria-pressed', on); b.textContent = on ? 'Saved' : 'Save'; });
+  }
+  function updateSavedCount() { $('#saved-count').textContent = S.saved.size ? `(${S.saved.size})` : ''; }
+  function renderSaved() {
+    const list = [...S.saved.values()].sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+    if (!list.length) { $('#saved-body').innerHTML = `<p class="muted">Papers you save appear here. They are kept in this browser, not in an account.</p>`; return; }
+    $('#saved-body').innerHTML = `<div class="row" style="margin-bottom:10px">
+        <button class="btn small" data-export="bib">Copy BibTeX</button><button class="btn small" data-export="ris">Copy RIS</button>
+        <button class="btn small" data-download="bib">Download .bib</button><button class="btn small" data-download="ris">Download .ris</button><button class="btn small" data-download="csv">Download .csv</button>
+      </div>
+      <ul class="saved-list">${list.map(w => `<li><div class="badges"><span class="badge ${esc(w.typeInfo.conf)}">${esc(w.typeInfo.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}</div>
+        <h3><a href="${esc(primaryLink(w))}" target="_blank" rel="noopener">${esc(w.title)}</a></h3>
+        <p class="byline">${esc(w.authors.slice(0, 3).join(', '))}${w.authors.length > 3 ? ' et al.' : ''}${w.venue ? `. <span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
+        <div class="actions"><button class="save" aria-pressed="true" data-unsave="${esc(w.key)}">Remove</button>${safeUrl(w.oaUrl) && w.isOA ? `<a href="${esc(w.oaUrl)}" target="_blank" rel="noopener">Free full text</a>` : ''}</div></li>`).join('')}</ul>
+      <p style="margin-top:16px"><button class="btn small" id="clear-saved">Remove all saved papers</button></p>`;
+  }
+  function exportText(kind) {
+    const list = [...S.saved.values()];
+    return kind === 'bib' ? C.toBibTeX(list) : kind === 'ris' ? C.toRIS(list) : C.toCSV(list);
+  }
+  async function copyText(t, what) {
+    try { await navigator.clipboard.writeText(t); toast(`${what} copied`); }
+    catch (e) { toast('Copying is blocked here. Use Download instead.'); }
+  }
+  function download(kind) {
+    const t = exportText(kind);
+    const type = kind === 'csv' ? 'text/csv' : 'text/plain';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([t], { type })); a.download = `paperscope-saved.${kind}`;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  // ---------------------------------------------------------------- profile
+  async function readFile(file) {
+    const status = $('#parse-status');
+    status.textContent = `Reading ${file.name}…`;
+    try {
+      let text = '';
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.pdf') || file.type === 'application/pdf') {
+        status.textContent = 'Loading the PDF reader…';
+        const pdfjs = await import(LIBS.pdfjs);
+        pdfjs.GlobalWorkerOptions.workerSrc = LIBS.pdfWorker;
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+        const pages = [];
+        for (let p = 1; p <= Math.min(doc.numPages, 40); p++) {
+          status.textContent = `Reading page ${p} of ${doc.numPages}…`;
+          const page = await doc.getPage(p);
+          const tc = await page.getTextContent();
+          pages.push(tc.items.map(it => (it.str || '') + (it.hasEOL ? '\n' : ' ')).join(''));
+        }
+        text = pages.join('\n');
+      } else if (name.endsWith('.docx')) {
+        status.textContent = 'Loading the Word reader…';
+        if (!window.mammoth) await loadScript(LIBS.mammoth);
+        const r = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+        text = r.value;
+      } else if (name.endsWith('.doc')) {
+        throw new Error('Old .doc files cannot be read here. Save it as .docx or PDF, or paste the text.');
+      } else {
+        text = await file.text();
+      }
+      if (text.replace(/\s/g, '').length < 80) throw new Error('Very little text was found. If this is a scanned PDF, paste the text instead.');
+      buildProfile(text, file.name);
+    } catch (e) {
+      status.textContent = e.message && /Could not load|Failed to fetch|import/i.test(e.message) ? 'The file reader could not be downloaded. Check your connection, or paste the text instead.' : (e.message || 'Could not read that file.');
+    }
+  }
+  function buildProfile(text, sourceName) {
+    const p = C.extractProfile(text);
+    p.source = sourceName || 'pasted text';
+    S.profile = p; persistProfile();
+    const n = p.interests.length + p.methods.length + p.areas.length;
+    $('#parse-status').textContent = n ? `Found ${n} terms. Check them below and remove anything that is not research.` : 'No research terms were found. Try pasting a research statement.';
+    renderProfileEditor(); renderModes();
+    if (S.search) { S.search.sem = new Map(); rerank(); renderAll(); if (S.ai.status === 'ready') embedPool(); }
+  }
+  function renderProfileEditor() {
+    const el = $('#profile-editor');
+    if (!S.profile) { el.innerHTML = ''; return; }
+    const p = S.profile;
+    const group = (k, title, hint) => `<div class="term-group"><h3>${title} <small>${hint}</small></h3>
+      <ul class="chips">${(p[k] || []).map((t, i) => `<li class="chip">${esc(t.text)}${t.expansion ? ` <span class="tiny">(${esc(t.expansion)})</span>` : ''}<button type="button" data-rmterm="${k}:${i}" aria-label="Remove ${esc(t.text)}">×</button></li>`).join('') || '<li class="tiny">None found</li>'}</ul>
+      <form class="add-term" data-addterm="${k}"><label class="sr-only" for="add-${k}">Add to ${title}</label><input id="add-${k}" placeholder="Add a term"><button class="btn small" type="submit">Add</button></form></div>`;
+    const gl = Object.entries(p.glossary || {});
+    el.innerHTML = `<h2>What Paperscope found</h2>
+      <p class="small muted">From ${esc(p.source || 'your text')}. These terms are used to rank results and to resolve acronyms. They are never sent anywhere.</p>
+      ${group('interests', 'Research interests', 'topics you work on')}
+      ${group('methods', 'Methods and techniques', 'how you work')}
+      ${group('areas', 'Areas of expertise', 'broad fields')}
+      ${gl.length ? `<div class="term-group"><h3>Acronyms <small>used to read your searches</small></h3><ul class="chips">${gl.map(([a, l]) => `<li class="chip">${esc(a)} = ${esc(l)}<button type="button" data-rmacr="${esc(a)}" aria-label="Remove ${esc(a)}">×</button></li>`).join('')}</ul></div>` : ''}
+      <label class="switch"><input type="checkbox" id="remember" ${S.settings.rememberProfile ? 'checked' : ''}><span>Remember my profile on this device<br><span class="tiny">Stored in this browser’s local storage. Off: the profile is forgotten when you close the page.</span></span></label>
+      <button class="btn small" type="button" id="clear-profile">Delete profile</button>`;
+  }
+  function profileChanged() {
+    persistProfile(); renderProfileEditor(); renderModes();
+    S.ai.qcache.delete('__profile');
+    if (S.search) { rerank(); renderAll(); if (S.ai.status === 'ready') embedPool(); }
+  }
+
+  // ---------------------------------------------------------------- on-device model
+  function deviceInfo() {
+    const wasm = typeof WebAssembly === 'object';
+    const mem = navigator.deviceMemory ? `${navigator.deviceMemory} GB` : 'not reported';
+    return { wasm, mem, webgpu: !!navigator.gpu };
+  }
+  function renderAI() {
+    const d = deviceInfo();
+    const a = S.ai;
+    let body = `<p class="small">A small open-weight language model (all-MiniLM-L6-v2, Apache 2.0) can run in this browser to judge meaning, not just shared words: it re-ranks results and compares them with your profile. It does not write text, so it cannot invent findings.</p>
+      <ul class="small"><li>Download: about 20 MB once (model 23 MB and runtime 14 MB before compression), from Hugging Face and jsDelivr. Stored in the browser cache; clear it by clearing this site’s data.</li>
+      <li>Speed: roughly a few seconds per search on a recent phone, faster on a laptop. Runs on the processor (WebAssembly).</li>
+      <li>This device: WebAssembly ${d.wasm ? 'available' : '<strong>not available (the model cannot run here)</strong>'}; memory ${esc(d.mem)}.</li></ul>`;
+    if (a.status === 'off') body += `<button class="btn primary" id="ai-on" ${d.wasm ? '' : 'disabled'}>Download and turn on</button>`;
+    if (a.status === 'loading') body += `<p class="small" role="status">Downloading and starting the model… ${Math.round(a.progress)}%</p><div class="progress"><i style="width:${Math.round(a.progress)}%"></i></div>`;
+    if (a.status === 'ready') body += `<p class="small"><strong>On.</strong> ${a.lastRun ? `Last search: ${a.lastRun.n} papers embedded in ${(a.lastRun.ms / 1000).toFixed(1)} s on this device.` : 'Results will be re-ranked on the next search.'}</p><button class="btn" id="ai-off">Turn off</button>`;
+    if (a.status === 'error') body += `<p class="small" style="color:var(--warn)">The model could not start: ${esc(a.error)}</p><button class="btn" id="ai-on">Try again</button>`;
+    $('#ai-panel').innerHTML = body;
+  }
+  async function loadAI(silent) {
+    if (S.ai.status === 'loading' || S.ai.status === 'ready') return;
+    S.ai.status = 'loading'; S.ai.progress = 0; renderAI();
+    const files = new Map();
+    try {
+      const t = await import(LIBS.tjs);
+      t.env.allowLocalModels = false;
+      try {
+        const onnx = t.env.backends.onnx;
+        const v = onnx && onnx.versions && onnx.versions.web;
+        if (v && onnx.wasm) onnx.wasm.wasmPaths = { mjs: `https://cdn.jsdelivr.net/npm/onnxruntime-web@${v}/dist/ort-wasm-simd-threaded.mjs`, wasm: `https://cdn.jsdelivr.net/npm/onnxruntime-web@${v}/dist/ort-wasm-simd-threaded.wasm` };
+      } catch (e) { /* keep library default */ }
+      S.ai.pipe = await t.pipeline('feature-extraction', MODEL_ID, {
+        dtype: 'q8', device: 'wasm',
+        progress_callback: p => {
+          if (p.status === 'progress' && p.file) { files.set(p.file, { loaded: p.loaded || 0, total: p.total || 0 }); }
+          const tot = [...files.values()].reduce((s, f) => s + f.total, 0); const ld = [...files.values()].reduce((s, f) => s + f.loaded, 0);
+          S.ai.progress = tot ? (100 * ld) / tot : S.ai.progress;
+          if (!$('#view-profile').hidden) renderAI();
+        },
+      });
+      S.ai.status = 'ready'; S.settings.ai = true; saveSettings();
+      if (!silent) toast('On-device model ready');
+      renderAI();
+      if (S.search && S.search.ranked.length) embedPool();
+    } catch (e) {
+      S.ai.status = 'error'; S.ai.error = e.message || String(e); S.ai.pipe = null; renderAI();
+      if (!silent) toast('The model could not start');
+    }
+  }
+  async function embedTexts(texts) {
+    const out = await S.ai.pipe(texts, { pooling: 'mean', normalize: true });
+    return out.tolist();
+  }
+  const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
+  let embedRun = 0;
+  async function embedPool() {
+    const s = S.search; if (!s || S.ai.status !== 'ready') return;
+    const run = ++embedRun; const token = searchToken;
+    const t0 = performance.now();
+    const qtext = s.analysis.semanticQuery;
+    if (!S.ai.qcache.has('q:' + qtext)) S.ai.qcache.set('q:' + qtext, (await embedTexts([qtext]))[0]);
+    const ptext = hasProfile() ? C.profileText(S.profile) : '';
+    if (ptext && !S.ai.qcache.has('p:' + ptext)) S.ai.qcache.set('p:' + ptext, (await embedTexts([ptext]))[0]);
+    const todo = [...s.pool.values()].filter(w => !S.ai.cache.has(w.key));
+    for (let i = 0; i < todo.length; i += 8) {
+      const batch = todo.slice(i, i + 8);
+      const vecs = await embedTexts(batch.map(w => `${w.title}. ${C.splitSentences(w.abstract).slice(0, 2).join(' ')}`.slice(0, 700)));
+      batch.forEach((w, k) => S.ai.cache.set(w.key, vecs[k]));
+      if (run !== embedRun || token !== searchToken) return;
+      await sleep(0);
+    }
+    const qv = S.ai.qcache.get('q:' + qtext); const pv = ptext ? S.ai.qcache.get('p:' + ptext) : null;
+    s.sem = new Map();
+    for (const w of s.pool.values()) { const v = S.ai.cache.get(w.key); if (v) s.sem.set(w.key, { q: dot(qv, v), p: pv ? dot(pv, v) : null }); }
+    if (todo.length) S.ai.lastRun = { n: todo.length, ms: performance.now() - t0 };
+    rerank(); renderAll();
+  }
+
+  // ---------------------------------------------------------------- About
+  const FEATURES = [
+    ['Profile from CV or statement', 'ok', 'Rule-based extraction in the browser (PDF, .docx, text). Editable. Works best on English CVs with section headings.'],
+    ['Acronym and field questions', 'ok', 'Asks when an acronym has several meanings or a short query spans unrelated fields; uses your profile to answer when it can.'],
+    ['Synonym and related-term expansion', 'ok', 'A small curated synonym list plus OpenAlex meaning-based search. Not a full thesaurus.'],
+    ['Search OpenAlex, Crossref, Europe PMC; merge duplicates', 'ok', 'By DOI, then by title and year.'],
+    ['Ranking with explanations', 'ok', 'Explanations only cite words found in the title or abstract, and quote the abstract verbatim.'],
+    ['Publication type filter', 'ok', 'Reviews and perspectives are partly inferred from wording and marked with ?.'],
+    ['Theme map', 'ok', 'Based on OpenAlex topics; “close” means overlap with your profile terms.'],
+    ['Save and export (BibTeX, RIS, CSV)', 'ok', 'Stored in this browser only; no sync between devices.'],
+    ['On-device relevance model', 'proto', 'Optional. Tested in desktop Chrome (about 0.8 s for 24 papers); not yet measured on a phone.'],
+    ['Google Scholar comparison', 'proto', 'Manual: paste titles from Scholar. Automated comparison is not possible (Scholar blocks automated access).'],
+    ['AI-written summaries of papers', 'plan', 'Not built. Small generative models that run on a phone (hundreds of MB) are slow and can invent claims; quoting the abstract is safer.'],
+    ['Accounts and sync', 'plan', 'Not built; would need a server.'],
+  ];
+  const LIMITS = [
+    'Coverage is that of OpenAlex, Crossref and Europe PMC. Google Scholar also indexes many web pages, theses, books and grey literature these sources miss, and its ranking leans heavily on citations.',
+    'OpenAlex’s keyword search covers full text for some papers, so a few results match only in the body text; Paperscope ranks title and abstract matches higher.',
+    'About a third of papers have no abstract in these sources; their explanations rely on the title and metadata.',
+    'Publication types are only as good as the sources: OpenAlex labels many reviews as “article”. Paperscope adds wording-based guesses, marked with ?.',
+    'Profile extraction is rule-based. It can miss terms or pick up names of places and institutions. Check and edit the list.',
+    'OpenAlex’s free allowance without a key is small (about 30 searches a day here). Add a free key for more.',
+    'Field labels come from OpenAlex’s topic classifier and can be wrong for interdisciplinary papers.',
+  ];
+  function renderAbout() {
+    $('#version').textContent = VERSION;
+    $('#api-key').value = S.settings.apiKey || '';
+    $('#set-semantic').checked = S.settings.semantic; $('#set-crossref').checked = S.settings.crossref; $('#set-epmc').checked = S.settings.epmc;
+    const lab = { ok: ['Working', 'status-ok'], proto: ['Prototype', 'status-proto'], plan: ['Planned', 'status-plan'] };
+    $('#feature-table tbody').innerHTML = FEATURES.map(([f, s, n]) => `<tr><td>${esc(f)}</td><td class="${lab[s][1]}">${lab[s][0]}</td><td>${esc(n)}</td></tr>`).join('');
+    $('#limits').innerHTML = LIMITS.map(l => `<li>${esc(l)}</li>`).join('');
+  }
+
+  // ---------------------------------------------------------------- compare with Scholar
+  function runCompare() {
+    const s = S.search;
+    const text = $('#cmp-text').value;
+    const lines = C.parseScholarLines(text).slice(0, 30);
+    if (!lines.length) { toast('Paste at least one title'); return; }
+    s.compare = { text, rows: C.compareWithList(lines, s.ranked) };
+    renderCompare();
+  }
+  async function checkMissing() {
+    const s = S.search; const rows = s.compare.rows.filter(r => !r.found && !r.oa).slice(0, 10);
+    const btn = $('#cmp-check'); if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+    for (const r of rows) {
+      const res = await getJSON(oaURL({ 'search.title': r.line.slice(0, 250), per_page: 3, select: 'id,display_name,publication_year' }), { retries: 0 });
+      addCost(res);
+      if (!res.ok) { r.oa = 'OpenAlex check failed'; continue; }
+      const hit = (res.data.results || []).find(x => C.titleSimilarity(x.display_name, r.line) >= 0.8);
+      r.oa = hit ? 'In OpenAlex but not retrieved by this search' : 'Not found in OpenAlex';
+      await sleep(150);
+    }
+    renderCompare();
+  }
+
+  // ---------------------------------------------------------------- events
+  document.addEventListener('click', e => {
+    const t = e.target.closest('button, [data-theme], [data-exp], a[href^="#"]');
+    if (!t) return;
+    const d = t.dataset;
+    if (d.mode && t.closest('#modes')) {
+      if (t.disabled) return;
+      S.mode = d.mode; store.set('mode', S.mode); renderModes();
+      if (S.search) { S.search.shown = PAGE; rerank(); renderAll(); }
+      return;
+    }
+    if (t.closest('#examples')) { runSearch(t.textContent); return; }
+    if (d.acr !== undefined && d.long !== undefined) { runSearch(S.search.q, { choices: { ...S.search.choices, [d.acr]: d.long } }); return; }
+    if (d.field) {
+      if (d.field === 'all') runSearch(S.search.q, { choices: S.search.choices, allFields: true });
+      else runSearch(S.search.q, { choices: S.search.choices, sense: { id: Number(d.field), name: d.fname } });
+      return;
+    }
+    if (d.unacr) { runSearch(S.search.q, { choices: { ...S.search.choices, [d.unacr]: '' }, sense: S.search.sense, allFields: S.search.allFields }); return; }
+    if (d.unfield) { runSearch(S.search.q, { choices: S.search.choices, allFields: true }); return; }
+    if (d.exp !== undefined) {
+      const dis = new Set(S.search.choices.disabledExpansions || []);
+      dis.has(d.exp) ? dis.delete(d.exp) : dis.add(d.exp);
+      runSearch(S.search.q, { choices: { ...S.search.choices, disabledExpansions: [...dis] }, sense: S.search.sense, allFields: S.search.allFields });
+      return;
+    }
+    if (d.theme) {
+      S.filters.theme = S.filters.theme === d.theme ? null : d.theme; S.search.shown = PAGE;
+      renderMap(); renderResults();
+      if (S.filters.theme) $('#filterbar').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (t.id === 'open-filters') { openFilters(); return; }
+    if (d.closeSheet !== undefined) { closeSheet(); return; }
+    if (t.id === 'apply-filters') { applyFilters(); return; }
+    if (t.id === 'reset-filters') { S.filters = { cats: new Set(CATS.map(c => c[0])), hideInferred: false, yearFrom: '', yearTo: '', oaOnly: false, theme: S.filters.theme }; closeSheet(); renderResults(); return; }
+    if (d.clear) {
+      const f = S.filters;
+      if (d.clear === 'cats') f.cats = new Set(CATS.map(c => c[0]));
+      else if (d.clear === 'years') { f.yearFrom = ''; f.yearTo = ''; }
+      else if (d.clear === 'theme') { f.theme = null; renderMap(); }
+      else f[d.clear] = false;
+      renderResults(); return;
+    }
+    if (t.id === 'show-more') { S.search.shown += PAGE; renderResults(); return; }
+    if (t.id === 'fetch-more') { S.search.shown += PAGE; fetchBatch(searchToken); return; }
+    if (t.id === 'server-filter') {
+      const f = S.filters;
+      const sf = { yearFrom: f.yearFrom, yearTo: f.yearTo, oaOnly: f.oaOnly, type: f.cats.size === 1 && f.cats.has('review') ? 'review' : (f.cats.size === 1 && f.cats.has('preprint') ? 'preprint' : '') };
+      runSearch(S.search.q, { choices: S.search.choices, sense: S.search.sense, allFields: true, skipQuestion: true, serverFilters: sf });
+      return;
+    }
+    if (d.save) { toggleSave(d.save); return; }
+    if (d.unsave) { S.saved.delete(d.unsave); persistSaved(); updateSavedCount(); renderSaved(); return; }
+    if (d.details) {
+      const k = d.details; const li = t.closest('.paper'); const box = $('.details', li);
+      box.hidden = !box.hidden; t.setAttribute('aria-expanded', String(!box.hidden));
+      box.hidden ? S.ui.openDetails.delete(k) : S.ui.openDetails.add(k);
+      return;
+    }
+    if (d.export) { copyText(exportText(d.export), d.export === 'bib' ? 'BibTeX' : 'RIS'); return; }
+    if (d.download) { download(d.download); return; }
+    if (t.id === 'clear-saved') { S.saved.clear(); persistSaved(); updateSavedCount(); renderSaved(); return; }
+    if (t.id === 'cmp-run') { runCompare(); return; }
+    if (t.id === 'cmp-check') { checkMissing(); return; }
+    if (t.id === 'read-text') { const v = $('#cv-text').value; if (v.trim().length < 40) { $('#parse-status').textContent = 'Paste a bit more text: a paragraph at least.'; return; } buildProfile(v, 'pasted text'); return; }
+    if (d.rmterm) { const [k, i] = d.rmterm.split(':'); S.profile[k].splice(Number(i), 1); profileChanged(); return; }
+    if (d.rmacr) { delete S.profile.glossary[d.rmacr]; profileChanged(); return; }
+    if (t.id === 'clear-profile') { S.profile = null; store.del('profile'); $('#parse-status').textContent = 'Profile deleted.'; profileChanged(); return; }
+    if (t.id === 'ai-on') { loadAI(false); return; }
+    if (t.id === 'ai-off') { S.ai.status = 'off'; S.ai.pipe = null; S.settings.ai = false; saveSettings(); renderAI(); if (S.search) { S.search.sem = new Map(); rerank(); renderAll(); } return; }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && $('#sheet-root').innerHTML) closeSheet();
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-theme], [data-exp]')) { e.preventDefault(); e.target.click(); }
+  });
+  document.addEventListener('submit', e => {
+    e.preventDefault();
+    const f = e.target;
+    if (f.id === 'search-form') { runSearch($('#q').value); $('#q').blur(); return; }
+    if (f.dataset.acrForm) { const v = $('input', f).value.trim(); if (v) runSearch(S.search.q, { choices: { ...S.search.choices, [f.dataset.acrForm]: v } }); return; }
+    if (f.dataset.addterm) {
+      const v = $('input', f).value.trim(); if (!v) return;
+      if (!S.profile) S.profile = { interests: [], methods: [], areas: [], glossary: {}, source: 'typed terms' };
+      S.profile[f.dataset.addterm].push({ text: v, score: 0, added: true }); profileChanged();
+      const inp = $(`#add-${f.dataset.addterm}`); if (inp) inp.focus();
+    }
+  });
+  document.addEventListener('change', e => {
+    const t = e.target;
+    if (t.id === 'cv-file' && t.files[0]) readFile(t.files[0]);
+    if (t.id === 'remember') { S.settings.rememberProfile = t.checked; saveSettings(); persistProfile(); toast(t.checked ? 'Profile will be remembered on this device' : 'Profile removed from this device’s storage'); }
+    if (t.id === 'api-key') { S.settings.apiKey = t.value.trim(); saveSettings(); toast(S.settings.apiKey ? 'API key saved in this browser' : 'API key removed'); }
+    if (t.id === 'set-semantic') { S.settings.semantic = t.checked; saveSettings(); }
+    if (t.id === 'set-crossref') { S.settings.crossref = t.checked; saveSettings(); }
+    if (t.id === 'set-epmc') { S.settings.epmc = t.checked; saveSettings(); }
+  });
+  const drop = $('#drop');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) readFile(f); });
+  window.addEventListener('hashchange', route);
+
+  // ---------------------------------------------------------------- init
+  updateSavedCount(); renderModes(); route();
+  if (S.settings.ai) loadAI(true);
+  window.Paperscope = { S, runSearch, version: VERSION }; // for debugging and tests
+})();
+</script>
+</body>
+</html>
