@@ -6,7 +6,7 @@ Paperscope is **not** Google Scholar. It searches different sources, ranks diffe
 
 The whole app is one file, `index.html` (about 150 KB). There is no server, account or paid AI service.
 
-**Live version:** <https://branadeb.github.io/paperscope/> (once GitHub Pages is enabled for this repository).
+**Live version:** <https://branadeb.github.io/Paperscope/>
 
 ## Running it
 
