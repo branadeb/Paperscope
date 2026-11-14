@@ -583,7 +583,7 @@
       key: '', openalexId: '', doi: cleanDoi(it.DOI), title: stripTags((it.title && it.title[0]) || ''), year: dp[0] || null, date: dp.join('-'),
       authors: (it.author || []).map(a => normSpace([a.given, a.family].filter(Boolean).join(' ')) || a.name).filter(Boolean),
       ships: (it.author || []).map(a => { const n = normSpace([a.given, a.family].filter(Boolean).join(' ')) || a.name || ''; return { id: '', name: n, raw: n, orcid: orcidOf(a.ORCID), inst: (a.affiliation || []).map(x => x && x.name).filter(Boolean) }; }),
-      venue: (it['container-title'] && it['container-title'][0]) || '', abstract: abs, abstractFrom: abs ? 'Crossref' : '',
+      venue: stripTags((it['container-title'] && it['container-title'][0]) || ''), abstract: abs, abstractFrom: abs ? 'Crossref' : '',
       oaType: '', crType: it.type || '', epmcTypes: [], isOA: false, oaStatus: '',
       landing: it.URL || (it.DOI ? `https://doi.org/${it.DOI}` : ''), oaUrl: '', pdf: '', oaHost: '',
       cites: it['is-referenced-by-count'] || 0, pct: null, top1: false, top10: false, topic: null, keywords: (it.subject || []).slice(0, 5), retracted: false,
@@ -1418,6 +1418,41 @@
     return { hops: Math.max(0, steps.length - 1), from: steps[0] && steps[0].year, to: steps.length ? steps[steps.length - 1].year : null, span: ys.length ? Math.max(...ys) - Math.min(...ys) : 0 };
   }
 
+  // ---------------------------------------------------------------- Lab: papers of the day
+  // New papers from chosen publishers, found through Crossref (which lists papers the day their DOI is registered).
+  const PUBLISHERS = [
+    { id: 'acs', name: 'ACS', full: 'American Chemical Society journals', filter: 'member:316', on: true },
+    { id: 'wiley', name: 'Wiley', full: 'Wiley journals', filter: 'member:311', on: true },
+    { id: 'nature', name: 'Nature', full: 'Nature Portfolio journals', filter: 'prefix:10.1038', on: true },
+    { id: 'science', name: 'Science', full: 'Science family (AAAS)', filter: 'member:221', on: true },
+    { id: 'rsc', name: 'RSC', full: 'Royal Society of Chemistry', filter: 'member:292', on: false },
+    { id: 'aip', name: 'AIP', full: 'AIP Publishing (J. Chem. Phys. and more)', filter: 'member:317', on: false },
+    { id: 'aps', name: 'APS', full: 'American Physical Society (Phys. Rev.)', filter: 'member:16', on: false },
+    { id: 'elsevier', name: 'Elsevier', full: 'Elsevier journals', filter: 'member:78', on: false },
+    { id: 'springer', name: 'Springer', full: 'Other Springer journals', filter: 'member:297', on: false },
+  ];
+  // Topics you type (comma or line separated) come first, then your profile's terms.
+  function todayTerms(profile, topicsText) {
+    const own = String(topicsText || '').split(/[,;\n]+/).map(normSpace).filter(t => t.length > 1)
+      .map(t => ({ text: t, stems: phraseStems(t), kind: 'interest', weight: 1.2 })).filter(t => t.stems.length);
+    const seen = new Set();
+    return [...own, ...profileTerms(profile)].filter(t => { const k = t.stems.join(' '); if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+  function todayQuery(terms, max = 14) { return terms.slice(0, max).map(t => t.text).join(' '); }
+  const NOT_PAPER = /^(correction|corrigendum|erratum|retraction|retracted article|expression of concern|issue information|masthead|(front|back|inside) cover|cover (picture|image|feature|story|art)|table of contents|graphical abstract|editorial board|in this issue|this week in|news in brief|research highlights?)\b/i;
+  function rankToday(works, terms) {
+    return works.filter(w => w.title && !NOT_PAPER.test(w.title))
+      .map(w => { const r = scoreProfile(w, terms); return { w, score: r.score, hits: r.hits }; })
+      .filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score || String(b.w.created || b.w.date).localeCompare(String(a.w.created || a.w.date)));
+  }
+  // Start of the window to check: the last check (at most 7 days back), or 2 days back the first time. UTC dates, as Crossref uses.
+  function todaySince(lastRunAt, now = Date.now(), maxDays = 7) {
+    const day = 864e5;
+    const from = lastRunAt ? Math.max(Date.parse(lastRunAt) - day / 2, now - maxDays * day) : now - 2 * day;
+    return new Date(from).toISOString().slice(0, 10);
+  }
+
   const Core = {
     stem, stems, words, contentStems, phraseStems, hasPhrase, splitSentences, cleanDoi, normTitle, stripTags, reconstructAbstract,
     extractGlossary, extractProfile, profileTerms, profileText, analyzeQuery, assessFieldAmbiguity,
@@ -1427,6 +1462,7 @@
     orcidOf, versionKey, versionNo, parseOrcidRecord, normOrcidWork, nameForm, coKey, verifyAuthorWorks, collapseVersions, hIndex,
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
     questStep, questSuggest, trailCode, parseTrailCode, trailStats,
+    PUBLISHERS, todayTerms, todayQuery, rankToday, todaySince,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };

@@ -583,7 +583,7 @@
       key: '', openalexId: '', doi: cleanDoi(it.DOI), title: stripTags((it.title && it.title[0]) || ''), year: dp[0] || null, date: dp.join('-'),
       authors: (it.author || []).map(a => normSpace([a.given, a.family].filter(Boolean).join(' ')) || a.name).filter(Boolean),
       ships: (it.author || []).map(a => { const n = normSpace([a.given, a.family].filter(Boolean).join(' ')) || a.name || ''; return { id: '', name: n, raw: n, orcid: orcidOf(a.ORCID), inst: (a.affiliation || []).map(x => x && x.name).filter(Boolean) }; }),
-      venue: (it['container-title'] && it['container-title'][0]) || '', abstract: abs, abstractFrom: abs ? 'Crossref' : '',
+      venue: stripTags((it['container-title'] && it['container-title'][0]) || ''), abstract: abs, abstractFrom: abs ? 'Crossref' : '',
       oaType: '', crType: it.type || '', epmcTypes: [], isOA: false, oaStatus: '',
       landing: it.URL || (it.DOI ? `https://doi.org/${it.DOI}` : ''), oaUrl: '', pdf: '', oaHost: '',
       cites: it['is-referenced-by-count'] || 0, pct: null, top1: false, top10: false, topic: null, keywords: (it.subject || []).slice(0, 5), retracted: false,

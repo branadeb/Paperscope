@@ -162,7 +162,7 @@
     ['#clarify', '#interp', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
     setLoading(null);
     $('#start').hidden = false; $('#hero').classList.remove('compact'); $('#q').value = '';
-    renderModes(); renderFollows();
+    renderModes(); renderFollows(); renderToday();
   }
 
   // ---------------------------------------------------------------- routing
@@ -1511,7 +1511,24 @@
     }
     if (t.id === 'home-link') { goHome(); return; }
     if (t.id === 'lab-import') { labImport(); return; }
+    if (t.id === 'lab-note-hide') { store.set('labNoteHidden', true); const n = $('.lab-note'); if (n) n.hidden = true; return; }
     if (t.id === 'swipe-open') { openDeck(); return; }
+    if (t.id === 'today-refresh') { fetchToday(true); return; }
+    if (t.id === 'today-swipe') { todayDeck(); return; }
+    if (t.id === 'today-more') { todayShowAll = !todayShowAll; renderToday(); return; }
+    if (t.id === 'today-save') {
+      S.settings.todayTopics = $('#today-topics').value.trim();
+      const on = [...document.querySelectorAll('input[name="today-pub"]:checked')].map(i => i.value);
+      if (!on.length) { toast('Choose at least one publisher'); return; }
+      S.settings.todayPubs = on; saveSettings();
+      if (!todayTermsNow().length) { toast('Add a topic or a profile first'); return; }
+      fetchToday(true); return;
+    }
+    if (d.todaySave) {
+      const w = S.today && S.today.items.find(x => x.key === d.todaySave); if (!w) return;
+      if (S.saved.has(w.key)) S.saved.delete(w.key); else { const copy = Object.assign({}, w); C.prepWork(copy); copy.savedAt = new Date().toISOString(); S.saved.set(w.key, copy); S.taste = C.learnTaste(S.taste, w, 1); store.set('taste', S.taste); }
+      persistSaved(); updateSavedCount(); renderToday(); return;
+    }
     if (d.questStart) { const w = S.search && S.search.pool.get(d.key); if (w) startQuest(w, d.questStart); return; }
     if (d.questStep) { questStepTo(d.questStep); return; }
     if (t.id === 'quest-finish') { finishQuest(); return; }
@@ -1780,6 +1797,89 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden && S.settings.pendingKey) checkKey(false); });
   window.addEventListener('focus', () => { if (S.settings.pendingKey) checkKey(false); });
 
+  // ---------------------------------------------------------------- Lab: papers of the day
+  // When the app opens (once a day, or on request), new papers from chosen publishers are fetched from Crossref
+  // and ranked against your topics and profile. Nothing runs in the background: the browser does it when you open the app.
+  const localDay = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const pubsOn = () => C.PUBLISHERS.filter(p => (S.settings.todayPubs || C.PUBLISHERS.filter(x => x.on).map(x => x.id)).includes(p.id));
+  const todayTermsNow = () => C.todayTerms(S.profile, S.settings.todayTopics || '');
+  let todayBusy = false; let todayShowAll = false;
+  async function fetchToday(force) {
+    const terms = todayTermsNow(); if (!terms.length || todayBusy) { renderToday(); return; }
+    const prev = store.get('today', null);
+    if (!force && prev && prev.day === localDay() && prev.sig === todaySig()) { S.today = prev; renderToday(); return; }
+    todayBusy = true; renderToday();
+    const since = prev && prev.day === localDay() && prev.since ? prev.since : C.todaySince(prev && prev.at);
+    const q = C.todayQuery(terms);
+    const pubs = pubsOn(); const pool = new Map(); const counts = {}; const errors = [];
+    for (let i = 0; i < pubs.length; i += 3) {
+      const batch = pubs.slice(i, i + 3);
+      const res = await Promise.all(batch.map(p => getJSON(`${CR}/works?${new URLSearchParams({ filter: `${p.filter},from-created-date:${since},type:journal-article`, 'query.bibliographic': q, rows: 40,
+        select: 'DOI,title,abstract,type,issued,published,created,container-title,author,is-referenced-by-count,URL,subject' })}`, { timeout: 25000 })));
+      res.forEach((r, k) => {
+        const p = batch[k];
+        if (!r.ok) { errors.push(`${p.name}: ${failText('Crossref', r)}`); return; }
+        const items = (r.data.message && r.data.message.items) || [];
+        counts[p.id] = items.length;
+        C.dedupeInto(pool, items.map((it, j) => Object.assign(C.normCrossref(it, j + 1), { pub: p.id, created: it.created && it.created['date-time'] || '' })));
+      });
+    }
+    const seen = new Set(prev && prev.day !== localDay() ? (prev.seen || []) : (prev && prev.seenBefore) || []);
+    const ranked = C.rankToday([...pool.values()].filter(w => !seen.has(w.doi)), terms);
+    const items = ranked.slice(0, 15).map(x => Object.assign(C.slim(x.w), { pub: x.w.pub, created: x.w.created, score: Math.round(x.score * 100) / 100, hits: x.hits.slice(0, 3).map(h => h.text) }));
+    const seenBefore = [...seen];
+    S.today = { day: localDay(), at: new Date().toISOString(), since, sig: todaySig(), pubs: pubs.map(p => p.id), considered: pool.size, items, errors, seenBefore,
+      seen: [...new Set([...seenBefore, ...items.map(w => w.doi)])].slice(-400) };
+    if (!errors.length || items.length) store.set('today', S.today);
+    todayBusy = false; renderToday();
+  }
+  const todaySig = () => `${pubsOn().map(p => p.id).join(',')}|${C.todayQuery(todayTermsNow())}`;
+  function todayWork(w) { if (!w._prep) C.prepWork(w); return w; }
+  function sinceText(iso) {
+    const d = new Date(iso + 'T12:00:00Z'); const days = Math.round((Date.now() - d) / 864e5);
+    return days <= 1 ? 'since yesterday' : days < 7 ? `since ${d.toLocaleDateString([], { weekday: 'long' })}` : `since ${d.toLocaleDateString([], { day: 'numeric', month: 'long' })}`;
+  }
+  function renderToday() {
+    const box = $('#today'); if (!box) return;
+    const terms = todayTermsNow(); const pubs = pubsOn(); const t = S.today;
+    const names = pubs.map(p => p.name); const pubList = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || 'no publishers';
+    const settings = `<details class="today-set"${!terms.length ? ' open' : ''}><summary>Choose journals and topics</summary>
+        <fieldset class="pubs"><legend class="small">Publishers</legend>${C.PUBLISHERS.map(p => `<label class="pub"><input type="checkbox" name="today-pub" value="${p.id}" ${pubs.some(x => x.id === p.id) ? 'checked' : ''}><span><strong>${esc(p.name)}</strong> <span class="tiny">${esc(p.full)}</span></span></label>`).join('')}</fieldset>
+        <label for="today-topics" class="small">Your topics, separated by commas</label>
+        <textarea id="today-topics" rows="3" placeholder="e.g. exciton diffusion, transient absorption, perylene diimide">${esc(S.settings.todayTopics || '')}</textarea>
+        <p class="tiny">${hasProfile() ? 'Your profile’s terms are used too.' : 'Tip: a profile (Profile tab, or “Bring over” above) adds your terms automatically.'} These words, and the publishers, are sent to Crossref to find new papers.</p>
+        <button type="button" class="btn small primary" id="today-save">Save and check now</button></details>`;
+    if (!terms.length) {
+      box.innerHTML = `<section class="today" aria-labelledby="today-h"><h2 id="today-h">Papers of the day</h2>
+        <p class="small">Tell Paperscope what you work on, and each day it picks new papers for you from ${esc(pubList)} when you open the app.</p>${settings}</section>`;
+      return;
+    }
+    if (todayBusy) { box.innerHTML = `<section class="today" aria-labelledby="today-h" aria-busy="true"><h2 id="today-h">Papers of the day</h2><p class="small" role="status">Looking through today’s papers from ${esc(pubList)}…</p></section>`; return; }
+    if (!t) { box.innerHTML = `<section class="today" aria-labelledby="today-h"><h2 id="today-h">Papers of the day</h2><p class="small">Not checked yet.</p><button type="button" class="btn small primary" id="today-refresh">Check now</button>${settings}</section>`; return; }
+    const shown = todayShowAll ? t.items : t.items.slice(0, 5);
+    const pubName = id => (C.PUBLISHERS.find(p => p.id === id) || {}).name || '';
+    box.innerHTML = `<section class="today" aria-labelledby="today-h">
+      <div class="today-head"><h2 id="today-h">Papers of the day</h2><span class="tiny">${esc(new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' }))}</span></div>
+      <p class="small">${t.items.length ? `${t.items.length} new paper${t.items.length === 1 ? '' : 's'} matching your work, from ${fmt(t.considered)} new in ${esc(pubList)} ${sinceText(t.since)}.` : `Nothing new matching your topics in ${esc(pubList)} ${sinceText(t.since)}. Try adding topics or publishers.`}</p>
+      ${t.errors && t.errors.length ? `<p class="small warn-text" role="alert">${esc(t.errors.join(' '))}</p>` : ''}
+      ${t.items.length ? `<ol class="today-list">${shown.map(w => { todayWork(w); const link = primaryLink(w); const saved = S.saved.has(w.key); return `<li>
+          <p class="tj tiny">${esc(w.venue || pubName(w.pub))}</p>
+          <h3>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
+          <p class="byline">${esc((w.authors || []).slice(0, 3).join(', '))}${(w.authors || []).length > 3 ? ' et al.' : ''}</p>
+          ${w.hits && w.hits.length ? `<p class="tw small">Mentions ${esc(w.hits.join(', '))}${w.abstract ? '' : '. No abstract yet, so this is from the title'}.</p>` : ''}
+          <div class="actions"><button type="button" class="save" data-today-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Read it</a>` : ''}</div></li>`; }).join('')}</ol>
+        ${t.items.length > 5 ? `<button type="button" class="btn link" id="today-more">${todayShowAll ? 'Show fewer' : `Show all ${t.items.length}`}</button>` : ''}` : ''}
+      <div class="row today-btns">${t.items.length ? '<button type="button" class="btn small primary" id="today-swipe">Swipe through them</button>' : ''}<button type="button" class="btn small" id="today-refresh">Check again</button></div>
+      ${settings}</section>`;
+  }
+  function todayDeck() {
+    const t = S.today; if (!t || !t.items.length) return;
+    const pool = new Map(t.items.map(w => [w.key, todayWork(w)]));
+    openDeck({ pool, keys: t.items.map(w => w.key), title: 'Papers of the day', onClose: renderToday,
+      explain: w => ({ reasons: [w.hits && w.hits.length ? { kind: 'profile', text: `Mentions ${w.hits.join(', ')}.` } : null, { kind: '', text: `New in ${w.venue || 'a journal'}${w.created ? `, ${new Date(w.created).toLocaleDateString([], { day: 'numeric', month: 'short' })}` : ''}.` }].filter(Boolean),
+        evidence: w.abstract ? { text: C.splitSentences(w.abstract).slice(0, 2).join(' '), truncated: C.splitSentences(w.abstract).length > 2 } : null }) });
+  }
+
   // ---------------------------------------------------------------- Lab: trail quests
   // Follow references back to where an idea started (or citing papers forward to where it led), then replay or share the path.
   const QUEST = {
@@ -1956,11 +2056,13 @@
   // Right keeps (saves) a paper, left skips it, up puts it on a read-later list. Every choice nudges future ranking a little.
   const DELTA = { save: 1, later: 0.5, skip: -0.25 };
   const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  function openDeck() {
-    const s = S.search; if (!s) return;
-    const list = visibleWorks().filter(w => !S.saved.has(w.key) && !S.later.has(w.key)).map(w => w.key);
+  function openDeck(src) {
+    let pool, keys, explain = null, onClose = null, title = 'Swipe to sort';
+    if (src) ({ pool, keys, explain, onClose, title = title } = src);
+    else { const s = S.search; if (!s) return; pool = s.pool; keys = visibleWorks().map(w => w.key); }
+    const list = keys.filter(k => !S.saved.has(k) && !S.later.has(k));
     if (!list.length) { toast('Everything here is already sorted'); return; }
-    S.deck = { list, i: 0, history: [], counts: { save: 0, later: 0, skip: 0 }, returnTo: document.activeElement };
+    S.deck = { list, i: 0, history: [], counts: { save: 0, later: 0, skip: 0 }, returnTo: document.activeElement, pool, explain, onClose, title };
     document.body.classList.add('deck-open');
     $('#deck').hidden = false;
     renderDeck();
@@ -1968,11 +2070,12 @@
   function closeDeck() {
     const d = S.deck; if (!d) return;
     $('#deck').hidden = true; $('#deck').innerHTML = ''; document.body.classList.remove('deck-open');
-    S.deck = null; renderResults(); renderFilterbar(visibleWorks());
+    S.deck = null;
+    if (d.onClose) d.onClose(); else { renderResults(); renderFilterbar(visibleWorks()); }
     if (d.returnTo && document.contains(d.returnTo)) d.returnTo.focus(); else { const b = $('#swipe-open'); if (b) b.focus(); }
   }
   function deckCardHTML(w, c, behind) {
-    const ex = C.explain(w, c); const ti = w.typeInfo; const link = primaryLink(w);
+    const ex = S.deck.explain ? S.deck.explain(w) : C.explain(w, c); const ti = w.typeInfo; const link = primaryLink(w);
     const names = (w.authors || []); const authors = names.slice(0, 3).join(', ') + (names.length > 3 ? ' et al.' : '');
     const reasons = ex.reasons.slice(0, 3).map(r => `<li class="${esc(r.kind)}">${esc(r.text)}</li>`).join('');
     const quote = ex.evidence ? `<blockquote>“${esc(ex.evidence.text)}${ex.evidence.truncated ? '…' : ''}”</blockquote>` : (w.abstract ? '' : '<p class="tiny">No abstract available.</p>');
@@ -1987,13 +2090,14 @@
   }
   function renderDeck() {
     const d = S.deck; if (!d) return;
-    const s = S.search; const c = ctx(); c.topScore = s.ranked.length ? s.ranked[0].rank.score : 1;
+    let c = null;
+    if (!d.explain) { const s = S.search; c = ctx(); c.topScore = s.ranked.length ? s.ranked[0].rank.score : 1; }
     const total = d.list.length; const done = d.i >= total;
-    const cur = done ? null : s.pool.get(d.list[d.i]); const next = d.i + 1 < total ? s.pool.get(d.list[d.i + 1]) : null;
+    const cur = done ? null : d.pool.get(d.list[d.i]); const next = d.i + 1 < total ? d.pool.get(d.list[d.i + 1]) : null;
     const t = C.topTaste(S.taste, 5);
     $('#deck').innerHTML = `<div class="deck-top">
         <button type="button" class="icon-btn deck-close" id="deck-close" aria-label="Close and go back to the results"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-        <h2 id="deck-h">Swipe to sort</h2>
+        <h2 id="deck-h">${esc(d.title)}</h2>
         <span class="deck-count" aria-live="polite">${done ? 'Done' : `${d.i + 1} of ${total}`}</span>
         <span class="deck-progress" aria-hidden="true"><i style="width:${(100 * Math.min(d.i, total) / total).toFixed(1)}%"></i></span>
       </div>
@@ -2001,7 +2105,7 @@
           <p class="dd-big">All sorted</p>
           <p class="dd-counts"><span><b>${d.counts.save}</b> kept</span><span><b>${d.counts.later}</b> for later</span><span><b>${d.counts.skip}</b> skipped</span></p>
           ${t.liked.length ? `<p class="small">Future searches lean a little towards <em>${esc(t.liked.join(', '))}</em>.</p>` : ''}
-          <div class="row"><button type="button" class="btn primary" id="deck-sky">See your sky</button><button type="button" class="btn" id="deck-close2">Back to results</button></div>
+          <div class="row"><button type="button" class="btn primary" id="deck-sky">See your sky</button><button type="button" class="btn" id="deck-close2">${d.onClose ? 'Done' : 'Back to results'}</button></div>
           ${d.history.length ? '<button type="button" class="btn link" id="deck-undo">Undo the last one</button>' : ''}
         </div>`
       : `<div class="deck-stage">${next ? deckCardHTML(next, c, true) : ''}${deckCardHTML(cur, c, false)}</div>
@@ -2066,7 +2170,7 @@
     setTimeout(() => { flying = false; commit(act); }, ms + 10);
   }
   function commit(act) {
-    const d = S.deck; const s = S.search; const key = d.list[d.i]; const w = s.pool.get(key); if (!w) return;
+    const d = S.deck; const key = d.list[d.i]; const w = d.pool.get(key); if (!w) return;
     const before = S.taste;
     if (act === 'save' && !S.saved.has(key)) { const copy = C.slim(w); C.prepWork(copy); S.saved.set(key, copy); persistSaved(); updateSavedCount(); }
     if (act === 'later' && !S.later.has(key)) { const copy = C.slim(w); C.prepWork(copy); S.later.set(key, copy); persistLater(); }
@@ -2254,6 +2358,8 @@
 
   // ---------------------------------------------------------------- init
   updateSavedCount(); renderModes(); route(); renderFollows(); renderAppearance(); renderInstall();
+  { const n = $('.lab-note'); if (n && store.get('labNoteHidden', false)) n.hidden = true; }
+  S.today = store.get('today', null); renderToday(); if (!location.hash.startsWith('#trail=')) fetchToday(false);
   if (S.settings.pendingKey) checkKey(true);
   if (S.settings.ai) loadAI(true);
   window.Paperscope = { S, runSearch, version: VERSION }; // for debugging and tests

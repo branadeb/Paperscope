@@ -62,9 +62,10 @@
     </div>
 
     <div id="start">
+      <div id="today"></div>
       <div class="lab-note" role="note">
         <p><strong>You’re in Paperscope Lab</strong>, a copy for trying new ideas: swipe through results, and see your saved papers as a night sky. It keeps its own saved papers and settings, separate from <a href="../">the main app</a>.</p>
-        <div class="row"><button type="button" class="btn small" id="lab-import">Bring over my saved papers and profile</button></div>
+        <div class="row"><button type="button" class="btn small" id="lab-import">Bring over my saved papers and profile</button><button type="button" class="btn link" id="lab-note-hide">Got it</button></div>
       </div>
       <div id="install-hint"></div>
       <div id="follows-start"></div>
@@ -142,6 +143,7 @@
         <tr><td>Your OpenAlex API key, if you add one</td><td>OpenAlex only, with each request.</td></tr>
         <tr><td>Your ORCID iD, if you import from ORCID</td><td>OpenAlex, to find your publications.</td></tr>
         <tr><td>An author name, ORCID iD or DOI you search for</td><td>OpenAlex (and Crossref for a DOI that OpenAlex lacks).</td></tr>
+        <tr><td>Your “papers of the day” topics and chosen publishers (Lab)</td><td>Crossref, once a day when you open the app, to find new papers.</td></tr>
         <tr><td>The ORCID iD of an author you open (to check their papers)</td><td>ORCID, to read that person’s public record; Crossref, to find papers tagged with the iD; OpenAlex, to fetch the papers it lists.</td></tr>
         <tr><td>For “Write a short answer” (off unless you set it up): your search and the titles and abstracts of the top papers</td><td>The AI provider you choose, with your own key, billed to you. Never your CV or profile.</td></tr>
         <tr><td>Followed searches</td><td>Nowhere. Kept in this browser; checking one runs a normal search.</td></tr>

@@ -248,3 +248,19 @@ The checks also cover:
 - A broken link, reduced motion, and no WCAG 2 A/AA violations in light or dark.
 
 **Not yet judged with real users:** whether the suggested step usually matches what a researcher would pick. Each step offers two suggestions. The closest match is scored 55% on title words shared with the trail, 30% on citations and 15% on years travelled. The big leap must be at least 8 years away and share a word with the trail; it is scored 55% on citations and 45% on years travelled. A first live check, starting from Mikhnenko et al. (2015) with only the closest-match score, moved back just one year per step (2010, 2009, 2008) through near-identical titles. That is why the big leap was added (30/30 checks after the change).
+
+## Lab: papers of the day (14 November 2026)
+
+**Checked live from the app in a browser:**
+- Crossref member ids: 316 ACS, 311 Wiley, 297 Springer Nature, 221 AAAS, 292 RSC, 317 AIP Publishing, 16 APS, 78 Elsevier; Nature Portfolio journals use DOI prefix 10.1038.
+- A request filtered by publisher and `from-created-date` (two days back) with topic words returned papers registered that day or the day before (Nano Letters, J. Phys. Chem. C, Small, ACS Nano and others), and ACS records included abstracts.
+- Crossref journal names can contain HTML entities ("Environmental Science &amp; Technology"). Both apps now clean them.
+
+**Tested** (`test/lab-today.test.cjs`, 24/24, Crossref mocked):
+- Setup asks for topics; the default publishers are the four requested.
+- One request per publisher, journal articles only, from the last check, with your topics as the query.
+- Matching papers come best first; corrections and unrelated papers are left out. Each paper names the topics it mentions, and says when there is no abstract.
+- Same-day reopening uses the saved list, and *Check again* searches again. The next day it searches from the last check and does not repeat papers.
+- Saving works, and swiping works with saved papers skipped. Adding AIP searches AIP too; a failing publisher is reported while the rest still show.
+- Profile terms are used when no topics are typed, and the Lab note can be dismissed.
+- No WCAG 2 A/AA violations in light or dark. All other suites still pass.

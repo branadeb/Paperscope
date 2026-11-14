@@ -604,3 +604,28 @@ body.deck-open { overflow: hidden; }
 .trail-list .row { gap: 8px; }
 .quest-act.sg.leap { background: color-mix(in srgb, #f0ac4b 12%, var(--surface)); }
 .paper:has(.quest-act.sg.leap) { box-shadow: 0 0 0 2px color-mix(in srgb, #f0ac4b 60%, transparent), var(--shadow, 0 1px 2px rgb(0 0 0 / .06)); }
+
+/* ---------- Lab: papers of the day */
+.today { margin: 4px 0 22px; padding: 16px; border-radius: 20px; background: var(--surface); border: 1px solid var(--rule); box-shadow: 0 1px 2px rgb(0 0 0 / .04); }
+.today h2 { margin: 0; font-size: 1.35rem; }
+.today-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.today-head .tiny { color: var(--ink-2); }
+.today > .small { margin: 6px 0 8px; }
+.today-list { list-style: none; padding: 0; margin: 4px 0 6px; }
+.today-list li { padding: 12px 0; border-top: 1px solid var(--rule); }
+.today-list .tj { margin: 0 0 2px; color: var(--ink-2); font-weight: 600; }
+.today-list h3 { margin: 0 0 3px; font: 600 1.05rem/1.3 var(--display); }
+.today-list h3 a { color: var(--ink); text-decoration: none; }
+.today-list h3 a:hover { text-decoration: underline; text-decoration-thickness: 1px; }
+.today-list .byline { margin: 0; font-size: .85rem; }
+.today-list .tw { margin: 4px 0 0; color: var(--close); }
+.today-list .actions { margin-top: 8px; }
+.today-btns { gap: 8px; margin-top: 6px; }
+.today-set { margin-top: 12px; border-top: 1px solid var(--rule); padding-top: 10px; }
+.today-set summary { cursor: pointer; font-size: .92rem; color: var(--ink-2); }
+.today-set .pubs { border: 0; padding: 0; margin: 10px 0 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; }
+.today-set .pub { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; font-size: .92rem; }
+.today-set .pub input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--focus); flex: none; }
+.today-set .pub .tiny { display: block; color: var(--ink-2); }
+.today-set textarea { min-height: 70px; margin: 4px 0 2px; }
+.warn-text { color: var(--warn); }
