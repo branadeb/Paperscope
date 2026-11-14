@@ -588,7 +588,7 @@ p.vpanel { margin-bottom: 10px; }
     <p class="small muted">Code libraries are downloaded only when needed: pdf.js or mammoth.js from jsDelivr when you open a PDF or Word file, and the optional relevance model from jsDelivr and Hugging Face. These downloads do not include your data. Each service sees your IP address, as with any website.</p>
 
     <h3>Cost and limits</h3>
-    <p class="small">OpenAlex now meters its free API. Without a key you get about $0.10 of free use a day (roughly 30 searches here); with a free key, $1 a day (roughly 300). Paperscope shows what each search used. When the allowance runs out, OpenAlex refuses requests until midnight UTC; it does not bill you unless you have bought prepaid credit on openalex.org. Crossref and Europe PMC are free and need no key, but may slow down busy users.</p>
+    <p class="small">Paperscope has no server: your browser asks the databases directly, so everyone gets their own free allowance and one person’s searching never uses up anyone else’s. OpenAlex meters its free API in dollars: without a key you get about $0.10 of free use a day, with a free key $1 a day. A search here usually uses $0.002–0.003, so that is roughly <strong>30–50 searches a day without a key, or 300–500 with one</strong>; looking up an author uses about the same, and browsing citations or loading more results uses a little more. Paperscope shows what each search used. Without a key the allowance appears to be per network address, so people on the same campus or office network may share it; a free key avoids that. When the allowance runs out, OpenAlex refuses requests until midnight UTC; Paperscope keeps searching Crossref and Europe PMC and marks the results as incomplete. Nobody is billed unless they have bought prepaid credit on openalex.org. Crossref, Europe PMC and ORCID are free and need no key, but may slow down very busy users.</p>
 
     <h3 id="install-h">Install as an app</h3>
     <div id="install-panel"></div>
@@ -3342,7 +3342,7 @@ p.vpanel { margin-bottom: 10px; }
     'About a third of papers have no abstract in these sources; their explanations rely on the title and metadata.',
     'Publication types are only as good as the sources: OpenAlex labels many reviews as “article”. Paperscope adds wording-based guesses, marked with ?.',
     'Profile extraction is rule-based. It can miss terms or pick up names of places and institutions. Check and edit the list.',
-    'OpenAlex’s free allowance without a key is small (about 30 searches a day here). Add a free key for more.',
+    'OpenAlex’s free allowance without a key is small (about 30–50 searches a day here, possibly shared by everyone on the same network). A free key gives 300–500.',
     'Field labels come from OpenAlex’s topic classifier and can be wrong for interdisciplinary papers.',
   ];
   function renderAbout() {

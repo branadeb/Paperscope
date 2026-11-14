@@ -32,7 +32,7 @@ Paperscope has to be served from an ordinary web address, because it calls the d
 
 ### Optional: a free OpenAlex key
 
-OpenAlex meters its free API. Without a key you get about $0.10 of free use per day per network, which is roughly 30 Paperscope searches. A free key from <https://openalex.org/settings/api> raises that to $1 a day (roughly 300 searches). Paste it under **About › Settings**. When the allowance runs out, OpenAlex refuses requests until midnight UTC; it does not charge you unless you have bought prepaid credit on openalex.org. Paperscope shows the cost of every search.
+Paperscope has no server, so every user gets their own free allowance. OpenAlex meters its free API: without a key you get about $0.10 of free use per day (apparently per network address, so a shared campus network may share it). A Paperscope search usually uses $0.002–0.003 (measured live, November 2026: $0.002 for a specific query, $0.003 when it asks which field you mean), so that is roughly 30–50 searches. A free key from <https://openalex.org/settings/api> raises that to $1 a day (roughly 300–500 searches). Paste it under **About › Settings**. When the allowance runs out, OpenAlex refuses requests until midnight UTC; it does not charge you unless you have bought prepaid credit on openalex.org. Paperscope shows the cost of every search. When OpenAlex refuses, Paperscope still searches Crossref and Europe PMC and marks the results as incomplete.
 
 ## What it does
 

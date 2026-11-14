@@ -1402,7 +1402,7 @@
     'About a third of papers have no abstract in these sources; their explanations rely on the title and metadata.',
     'Publication types are only as good as the sources: OpenAlex labels many reviews as “article”. Paperscope adds wording-based guesses, marked with ?.',
     'Profile extraction is rule-based. It can miss terms or pick up names of places and institutions. Check and edit the list.',
-    'OpenAlex’s free allowance without a key is small (about 30 searches a day here). Add a free key for more.',
+    'OpenAlex’s free allowance without a key is small (about 30–50 searches a day here, possibly shared by everyone on the same network). A free key gives 300–500.',
     'Field labels come from OpenAlex’s topic classifier and can be wrong for interdisciplinary papers.',
   ];
   function renderAbout() {

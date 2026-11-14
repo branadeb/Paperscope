@@ -1,6 +1,6 @@
 // Paperscope service worker: keeps the app itself (one page, its icons and manifest) on the device so it opens offline.
 // It never stores searches or anything sent to OpenAlex, Crossref, Europe PMC, ORCID or AI services: requests to other sites pass straight through.
-const VERSION = '6bd84b8dba';
+const VERSION = '6fe0f49dcb';
 const CACHE = `paperscope-${VERSION}`;
 const SHELL = ['./', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'];
 
