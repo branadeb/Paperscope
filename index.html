@@ -470,11 +470,19 @@ p.vpanel { margin-bottom: 10px; }
 .keybox .key-own summary { cursor: pointer; font-size: .9rem; color: var(--ink-2); }
 .keybox .key-own label { display: block; margin: 8px 0 4px; }
 .keybox .key-own input { width: 100%; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); }
+
+/* app-like feel on phones: no grey flash on tap, no double-tap zoom on controls, a visible press */
+a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.save:active, .tabs a:active, .chip:active, .examples button:active, .btn.link:active { opacity: .7; }
+.nav-back { margin-right: 6px; flex: none; }
+.nav-back + .brand { margin-right: auto; }
+.top-inner .nav-back[hidden] + .brand { margin-right: 0; }
 </style>
 </head>
 <body>
 <header class="top">
   <div class="top-inner">
+    <button type="button" class="icon-btn nav-back" id="nav-back" hidden aria-label="Back"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <a class="brand" href="#search" id="home-link" aria-label="Paperscope, back to the start">
       <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="#4fc8d2" stroke-width="2.4"/><circle cx="16" cy="16" r="7.5" fill="none" stroke="#f0ac4b" stroke-width="2.4"/><circle cx="16" cy="16" r="3" fill="#eef2ff"/></svg>
       <span>Paperscope</span>
@@ -2127,17 +2135,121 @@ p.vpanel { margin-bottom: 10px; }
 
   // ---------------------------------------------------------------- routing
   const VIEWS = ['search', 'profile', 'saved', 'about'];
-  function route() {
-    const v = (location.hash || '#search').slice(1);
-    const view = v === 'install' || v === 'key' ? 'about' : VIEWS.includes(v) ? v : 'search'; // #install, #key: links into About
+  function showView(view) {
+    if (!VIEWS.includes(view)) view = 'search';
+    nav.view = view;
     VIEWS.forEach(x => { $('#view-' + x).hidden = x !== view; });
     document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.view === view ? 'page' : 'false'));
     if (view === 'saved') { renderSaved(); renderFollows(); }
     if (view === 'search') renderFollows();
     if (view === 'profile') { renderProfileEditor(); renderAI(); }
     if (view === 'about') renderAbout();
+    updateBack();
+  }
+  // A link to #profile, #saved, #about, #install or #key inside the app (or typed in the address bar).
+  function route() {
+    const v = (location.hash || '#search').slice(1);
+    const view = v === 'install' || v === 'key' ? 'about' : VIEWS.includes(v) ? v : 'search'; // #install, #key: links into About
+    if (!history.state || !history.state.ps) { // the browser added this entry; give it a state like a tab tap would
+      const from = nav.view; if (from === 'search') nav.searchState = nav.lastSearchState || { ps: 'home', depth: 0 };
+      history.replaceState(view === 'search' ? (nav.searchState || { ps: 'home', depth: 0 }) : { ps: 'tab', view, depth: (nav.depth || 0) + 1 }, '', '#' + (view === 'about' && v !== 'about' ? v : view));
+      nav.tabBase = from === 'search' && view !== 'search';
+    }
+    showView(view);
     if (v === 'install' || v === 'key') { renderInstall(); const h = $(v === 'key' ? '#key-box' : '#install-h'); if (h) setTimeout(() => h.scrollIntoView({ block: 'start' }), 0); return; }
-    window.scrollTo(0, 0);
+    window.scrollTo(0, nav.scroll[view] || 0);
+  }
+
+  // ---------------------------------------------------------------- app-like navigation (the back button)
+  // Back works like in a phone app: it first closes an open panel (filters), then steps back from a
+  // paper's trail to the results, from results to the start screen, and from another tab to
+  // Search. Each place keeps its scroll position. Only from the start screen does back leave the app.
+  // A back arrow in the header does the same where the device has no back button (iPhone home-screen app).
+  const nav = { seq: 0, entries: new Map(), scroll: {}, homeScroll: 0, view: 'search', depth: 0, ignore: 0, popping: false, tabBase: false, searchState: null, lastSearchState: null };
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  const navState = () => (history.state && history.state.ps ? history.state : { ps: 'home', depth: 0 });
+  function saveScroll() {
+    const st = history.state || {}; const y = window.scrollY;
+    if (nav.view !== 'search') { nav.scroll[nav.view] = y; return; }
+    if ($('#start').hidden && !$('#results').children.length && !$('#clarify').children.length) return; // page is being replaced; keep what was saved
+    if (st.ps === 'res' && nav.entries.has(st.id)) nav.entries.get(st.id).scrollY = y; else nav.homeScroll = y;
+  }
+  function navPush(state, hash = '#search') {
+    saveScroll(); const cur = navState();
+    const next = Object.assign({ depth: (cur.depth || 0) + 1 }, state);
+    history.pushState(next, '', hash); nav.depth = next.depth;
+    if (nav.view === 'search' && state.ps !== 'tab' && state.ps !== 'overlay') nav.lastSearchState = next;
+    updateBack();
+  }
+  // Called when new results appear (a search, a trail, papers like this, an author, a DOI). Refining the same
+  // search (picking an acronym's meaning or a field) replaces the entry instead of adding one.
+  function navEnter() {
+    if (nav.popping || !S.search) return;
+    const cur = navState(); const s = S.search;
+    const old = cur.ps === 'res' && nav.entries.get(cur.id);
+    const id = ++nav.seq; nav.entries.set(id, { search: s, prev: S.prevSearch, scrollY: 0 });
+    if (nav.entries.size > 40) nav.entries.delete(nav.entries.keys().next().value);
+    if (old && old.search && old.search !== s && old.search.kind === s.kind && old.search.q === s.q) { history.replaceState({ ps: 'res', id, depth: cur.depth || 0 }, '', '#search'); nav.lastSearchState = history.state; }
+    else navPush({ ps: 'res', id });
+  }
+  function navHome() { // the logo: back to the start screen
+    if (nav.view === 'search' && !S.search) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (nav.view !== 'search') showView('search');
+    navPush({ ps: 'home' }); goHome(); window.scrollTo(0, 0);
+  }
+  function goTab(view) {
+    if (view === nav.view) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    saveScroll();
+    if (view === 'search') {
+      if (nav.tabBase && (history.state || {}).ps === 'tab') { history.back(); return; }
+      history.replaceState(nav.searchState || nav.lastSearchState || { ps: 'home', depth: 0 }, '', '#search'); nav.tabBase = false;
+      showView('search'); restoreSearchScroll(); return;
+    }
+    if (nav.view === 'search') { nav.searchState = navState(); nav.tabBase = true; navPush({ ps: 'tab', view }, '#' + view); }
+    else history.replaceState({ ps: 'tab', view, depth: navState().depth || 1 }, '', '#' + view);
+    showView(view); window.scrollTo(0, nav.scroll[view] || 0);
+  }
+  function restoreSearchScroll() {
+    const st = history.state || {}; const en = st.ps === 'res' && nav.entries.get(st.id);
+    const y = en ? en.scrollY : nav.homeScroll;
+    requestAnimationFrame(() => window.scrollTo(0, y || 0));
+  }
+  // Panels on top of the page (the filters sheet) get their own entry, so back closes them.
+  function navOverlay(kind) { navPush({ ps: 'overlay', kind, view: nav.view }, location.hash || '#search'); }
+  function navCloseOverlay(then) { if ((history.state || {}).ps === 'overlay') { nav.ignore++; nav.then = then || null; history.back(); } else if (then) then(); }
+  function toSearchView() { if (nav.view !== 'search') { saveScroll(); showView('search'); } }
+  window.addEventListener('popstate', e => {
+    if (nav.ignore) { nav.ignore--; updateBack(); const f = nav.then; nav.then = null; if (f) f(); return; }
+    if ($('#sheet-root').innerHTML) { closeSheet(true); updateBack(); return; }
+    const st = e.state && e.state.ps ? e.state : null;
+    if (!st) { route(); return; }
+    nav.depth = st.depth || 0; nav.popping = true;
+    try {
+      if (st.ps === 'overlay') { history.back(); return; }
+      if (st.ps === 'tab') { if (nav.view === 'search') saveScroll(); showView(st.view); window.scrollTo(0, nav.scroll[st.view] || 0); return; }
+      if (nav.view !== 'search') { saveScroll(); showView('search'); }
+      nav.tabBase = false; nav.lastSearchState = st;
+      const en = st.ps === 'res' && nav.entries.get(st.id);
+      if (en) {
+        if (S.search !== en.search) {
+          searchToken++; S.search = en.search; S.prevSearch = en.prev;
+          clearSearchUI(); $('#q').value = S.search.kind === 'like' ? '' : (S.search.q || '');
+          S.pathway = S.search.kind === 'author' || S.search.kind === 'authorpick' ? 'author' : 'topic'; renderPathway();
+          if (S.search.kind === 'authorpick' && S.search.cands) renderAuthorPicker(S.search.cands); else { if (S.search.pool && S.search.kind !== 'quest') rerank(); renderAll(); }
+        }
+      } else if (S.search) goHome();
+      restoreSearchScroll();
+    } finally { nav.popping = false; updateBack(); }
+  });
+  function updateBack() {
+    const b = $('#nav-back'); if (!b) return;
+    b.hidden = !(nav.view !== 'search' || !!S.search); // on the start screen, back leaves the app as usual
+  }
+  function navBack() {
+    const st = history.state || {};
+    if ((st.depth || 0) > 0) { history.back(); return; }
+    if (nav.view !== 'search') { goTab('search'); return; }
+    if (S.search) { goHome(); history.replaceState({ ps: 'home', depth: 0 }, '', '#search'); updateBack(); }
   }
 
   // ---------------------------------------------------------------- search flow
@@ -2162,7 +2274,7 @@ p.vpanel { margin-bottom: 10px; }
     S.filters.theme = null; S.prevSearch = null;
     if (S.pathway !== 'topic') { S.pathway = 'topic'; renderPathway(); }
     clearSearchUI();
-    if (location.hash && location.hash !== '#search') location.hash = '#search';
+    toSearchView(); navEnter();
 
     if (analysis.question && !opts.skipQuestion) { renderClarify({ kind: 'acronym', ...analysis.question }); return; }
 
@@ -2186,6 +2298,7 @@ p.vpanel { margin-bottom: 10px; }
   }
 
   function clearSearchUI() {
+    if (!nav.popping && nav.view === 'search') saveScroll(); // remember where you were before the page empties
     $('#start').hidden = true;
     $('#hero').classList.add('compact');
     ['#clarify', '#interp', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
@@ -2201,7 +2314,7 @@ p.vpanel { margin-bottom: 10px; }
       q: seed.title, analysis, choices: {}, sense: null, pool: new Map(), ranked: [], themes: null, status: {}, pages: { oa_trail: 1 }, exhausted: {},
       shown: PAGE, cost: 0, sem: new Map(), dupes: 0, fetched: 0, compare: null, answer: null };
     S.prevSearch = prev; S.filters.theme = null;
-    clearSearchUI();
+    clearSearchUI(); toSearchView(); navEnter();
     window.scrollTo(0, 0);
     await fetchBatch(token);
   }
@@ -2666,8 +2779,9 @@ p.vpanel { margin-bottom: 10px; }
         <p class="tiny" style="margin-top:12px">Filters apply to the papers already fetched. If few remain, you can search the databases again with them.</p>
       </div>`;
     $('.sheet input', root).focus();
+    navOverlay('sheet');
   }
-  function closeSheet() { $('#sheet-root').innerHTML = ''; const b = $('#open-filters'); if (b) b.focus(); }
+  function closeSheet(fromBack) { if (!$('#sheet-root').innerHTML) return; $('#sheet-root').innerHTML = ''; if (!fromBack) navCloseOverlay(); const b = $('#open-filters'); if (b) b.focus(); }
   function applyFilters() {
     const f = S.filters;
     f.cats = new Set([...document.querySelectorAll('.sheet input[name="cat"]:checked')].map(i => i.value));
@@ -2877,9 +2991,9 @@ p.vpanel { margin-bottom: 10px; }
     raw = String(raw || '').trim(); if (!raw) return;
     $('#q').value = raw;
     const token = ++searchToken;
-    if (location.hash && location.hash !== '#search') location.hash = '#search';
+    toSearchView();
     S.prevSearch = null; S.filters.theme = null;
-    S.search = newAuthorState('authorpick', raw);
+    S.search = newAuthorState('authorpick', raw); navEnter();
     clearSearchUI(); setLoading('Looking up authors…');
     const orcid = /\d{4}/.test(raw) ? C.normOrcid(raw) : null;
     const r = orcid ? await getJSON(oaPath(`/authors/orcid:${orcid}`)) : await getJSON(oaPath('/authors', { search: raw, per_page: 8 }));
@@ -2896,7 +3010,7 @@ p.vpanel { margin-bottom: 10px; }
     renderAuthorPicker(cands);
   }
   function renderAuthorPicker(cands) {
-    const q = S.search.q;
+    const q = S.search.q; S.search.cands = cands;
     $('#clarify').innerHTML = `<div class="panel ask" role="group" aria-labelledby="ap-h">
       <h3 id="ap-h">Which “${esc(q)}”?</h3>
       <p class="small muted">OpenAlex sometimes splits one person into several profiles. Tick every profile that is the same person, then show their works.</p>
@@ -2916,10 +3030,10 @@ p.vpanel { margin-bottom: 10px; }
     const s = newAuthorState('author', cands[0].name);
     s.author = { cands, ids, name: cands[0].name };
     s.openFields = new Set(); s.fieldShown = {}; s.fieldCounts = null; s.fieldDone = {}; s.hiddenFields = new Set();
-    S.search = s; S.prevSearch = prev && prev !== s ? prev : null; S.filters.theme = null;
+    S.search = s; S.prevSearch = prev && prev !== s ? prev : null; S.filters.theme = null; navEnter();
     S.pathway = 'author'; renderPathway();
     $('#q').value = cands[0].name;
-    if (location.hash && location.hash !== '#search') location.hash = '#search';
+    toSearchView();
     clearSearchUI(); window.scrollTo(0, 0);
     setLoading(`Loading works by ${cands[0].name}…`);
     const jobs = [getJSON(oaURL({ filter: `author.id:${ids.join('|')}`, group_by: 'primary_topic.field.id' })),
@@ -3203,7 +3317,7 @@ p.vpanel { margin-bottom: 10px; }
     const token = ++searchToken;
     $('#q').value = doi;
     S.prevSearch = null; S.filters.theme = null;
-    const s = newAuthorState('doi', doi); S.search = s;
+    const s = newAuthorState('doi', doi); S.search = s; toSearchView(); navEnter();
     clearSearchUI(); setLoading('Looking up the DOI…');
     let r = await getJSON(oaPath(`/works/doi:${doiPath(doi)}`));
     if (token !== searchToken) return;
@@ -3425,6 +3539,8 @@ p.vpanel { margin-bottom: 10px; }
 
   // ---------------------------------------------------------------- events
   document.addEventListener('click', e => {
+    const tab = e.target.closest('.tabs a[data-view]');
+    if (tab) { e.preventDefault(); goTab(tab.dataset.view); return; }
     const t = e.target.closest('button, [data-theme], [data-exp], a[href^="#"]');
     if (!t) return;
     const d = t.dataset;
@@ -3459,7 +3575,8 @@ p.vpanel { margin-bottom: 10px; }
       const order = ['auto', 'light', 'dark']; const next = order[(order.indexOf(currentAppearance()) + 1) % 3];
       applyAppearance(next); toast(`Appearance: ${APPEARANCE_NAMES[next]}`); return;
     }
-    if (t.id === 'home-link') { goHome(); return; }
+    if (t.id === 'home-link') { e.preventDefault(); navHome(); return; }
+    if (t.id === 'nav-back') { navBack(); return; }
     if (t.id === 'install-btn' || t.id === 'install-btn2') { promptInstall(); return; }
     if (t.id === 'key-check') { checkKey(true); return; }
     if (t.id === 'key-cancel') { S.settings.pendingKey = null; saveSettings(); keyMsg = null; renderKey(); return; }
@@ -3494,6 +3611,7 @@ p.vpanel { margin-bottom: 10px; }
     if (t.id === 'verify-toggle' || d.verifyShow) { const v = S.search.verify; v.showAside = !v.showAside; renderAuthorView(); toast(v.showAside ? 'Showing papers that were not confirmed' : 'Not-confirmed papers set aside'); return; }
     if (d.trail && d.key) { const w = S.search && S.search.pool.get(d.key); if (w) runTrail(w, d.trail); return; }
     if (d.trailSwitch) { runTrail(S.search.trail.seed, d.trailSwitch); return; }
+    if (t.id === 'trail-back' && (history.state || {}).ps === 'res' && (history.state.depth || 0) > 1) { history.back(); return; }
     if (t.id === 'trail-back' && S.prevSearch) {
       searchToken++; S.search = S.prevSearch; S.prevSearch = null; $('#q').value = S.search.q;
       S.pathway = S.search.kind === 'author' ? 'author' : 'topic'; renderPathway();
@@ -3513,11 +3631,10 @@ p.vpanel { margin-bottom: 10px; }
     if (t.id === 'follow-toggle') { toggleFollow(); return; }
     if (d.checkFollow !== undefined) {
       const i = Number(d.checkFollow); const f = S.follows[i]; if (!f) return;
-      location.hash = '#search';
       runSearch(f.q, { choices: f.choices, sense: f.sense, allFields: !f.sense, skipQuestion: true, since: f.lastChecked, followIndex: i });
       return;
     }
-    if (d.openFollow !== undefined) { const f = S.follows[Number(d.openFollow)]; if (f) { location.hash = '#search'; runSearch(f.q, { choices: f.choices, sense: f.sense, allFields: !f.sense, skipQuestion: true }); } return; }
+    if (d.openFollow !== undefined) { const f = S.follows[Number(d.openFollow)]; if (f) { runSearch(f.q, { choices: f.choices, sense: f.sense, allFields: !f.sense, skipQuestion: true }); } return; }
     if (d.unfollow !== undefined) { S.follows.splice(Number(d.unfollow), 1); persistFollows(); renderFollows(); if (S.search && S.search.kind === 'search') renderInterp(); return; }
     if (t.id === 'answer-run') { runAnswer(); return; }
     if (t.id === 'answer-clear') { S.search.answer = null; renderAnswer(); return; }
@@ -3620,7 +3737,8 @@ p.vpanel { margin-bottom: 10px; }
   ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) readFile(f); });
-  window.addEventListener('hashchange', route);
+  // Moving back or forward between the app's own entries is handled by popstate; hashchange is for links and typed addresses.
+  window.addEventListener('hashchange', () => { if (history.state && history.state.ps) return; route(); });
 
   // ---------------------------------------------------------------- free OpenAlex key, requested from inside the app
   // OpenAlex creates a key for an email address and emails an activation link; the key works once the link is clicked.
@@ -3754,6 +3872,7 @@ p.vpanel { margin-bottom: 10px; }
   }
 
   // ---------------------------------------------------------------- init
+  { const st = history.state || {}; if (st.ps === 'res' || st.ps === 'overlay') history.replaceState({ ps: 'home', depth: st.depth || 0 }, '', '#search'); nav.depth = (history.state || {}).depth || 0; }
   updateSavedCount(); renderModes(); route(); renderFollows(); renderAppearance(); renderInstall();
   if (S.settings.pendingKey) checkKey(true);
   if (S.settings.ai) loadAI(true);

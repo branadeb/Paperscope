@@ -450,3 +450,10 @@ p.vpanel { margin-bottom: 10px; }
 .keybox .key-own summary { cursor: pointer; font-size: .9rem; color: var(--ink-2); }
 .keybox .key-own label { display: block; margin: 8px 0 4px; }
 .keybox .key-own input { width: 100%; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); }
+
+/* app-like feel on phones: no grey flash on tap, no double-tap zoom on controls, a visible press */
+a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.save:active, .tabs a:active, .chip:active, .examples button:active, .btn.link:active { opacity: .7; }
+.nav-back { margin-right: 6px; flex: none; }
+.nav-back + .brand { margin-right: auto; }
+.top-inner .nav-back[hidden] + .brand { margin-right: 0; }

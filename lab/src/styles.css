@@ -659,3 +659,14 @@ fieldset.scoring .radio input { margin-top: 4px; }
 
 /* orbit (Lab) */
 .orbit .row { margin: 8px 0; }
+
+/* app-like feel on phones: no grey flash on tap, no double-tap zoom on controls, a visible press */
+a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.save:active, .tabs a:active, .chip:active, .grade button:active, .examples button:active, .btn.link:active { opacity: .7; }
+.nav-back { margin-right: 6px; flex: none; }
+.nav-back + .brand { margin-right: auto; }
+.top-inner .nav-back[hidden] + .brand { margin-right: 0; }
+.today .skel { height: 64px; border-radius: 10px; margin: 10px 0; background: linear-gradient(90deg, var(--surface-2), color-mix(in srgb, var(--surface-2) 55%, var(--surface)), var(--surface-2)); background-size: 200% 100%; animation: skel 1.4s ease-in-out infinite; }
+@keyframes skel { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .today .skel { animation: none; } }
+.today-busy { display: flex; align-items: center; gap: 8px; }

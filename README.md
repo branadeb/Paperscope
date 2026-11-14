@@ -175,6 +175,13 @@ The brief asked for a free, open-weight model running on the device. What was bu
 
 ## Design
 
+**Navigation works like a phone app** (main app and Lab). The back button, Android's back gesture or the back arrow in the header (shown whenever there is somewhere to go back to, useful in an iPhone home-screen app, which has no back button) steps back inside the app:
+- It first closes an open panel (filters, swipe cards).
+- Then it returns from a paper's references, citing papers, "More like this" or an author page to the results you came from. From results it goes to the start screen, and from Profile, Saved or About to Search.
+- Only from the start screen does it leave the app.
+
+Refining a search (choosing what an acronym means, or a field) replaces the step instead of adding one. Each place keeps its scroll position, so switching tabs or going back returns you to the same spot in the results. Tapping the current tab scrolls it to the top, and the logo goes to the start screen. Taps no longer flash grey or zoom on a double tap.
+
 A night-sky hero and theme map with a thin light-spectrum band as the signature; titles in Spectral (Production Type, SIL Open Font License), embedded in the page so no font is fetched from another site; a phone-style tab bar at the bottom on small screens. Each result shows a five-bar match meter: teal when it overlaps your profile, amber when it lies outside your listed areas. Checked with axe-core in light, dark and auto modes (no WCAG 2 A/AA violations).
 
 ## Development

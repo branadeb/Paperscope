@@ -344,3 +344,30 @@ A review of the search algorithm, which the user shared, pointed out that every 
 - That bge-small-en-v1.5 downloads and runs in the browser. MiniLM has run before in this app.
 - How the AI check grades real searches, which needs the user's key.
 - Whether the orbit and the models improve rankings. That needs the user's grades.
+
+## Navigation and smoothness on phones (14 November 2026)
+
+The user reported that the app "is not smooth" on his phone and that the back button should work like a normal app.
+
+**Measured** on an emulated phone (390×844, touch, processor slowed 4× with Chrome's CPU throttling, mocked databases):
+- First paint: 0.4 s. A search took 0.5 s to show results, with one 167 ms rendering task.
+- Scrolling: 122 frames in 2 s, none slower than 34 ms. Saving a paper gave feedback in 24 ms.
+- So rendering was not the problem. Navigation was:
+  - Switching to Saved and back reset the results from 2,808 px to the top.
+  - The back button was not handled inside the app.
+  - Papers of the day shrank to a one-line message while checking and then grew back, moving the page.
+
+**Fixed:**
+- App-like history: panels, results, trails, "More like this", author and DOI pages, tabs and links into sections.
+- Scroll memory per place, and a header back arrow.
+- No tap flash or double-tap zoom on controls.
+- While papers of the day checks, the last list stays with a progress line; the first time, placeholders hold the space.
+
+**Tested** (`test/nav.test.cjs`: 23/23 in the Lab, 21/21 in the main app):
+- Back from results goes to the start screen and stays in the app; forward brings the results back.
+- Tabs open at their own scroll position. Back from a tab returns to the results at the same place (within 40 px of 1,500 px). Tapping Search does the same, and back from there goes to the start screen without walking through every tab visited.
+- Back closes Filters and the swipe cards. Cancel leaves no stray step.
+- Back from a paper's references returns to the results at the same place.
+- The header arrow and the logo work.
+- A link to a section can be undone with back. A reload opens normally.
+- All other suites still pass: Lab 41, 41, 30, 28, 25 and 20 checks; main app 49, 43, 32, 93, 26 and 27.
