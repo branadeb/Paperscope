@@ -35,13 +35,28 @@ t('taste: stop words and numbers are ignored; words shown as written', () => {
   const top = C.topTaste(C.learnTaste({}, { title: 'Perovskite solar cells' }, 1));
   assert.deepStrictEqual(top.liked.sort(), ['cells', 'perovskite', 'solar']);
 });
-t('papers of the day: topics go to Crossref in short groups, each topic once', () => {
+t('papers of the day: topics go to Crossref in short groups, each word once, topics first', () => {
   const terms = C.todayTerms(null, 'exciton diffusion, transient absorption, perylene diimide, organic semiconductor crystals, singlet fission, two-dimensional electronic spectroscopy, charge transfer, ion transport');
-  const qs = C.todayQueries(terms);
-  assert(qs.length > 1 && qs.every(q => q.split(' ').length <= 8), qs.join(' | '));
-  assert.strictEqual(qs.join(' '), terms.slice(0, 12).map(x => x.text).join(' '));
-  assert.deepStrictEqual(C.todayQueries(C.todayTerms(null, 'exciton diffusion, perylene diimide')), ['exciton diffusion perylene diimide']);
-  assert.deepStrictEqual(C.todayQueries(C.todayTerms(null, 'a very long topic made of many many different words, b2')), ['a very long topic made of many many different words', 'b2']);
+  const qs = C.todayQueries(terms); const all = qs.join(' ').split(' ');
+  assert(qs.length > 1 && qs.every(q => q.split(' ').length <= 7), qs.join(' | '));
+  assert.strictEqual(new Set(all).size, all.length);
+  assert(qs[0].startsWith('exciton diffusion transient absorption perylene diimide'));
+  ['ion', 'transport', 'fission'].forEach(w => assert(all.includes(w), w));
+  assert.deepStrictEqual(C.todayQueries([{ text: 'a very long topic made of many many different words', kind: 'interest' }, { text: 'b2', kind: 'interest' }]), ['long topic made many words b2']);
+});
+t('papers of the day: an umbrella topic also counts related wording; far-apart words do not', () => {
+  const terms = C.todayTerms(null, 'ultrafast spectroscopy');
+  assert(C.todayRelated(terms).includes('transient absorption') && C.todayRelated(terms).includes('femtosecond spectroscopy'));
+  const ws = [['Ordered Atomic Channels Enable Ultrafast Hydrogen Spillover', 'Ultrafast spillover happens. In situ Raman spectroscopy confirms it.'],
+    ['Photoexcited charge dynamics in plasmonic copper', 'Femtosecond transient absorption spectroscopy tracks hot carriers.'],
+    ['Excited-state dynamics of a dye', 'We use pump–probe measurements.'], ['Ultrafast vibrational spectroscopy of water', null]].map(([title, abstract]) => ({ title, abstract, doi: title }));
+  const r = C.rankToday(ws, terms).map(x => x.w.title);
+  assert.deepStrictEqual(r.slice().sort(), ['Excited-state dynamics of a dye', 'Photoexcited charge dynamics in plasmonic copper', 'Ultrafast vibrational spectroscopy of water']);
+});
+t('papers of the day: one topic alone is not discounted for being common', () => {
+  const terms = C.todayTerms(null, 'charge transfer');
+  const ws = [...Array(10)].map((_, i) => ({ title: `Charge transfer in system ${i}`, doi: 'd' + i }));
+  assert.strictEqual(C.rankToday(ws, terms).length, 10);
 });
 t('papers of the day: corrections and cover pages are not papers', () => {
   const terms = C.todayTerms(null, 'ion transport');

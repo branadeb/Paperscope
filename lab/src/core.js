@@ -1432,38 +1432,109 @@
     { id: 'springer', name: 'Springer', full: 'Other Springer journals', filter: 'member:297', on: false },
   ];
   // Topics you type (comma or line separated) come first, then your profile's terms.
+  // Papers of the day. Crossref searches titles only, and titles rarely carry an umbrella term such as "ultrafast
+  // spectroscopy", so each topic also counts a few related phrasings (shown to the user). Kept small and curated.
+  const TODAY_RELATED = [
+    [['ultrafast spectroscopy', 'ultrafast dynamics', 'femtosecond spectroscopy', 'time-resolved spectroscopy', 'ultrafast'],
+      ['transient absorption', 'pump-probe', 'femtosecond', 'time-resolved', 'two-dimensional electronic spectroscopy', 'two-dimensional infrared', 'excited-state dynamics', 'transient infrared', 'coherent dynamics', 'time-domain spectroscopy', 'terahertz spectroscopy']],
+    [['transient absorption', 'transient absorption spectroscopy'], ['pump-probe', 'femtosecond absorption', 'excited-state absorption']],
+    [['two-dimensional electronic spectroscopy', '2d electronic spectroscopy', '2des'], ['2DES', '2D electronic spectroscopy', 'two-dimensional spectroscopy', 'electronic coherence']],
+    [['two-dimensional infrared', 'two-dimensional infrared spectroscopy', '2d ir', '2d-ir', '2dir'], ['2D IR', '2D-IR', 'two-dimensional infrared', 'vibrational dynamics']],
+    [['nonlinear spectroscopy', 'coherent spectroscopy', 'multidimensional spectroscopy'], ['two-dimensional spectroscopy', 'pump-probe', 'four-wave mixing', 'sum-frequency generation', 'coherent dynamics']],
+    [['vibrational spectroscopy'], ['infrared spectroscopy', 'Raman spectroscopy', 'vibrational dynamics']],
+    [['singlet fission'], ['triplet pair', 'multiexciton']],
+    [['exciton diffusion', 'exciton transport', 'exciton migration'], ['exciton diffusion', 'exciton transport', 'exciton migration']],
+    [['perylene diimide', 'perylene bisimide', 'pdi', 'pbi'], ['perylene diimide', 'perylene bisimide', 'perylene']],
+    [['ion transport', 'ion conduction'], ['ion transport', 'ionic conductivity', 'ion conduction']],
+  ];
+  const TODAY_SPLIT = s => stems(String(s || '').replace(/[-‐-―]/g, ' '));
+  function todayVariants(text) {
+    const low = normSpace(text).toLowerCase(); const key = TODAY_SPLIT(low).join(' ');
+    const out = [];
+    for (const [keys, alts] of TODAY_RELATED) if (keys.some(k => TODAY_SPLIT(k).join(' ') === key)) out.push(...alts.map(a => ({ text: a, weight: 0.85 })));
+    for (const g of SYNONYMS) for (const m of g) {
+      const re = new RegExp(`(^|[^\\p{L}\\p{N}])${m.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^\\p{L}\\p{N}])`, 'u');
+      if (!re.test(low)) continue;
+      const guard = SYN_GUARD.get(g[0].text); if (guard && !guard.some(x => low.includes(x))) continue;
+      g.filter(o => o !== m).forEach(o => out.push({ text: low.replace(re, `$1${o.text}`), weight: 0.95 }));
+    }
+    const seen = new Set([key]);
+    return out.filter(v => { const k = TODAY_SPLIT(v.text).join(' '); if (!k || seen.has(k)) return false; seen.add(k); return true; });
+  }
   function todayTerms(profile, topicsText) {
     const own = String(topicsText || '').split(/[,;\n]+/).map(normSpace).filter(t => t.length > 1)
       .map(t => ({ text: t, stems: phraseStems(t), kind: 'interest', weight: 1.2 })).filter(t => t.stems.length);
     const seen = new Set();
-    return [...own, ...profileTerms(profile)].filter(t => { const k = t.stems.join(' '); if (seen.has(k)) return false; seen.add(k); return true; });
+    const base = [...own, ...profileTerms(profile)].filter(t => { const k = t.stems.join(' '); if (seen.has(k)) return false; seen.add(k); return true; });
+    const out = [];
+    base.forEach((t, g) => {
+      out.push(Object.assign({}, t, { group: g, of: t.text }));
+      if (t.kind === 'interest') todayVariants(t.text).forEach(v => out.push({ text: v.text, stems: phraseStems(v.text), kind: 'related', weight: t.weight * v.weight, group: g, of: t.text }));
+    });
+    return out;
   }
-  function todayQuery(terms, max = 14) { return terms.slice(0, max).map(t => t.text).join(' '); }
-  // Crossref finds nothing when a query has many words (it then wants most of them in one paper), so the topics are
-  // sent in short groups: at most `maxWords` words per request, at most `max` topics in all.
-  function todayQueries(terms, max = 12, maxWords = 8) {
-    const groups = []; let cur = [], n = 0;
-    for (const t of terms.slice(0, max)) {
-      const w = String(t.text).split(/\s+/).filter(Boolean).length;
-      if (cur.length && n + w > maxWords) { groups.push(cur.join(' ')); cur = []; n = 0; }
-      cur.push(t.text); n += w;
-    }
-    if (cur.length) groups.push(cur.join(' '));
+  // The related phrasings, for showing the user what else counts.
+  function todayRelated(terms) { return terms.filter(t => t.kind === 'related').map(t => t.text); }
+  function todayQuery(terms, max = 14) { return terms.filter(t => t.kind !== 'related').slice(0, max).map(t => t.text).join(' '); }
+  // Crossref matches any of a query's words in titles, but finds nothing when a query has many words, so the words
+  // (each once; topics first, then related phrasings) are sent in short groups of at most `maxWords`.
+  function todayQueries(terms, maxTotal = 28, maxWords = 7) {
+    const ws = []; const seen = new Set();
+    const add = t => words(t.text).forEach(w => { const k = w.toLowerCase(); if (STOP.has(k) || GENERIC_SINGLE.has(k) || seen.has(k)) return; seen.add(k); ws.push(w.toLowerCase()); });
+    terms.filter(t => t.kind !== 'related').forEach(add); terms.filter(t => t.kind === 'related').forEach(add);
+    const groups = [];
+    for (let i = 0; i < Math.min(ws.length, maxTotal); i += maxWords) groups.push(ws.slice(i, Math.min(i + maxWords, maxTotal)).join(' '));
     return groups;
   }
   const NOT_PAPER = /^((author|publisher)(['’]s)? correction|correction|corrigendum|erratum|retraction|retracted article|expression of concern|issue information|masthead|(front|back|inside) cover|cover (picture|image|feature|story|art)|table of contents|graphical abstract|editorial board|in this issue|this week in|news in brief|research highlights?)\b/i;
-  // Topics that match many of today's papers (e.g. "charge transfer") count for less than rarer ones, so a paper
-  // needs a specific match to make the list. The same title under two DOIs (e.g. Angewandte's two editions) appears once.
+  function todayPrep(w) {
+    if (!w._tp) w._tp = { t: TODAY_SPLIT(w.title), a: TODAY_SPLIT(w.abstract), k: TODAY_SPLIT([...(w.keywords || []), w.topic ? w.topic.name : ''].join(' ; ')) };
+    return w._tp;
+  }
+  // All words of a phrase within a few words of each other ("ultrafast transient absorption spectroscopy" counts for
+  // "ultrafast spectroscopy"; "ultrafast hydrogen spillover … Raman spectroscopy" does not).
+  function nearAll(hay, st, slack = 3) {
+    const want = new Set(st); if (!want.size || hay.length < want.size) return false;
+    const span = st.length + slack;
+    for (let i = 0; i < hay.length; i++) {
+      if (!want.has(hay[i])) continue;
+      const got = new Set(); for (let j = i; j < Math.min(hay.length, i + span); j++) if (want.has(hay[j])) got.add(hay[j]);
+      if (got.size === want.size) return true;
+    }
+    return false;
+  }
+  function matchToday(p, st) {
+    if (hasPhrase(p.t, st)) return { s: 1, where: 'title' };
+    if (hasPhrase(p.a, st)) return { s: 0.7, where: 'abstract' };
+    if (st.length > 1 && nearAll(p.t, st)) return { s: 0.6, where: 'title' };
+    if (hasPhrase(p.k, st)) return { s: 0.45, where: 'keywords' };
+    if (st.length > 1 && nearAll(p.a, st)) return { s: 0.45, where: 'abstract' };
+    return null;
+  }
+  // Each topic counts once (its best phrasing). Topics that match many of today's papers (e.g. "charge transfer")
+  // count for less than the most specific one, so a paper needs a specific match to make the list; with one topic
+  // nothing is discounted. The same title under two DOIs (e.g. Angewandte's two editions) appears once.
   function rankToday(works, terms, minScore = 0.15) {
     // Wiley lists cover and frontispiece pages as articles, titled "… (Adv. Mater. 46/2026)".
     const list = works.filter(w => w.title && !NOT_PAPER.test(w.title) && !/\(\s*[A-Z][^()]*\b\d+\/(19|20)\d\d\s*\)\s*$/.test(w.title));
     const N = Math.max(1, list.length);
-    const weighted = terms.map(t => {
-      const df = list.filter(w => scoreProfile(w, [t]).score > 0).length;
-      return Object.assign({}, t, { weight: t.weight * (df > 1 && N > 4 ? Math.log(1 + N / df) / Math.log(1 + N) : 1) });
-    });
+    const ts = terms.map(t => Object.assign({}, t, { sp: TODAY_SPLIT(t.text), group: t.group == null ? t.text : t.group }));
+    const groupOf = new Map(); ts.forEach(t => { if (!groupOf.has(t.group)) groupOf.set(t.group, []); groupOf.get(t.group).push(t); });
+    const best = (w, g) => {
+      const p = todayPrep(w); let b = null;
+      for (const t of groupOf.get(g)) { if (!t.sp.length) continue; const m = matchToday(p, t.sp); if (!m) continue;
+        const s = m.s * t.weight * (t.sp.length > 1 ? 1 : 0.6); if (!b || s > b.s) b = { s, text: t.text, where: m.where, of: t.of }; }
+      return b;
+    };
+    const per = new Map(list.map(w => [w, [...groupOf.keys()].map(g => [g, best(w, g)])]));
+    const idf = new Map([...groupOf.keys()].map(g => { const df = list.filter(w => per.get(w).some(([k, b]) => k === g && b)).length;
+      return [g, df ? (N > 4 && df > 1 ? Math.log(1 + N / df) / Math.log(1 + N) : 1) : 0]; }));
+    const top = Math.max(0, ...idf.values()) || 1;
     const seenTitles = new Set();
-    return list.map(w => { const r = scoreProfile(w, weighted); return { w, score: r.score, hits: r.hits }; })
+    return list.map(w => {
+      const hits = per.get(w).filter(([, b]) => b).map(([g, b]) => Object.assign({}, b, { s: b.s * idf.get(g) / top })).sort((a, b) => b.s - a.s);
+      return { w, score: Math.min(1, hits.reduce((a, h) => a + h.s, 0) / 2.5), hits };
+    })
       .filter(x => x.score >= minScore)
       .sort((a, b) => b.score - a.score || String(b.w.created || b.w.date).localeCompare(String(a.w.created || a.w.date)))
       .filter(x => { const k = normTitle(x.w.title); if (seenTitles.has(k)) return false; seenTitles.add(k); return true; });
@@ -1484,7 +1555,7 @@
     orcidOf, versionKey, versionNo, parseOrcidRecord, normOrcidWork, nameForm, coKey, verifyAuthorWorks, collapseVersions, hIndex,
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
     questStep, questSuggest, trailCode, parseTrailCode, trailStats,
-    PUBLISHERS, todayTerms, todayQuery, todayQueries, rankToday, todaySince,
+    PUBLISHERS, todayTerms, todayQuery, todayQueries, todayRelated, rankToday, todaySince,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };

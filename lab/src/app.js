@@ -1835,7 +1835,8 @@
     if (!errors.length || items.length) store.set('today', S.today);
     todayBusy = false; renderToday();
   }
-  const todaySig = () => `${pubsOn().map(p => p.id).join(',')}|${C.todayQuery(todayTermsNow())}`;
+  // The leading number changes when the way papers are found changes, so the day's list is fetched again.
+  const todaySig = () => `2|${pubsOn().map(p => p.id).join(',')}|${C.todayQuery(todayTermsNow())}`;
   function todayWork(w) { if (!w._prep) C.prepWork(w); return w; }
   function sinceText(iso) {
     const d = new Date(iso + 'T12:00:00Z'); const days = Math.round((Date.now() - d) / 864e5);
@@ -1843,12 +1844,13 @@
   }
   function renderToday() {
     const box = $('#today'); if (!box) return;
-    const terms = todayTermsNow(); const pubs = pubsOn(); const t = S.today;
+    const terms = todayTermsNow(); const pubs = pubsOn(); const t = S.today; const related = C.todayRelated(terms);
     const names = pubs.map(p => p.name); const pubList = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || 'no publishers';
     const settings = `<details class="today-set"${!terms.length ? ' open' : ''}><summary>Choose journals and topics</summary>
         <fieldset class="pubs"><legend class="small">Publishers</legend>${C.PUBLISHERS.map(p => `<label class="pub"><input type="checkbox" name="today-pub" value="${p.id}" ${pubs.some(x => x.id === p.id) ? 'checked' : ''}><span><strong>${esc(p.name)}</strong> <span class="tiny">${esc(p.full)}</span></span></label>`).join('')}</fieldset>
         <label for="today-topics" class="small">Your topics, separated by commas</label>
         <textarea id="today-topics" rows="3" placeholder="e.g. exciton diffusion, transient absorption, perylene diimide">${esc(S.settings.todayTopics || '')}</textarea>
+        ${related.length ? `<p class="tiny" id="today-related">Related wording that also counts: ${esc(related.slice(0, 10).join(', '))}${related.length > 10 ? ` and ${related.length - 10} more` : ''}.</p>` : ''}
         <p class="tiny">${hasProfile() ? 'Your profile’s terms are used too.' : 'Tip: a profile (Profile tab, or “Bring over” above) adds your terms automatically.'} These words, and the publishers, are sent to Crossref to find new papers.</p>
         <button type="button" class="btn small primary" id="today-save">Save and check now</button></details>`;
     if (!terms.length) {

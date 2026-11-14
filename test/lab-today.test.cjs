@@ -63,8 +63,10 @@ function route(req) {
 
   await page.$eval('#today-topics', e => { e.value = 'exciton diffusion, transient absorption, perylene diimide'; });
   await page.$eval('#today-save', b => b.click()); await waitToday();
-  check('one Crossref request per publisher, new journal articles only', crCalls.length === 4 && crCalls.every(c => /from-created-date:\d{4}-\d{2}-\d{2},type:journal-article$/.test(c.f) && c.rows === '40') && ['member:316', 'member:311', 'prefix:10.1038', 'member:221'].every(k => crCalls.some(c => c.f.startsWith(k + ','))), JSON.stringify(crCalls.map(c => c.f)));
-  check('your topics are what is searched', crCalls.every(c => c.q === 'exciton diffusion transient absorption perylene diimide'));
+  const nq = await page.evaluate(() => window.Core.todayQueries(window.Core.todayTerms(null, 'exciton diffusion, transient absorption, perylene diimide')).length);
+  check('one Crossref request per publisher and word group, new journal articles only', nq === 2 && crCalls.length === 4 * nq && crCalls.every(c => /from-created-date:\d{4}-\d{2}-\d{2},type:journal-article$/.test(c.f) && c.rows === '40') && ['member:316', 'member:311', 'prefix:10.1038', 'member:221'].every(k => crCalls.some(c => c.f.startsWith(k + ','))), JSON.stringify(crCalls.map(c => c.f)));
+  check('your topics are what is searched first, then related wording', crCalls[0].q.startsWith('exciton diffusion transient absorption perylene diimide') && crCalls.some(c => /pump-probe/.test(c.q)), crCalls.map(c => c.q).join(' | '));
+  check('the related wording is shown', /Related wording that also counts: [^.]*pump-probe/.test(await page.$eval('#today-related', e => e.textContent)));
   let ts = await titles(); t = await today();
   check('papers matching your topics are listed, best first', ts[0] === 'Exciton diffusion in perylene diimide crystals' && ts.length === 3 && ts.includes('Long-range exciton diffusion in molecular crystals') && ts.includes('Transient absorption of singlet fission in organic semiconductors'), ts.join(' | '));
   check('corrections and unrelated papers are left out', !ts.some(x => /Correction|rivers|Battery|bird/.test(x)));
@@ -85,7 +87,7 @@ function route(req) {
   await page.reload({ waitUntil: 'load' }); await sleep(500);
   check('opening the app again the same day shows the same list without searching again', crCalls.length === 0 && (await titles()).length === 3);
   await page.$eval('#today-refresh', b => b.click()); await waitToday();
-  check('“Check again” searches again on request', crCalls.length === 4 && (await titles()).length === 3);
+  check('“Check again” searches again on request', crCalls.length === 4 * nq && (await titles()).length === 3);
 
   // ---------- save, swipe
   await page.$eval('[data-today-save]', b => b.click()); await sleep(150);
@@ -103,7 +105,7 @@ function route(req) {
   await page.reload({ waitUntil: 'load' }); await waitToday();
   const sinceUsed = (crCalls[0] && crCalls[0].f.match(/from-created-date:([\d-]+)/) || [])[1];
   const expectSince = new Date(Date.now() - 864e5 - 864e5 / 2).toISOString().slice(0, 10);
-  check('the next day it looks again, from the last check', crCalls.length === 4 && sinceUsed === expectSince, `${sinceUsed} vs ${expectSince}`);
+  check('the next day it looks again, from the last check', crCalls.length === 4 * nq && sinceUsed === expectSince, `${sinceUsed} vs ${expectSince}`);
   t = await today();
   check('papers already shown are not repeated', (await titles()).length === 0 && /Nothing new matching your topics/.test(t), t.slice(0, 160));
 
@@ -124,7 +126,7 @@ function route(req) {
   crCalls.length = 0;
   await page.$eval('#today-save', b => b.click()); await waitToday();
   const groups = [...new Set(crCalls.map(c => c.q))];
-  check('many topics are sent in short groups, to every publisher, one request at a time', groups.length > 1 && groups.every(q => q.split(' ').length <= 8) && crCalls.length === 4 * groups.length
+  check('many topics are sent in short groups, to every publisher, one request at a time', groups.length > 1 && groups.every(q => q.split(' ').length <= 7) && crCalls.length === 4 * groups.length
     && groups.join(' ').includes('ion transport') && groups.join(' ').includes('exciton diffusion'), JSON.stringify(groups));
   check('a paper found by two groups is listed once', new Set(await titles()).size === (await titles()).length);
 
@@ -134,6 +136,17 @@ function route(req) {
   await page.evaluate(() => { localStorage.removeItem('paperscope-lab.today'); });
   await page.$eval('#today-refresh', b => b.click()); await waitToday();
   check('a profile’s terms are used when no topics are typed', crCalls.length > 0 && /singlet fission/.test(crCalls[0].q || ''), crCalls[0] && crCalls[0].q);
+
+  // ---------- the reported case: "ultrafast spectroscopy" alone, with a list saved by the previous version
+  await page.evaluate(() => { const st = JSON.parse(localStorage.getItem('paperscope-lab.settings') || '{}'); st.todayTopics = 'ultrafast spectroscopy'; localStorage.setItem('paperscope-lab.settings', JSON.stringify(st));
+    localStorage.removeItem('paperscope-lab.profile');
+    const d = new Date(); const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    localStorage.setItem('paperscope-lab.today', JSON.stringify({ day, at: new Date().toISOString(), since: day, sig: 'acs,wiley,nature,science|ultrafast spectroscopy', pubs: [], considered: 24, items: [], errors: [], seenBefore: [], seen: [] })); });
+  crCalls.length = 0;
+  await page.reload({ waitUntil: 'load' }); await waitToday();
+  t = await today();
+  check('after this update, a list saved by the old version is fetched again', crCalls.length > 0 && crCalls[0].q.startsWith('ultrafast spectroscopy'), crCalls.map(c => c.q).join(' | '));
+  check('“ultrafast spectroscopy” finds transient-absorption papers', (await titles()).includes('Exciton diffusion in perylene diimide crystals') && /Mentions [^.]*transient absorption/.test(t), t.slice(0, 300));
 
   await page.$eval('#lab-note-hide', b => b.click()); await page.reload({ waitUntil: 'load' }); await sleep(300);
   check('the Lab note can be dismissed for good', await page.$eval('.lab-note', n => n.hidden));
