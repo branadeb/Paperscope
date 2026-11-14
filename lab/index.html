@@ -694,6 +694,21 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
 /* papers that arrive after the list is shown (slower sources) */
 .late-pill { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 35; border: 0; border-radius: 999px; padding: 10px 16px; font: inherit; font-size: .9rem; font-weight: 600; background: var(--ink); color: var(--surface); box-shadow: 0 6px 20px rgb(0 0 0 / .25); cursor: pointer; }
 .panel.note { border-left: 3px solid var(--ink-3); }
+
+/* which databases answered (above results), and the database check in Settings */
+.srcline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; font-size: .86rem; }
+.srcline .src { white-space: nowrap; color: var(--ink-2); }
+.srcline .src.ok span[aria-hidden] { color: var(--ok); font-weight: 700; }
+.srcline .src.fail { color: var(--warn); }
+.srcline .src.wait i, .srcline .src.off i { color: var(--ink-3); }
+.srcline b { color: var(--ink); font-weight: 600; }
+.src-check-box { margin: 10px 0 14px; }
+.src-check { list-style: none; padding: 0; margin: 8px 0 4px; font-size: .92rem; }
+.src-check li { padding: 4px 0 4px 22px; position: relative; }
+.src-check li::before { position: absolute; left: 0; top: 4px; font-weight: 700; }
+.src-check li.ok::before { content: '✓'; color: var(--ok); }
+.src-check li.fail::before { content: '✕'; color: var(--warn); }
+.src-check li.wait::before { content: '…'; color: var(--ink-3); }
 </style>
 </head>
 <body>
@@ -873,6 +888,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     <label class="switch"><input type="checkbox" id="set-rerank"><span>OpenAlex reranker (Lab)<br><span class="tiny">OpenAlex reorders its top 100 keyword results with a model that judges how well each answers your search, from the title, journal, year and type (not the abstract). Doubles the cost of the keyword search. Measure it on your graded searches first.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>
+    <div class="src-check-box"><button type="button" class="btn small" id="check-sources">Check that all databases answer</button><div id="src-check" role="status"></div></div>
 
     <h3>AI answers (optional)</h3>
     <p class="small">Paperscope can ask an AI model to write a short answer to your search from the abstracts of the top papers, citing each one. It uses your own account with the provider, which bills you directly; Paperscope adds no charge. Your key is kept in this browser only.</p>
@@ -3455,7 +3471,47 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     const fi = followIndex(s);
     const since = s.since ? `<div class="panel since"><strong>Papers published since ${esc(s.since)}</strong> for “${esc(s.q)}”. ${s.pool.size ? '' : 'Nothing new yet.'} <span class="tiny">Uses publication dates, so papers indexed late with older dates can be missed.</span></div>` : '';
     const follow = `<div class="row follow-row"><button type="button" class="btn small" id="follow-toggle" aria-pressed="${fi >= 0}">${fi >= 0 ? 'Following this search' : 'Follow this search'}</button><span class="tiny">${fi >= 0 ? 'Check it for new papers from the Saved tab.' : 'Keep it on this device and check later for new papers.'}</span></div>`;
-    $('#interp').innerHTML = `${warn}${since}${renderRelated()}<details class="panel interp"><summary class="small"><strong>How this was searched</strong></summary>${bits.join('')}</details>${follow}`;
+    $('#interp').innerHTML = `${warn}${since}${sourcesLine(s)}${renderRelated()}<details class="panel interp"><summary class="small"><strong>How this was searched</strong></summary>${bits.join('')}</details>${follow}`;
+  }
+
+  // Always visible above the results: which databases answered this search and how many papers each gave.
+  function sourcesLine(s) {
+    const st = s.status || {}; const parts = [];
+    const oa = ['oa_kw', 'oa_sem', 'oa_rel', 'oa_recent'].map(k => st[k]).filter(Boolean);
+    if (oa.length) {
+      const n = oa.filter(x => x.ok).reduce((a, x) => a + (x.n || 0), 0);
+      const bad = oa.filter(x => x.ok === false).map(x => String(x.label).replace(/^OpenAlex /, ''));
+      parts.push(oa.every(x => x.ok === false) ? ['fail', 'OpenAlex', 'no answer'] : oa.some(x => x.pending) ? ['wait', 'OpenAlex', 'searching…'] : ['ok', 'OpenAlex', fmt(n) + (bad.length ? ` (${bad.join(', ')} did not answer)` : '')]);
+    }
+    [['crossref', 'Crossref'], ['epmc', 'Europe PMC']].forEach(([k, name]) => {
+      const x = st[k];
+      if (!S.settings[k]) parts.push(['off', name, 'off in Settings']);
+      else if (!x) return;
+      else if (x.pending) parts.push(['wait', name, x.retrying ? 'trying again…' : 'searching…']);
+      else if (x.ok === false) parts.push(['fail', name, 'no answer']);
+      else parts.push(['ok', name, fmt(x.n || 0)]);
+    });
+    if (!parts.length) return '';
+    const mark = { ok: '✓', wait: '…', fail: '✕', off: '–' };
+    return `<p class="srcline" role="status"><span class="tiny">Searched:</span> ${parts.map(([c, name, v]) => `<span class="src ${c}"><span aria-hidden="true">${mark[c]}</span> ${esc(name)} ${c === 'ok' ? `<b>${esc(v)}</b>` : `<i>${esc(v)}</i>`}</span>`).join(' ')}</p>`;
+  }
+  // About › Settings: test, from this device, that each database answers (tiny requests; the OpenAlex one is free).
+  let srcCheck = null;
+  async function checkSources() {
+    const list = [['OpenAlex', PROBE + (S.settings.apiKey ? `&api_key=${encodeURIComponent(S.settings.apiKey.trim())}` : '')], ['Crossref', `${CR}/works?rows=1&select=DOI&query.bibliographic=exciton`], ['Europe PMC', `${EP}/search?query=exciton&format=json&pageSize=1&resultType=lite`]];
+    srcCheck = { running: true, rows: list.map(([name]) => ({ name })) }; renderSourceCheck();
+    srcCheck.rows = await Promise.all(list.map(async ([name, url]) => {
+      const t0 = performance.now(); const r = await getJSON(url, { timeout: 15000, retries: 0 });
+      return { name, ok: r.ok, ms: Math.round(performance.now() - t0), msg: r.ok ? '' : failText(name, r) };
+    }));
+    srcCheck.running = false; srcCheck.at = new Date(); renderSourceCheck();
+  }
+  function renderSourceCheck() {
+    const el = $('#src-check'); if (!el) return;
+    if (!srcCheck) { el.innerHTML = ''; return; }
+    const off = { 'Crossref': !S.settings.crossref, 'Europe PMC': !S.settings.epmc };
+    el.innerHTML = `<ul class="src-check">${srcCheck.rows.map(r => `<li class="${srcCheck.running ? 'wait' : r.ok ? 'ok' : 'fail'}"><strong>${esc(r.name)}</strong>: ${srcCheck.running ? 'checking…' : r.ok ? `answering (${(r.ms / 1000).toFixed(1)} s)${off[r.name] ? ', but it is turned off below, so searches skip it' : ''}` : `${esc(r.msg.replace(r.name + ' ', ''))} Searches still use the other databases; try again in a few minutes.`}</li>`).join('')}</ul>
+      ${!srcCheck.running ? `<p class="tiny">Checked from this device at ${esc(srcCheck.at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}.</p>` : ''}`;
   }
 
   // A fixed, faint starfield behind the theme map (seeded, so it does not jump between renders).
@@ -4523,6 +4579,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     if (d.retry && S.search && S.search.status[d.retry]) { const ch = d.retry; S.search.exhausted[ch] = false; S.search.status[ch] = { pending: true, label: S.search.status[ch].label }; renderInterp(); fetchBatch(searchToken, { only: [ch] }); return; }
     if (t.id === 'late-pill') { const s = S.search; if (s) { s.lateAdded = 0; rerank(); renderAll(); const r = $('#results'); if (r) r.scrollIntoView({ block: 'start' }); } renderLatePill(); return; }
     if (t.id === 'home-link') { e.preventDefault(); navHome(); return; }
+    if (t.id === 'check-sources') { checkSources(); return; }
     if (t.id === 'nav-back') { navBack(); return; }
     if (t.id === 'lab-import') { labImport(); return; }
     if (t.id === 'lab-note-hide') { store.set('labNoteHidden', true); const n = $('.lab-note'); if (n) n.hidden = true; return; }
@@ -4747,8 +4804,8 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
       renderAI(); renderBench(); if (was) loadAI(false);
     }
     if (t.name === 'scoring') { S.settings.scoring = t.value === 'v1' ? 'v1' : 'v2'; saveSettings(); gradingCache = null; if (S.search && S.search.pool) { rerank(); } toast(S.settings.scoring === 'v1' ? 'Using the previous ranking' : 'Using the new ranking'); }
-    if (t.id === 'set-crossref') { S.settings.crossref = t.checked; saveSettings(); }
-    if (t.id === 'set-epmc') { S.settings.epmc = t.checked; saveSettings(); }
+    if (t.id === 'set-crossref') { S.settings.crossref = t.checked; saveSettings(); renderSourceCheck(); }
+    if (t.id === 'set-epmc') { S.settings.epmc = t.checked; saveSettings(); renderSourceCheck(); }
     if (t.id === 'sort') {
       S.sort = t.value; store.set('sort', S.sort);
       const s = S.search; if (!s) return;

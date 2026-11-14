@@ -85,6 +85,7 @@ Paperscope has no server, so every user gets their own free allowance. OpenAlex 
 
 | Feature | Status | Notes |
 |---|---|---|
+| Which databases answered | Working | Every search shows a line above the results such as "Searched: ✓ OpenAlex 36 ✓ Crossref 20 ✓ Europe PMC 12" (papers fetched from each), "… trying again" while a source is retried, "✕ no answer" if it failed, or "off in Settings". About › Settings › *Check that all databases answer* sends one tiny request to each from your own device (the OpenAlex one is a free single-record lookup) and reports which answer and how fast, or what went wrong. Crossref and Europe PMC are retried once, quietly, 4 seconds after a failure. |
 | Profile from a CV or research statement (PDF, .docx, text, or pasted) | Working | Rule-based extraction in the browser. Lists research interests, methods, areas and acronyms (e.g. "TA = transient absorption"). Fully editable. |
 | Profile from ORCID | Working | Enter your ORCID iD; Paperscope reads your publications in OpenAlex (keywords, topics, titles, abstracts) and builds or extends your profile. |
 | Short follow-up questions | Working | Asks when an acronym has several meanings ("MD") or when short query words are used across unrelated domains ("coherence", "relaxation"). Answers from your profile when it can. |

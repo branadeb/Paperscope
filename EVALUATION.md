@@ -393,3 +393,9 @@ The user saw on his phone: "These results are incomplete. Europe PMC could not b
 - If it keeps failing, the calm note appears with no red warning and no raw error words, and "Try again" works.
 - An OpenAlex failure gives the red warning.
 - All other suites still pass.
+
+**Follow-up, same day:** the user asked that the app make sure it reaches OpenAlex, Europe PMC and Crossref.
+- Every search now shows which databases answered and how many papers each gave, above the results.
+- About › Settings has *Check that all databases answer*, which tests the three from the user's own device. A database turned off in Settings is pointed out in both places.
+- `test/sources.test.cjs`: 15/15 in each app, covering the line, the retry state, the failure mark, the device check (all answering; Europe PMC failing; Crossref turned off) and the off state in the search line. All other suites still pass.
+- A live check of the three services could not be run this time, because the built-in browser was no longer connected. The previous live check, a few minutes earlier, had 20 of 20 Europe PMC requests succeeding.
