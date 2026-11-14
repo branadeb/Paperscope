@@ -27,7 +27,7 @@ const DATA = {
   'member:221': [item('10.1126/science.6c7', 'A new bird species in the Andes', 'Science', 'Birds.')],
   'member:317': [item('10.1063/5.06c8', 'Exciton diffusion simulated with Redfield theory', 'The Journal of Chemical Physics', 'Open quantum systems.')],
 };
-const crCalls = [];
+const crCalls = []; const oaCalls = []; const s2Calls = [];
 function route(req) {
   const url = req.url(); if (url.startsWith('data:') || url.startsWith('blob:')) return req.continue();
   const u = new URL(url); if (u.hostname === 'localhost') return req.continue();
@@ -38,7 +38,13 @@ function route(req) {
     if (/member:221/.test(f) && global.FAIL_SCIENCE) return json(req, { message: 'Too many requests' }, 429);
     return json(req, { status: 'ok', message: { 'total-results': key ? DATA[key].length : 0, items: key ? DATA[key] : [] } });
   }
-  if (u.hostname === 'api.openalex.org') return json(req, u.pathname.startsWith('/works/W') ? { id: 'x' } : { meta: { count: 0, cost_usd: 0 }, results: [] });
+  if (u.hostname === 'api.openalex.org') {
+    if (u.pathname.startsWith('/works/W')) return json(req, { id: 'x' });
+    const f = u.searchParams.get('filter') || '';
+    if (/host_organization_lineage/.test(f)) { oaCalls.push({ f, q: u.searchParams.get('search') }); return json(req, { meta: { count: global.OA_WORKS ? global.OA_WORKS.length : 0, cost_usd: 0.001 }, results: global.OA_WORKS || [] }); }
+    return json(req, { meta: { count: 0, cost_usd: 0 }, results: [] });
+  }
+  if (u.hostname === 'api.semanticscholar.org') { s2Calls.push(JSON.parse(req.postData() || '{}')); return json(req, { recommendedPapers: global.S2_PAPERS || [] }); }
   return req.abort();
 }
 
@@ -70,7 +76,7 @@ function route(req) {
   let ts = await titles(); t = await today();
   check('papers matching your topics are listed, best first', ts[0] === 'Exciton diffusion in perylene diimide crystals' && ts.length === 3 && ts.includes('Long-range exciton diffusion in molecular crystals') && ts.includes('Transient absorption of singlet fission in organic semiconductors'), ts.join(' | '));
   check('corrections and unrelated papers are left out', !ts.some(x => /Correction|rivers|Battery|bird/.test(x)));
-  check('it says what was searched and why each paper is there', /3 new papers matching your work, from \d+ new in ACS, Wiley, Nature and Science since/.test(t) && /Mentions [^.]*exciton diffusion/.test(t) && /Mentions [^.]*perylene diimide/.test(t), t.slice(0, 260));
+  check('it says what was searched and why each paper is there', /3 new papers from ACS, Wiley, Nature and Science in the last 5 days: 2 on your topics, 1 using your methods\./.test(t) && /Looked at \d+ new papers: \d+ from Crossref, 0 from OpenAlex/.test(t) && /Mentions [^.]*exciton diffusion/.test(t) && /Mentions [^.]*perylene diimide/.test(t), t.slice(0, 260));
   check('a paper without an abstract says so', /No abstract yet, so this is from the title/.test(t));
   check('journal names are clean', !/&amp;/.test(t));
   check('papers of the day: no WCAG A/AA violations (light)', (await axe()).length === 0, (await axe()).join(' | '));
@@ -104,8 +110,8 @@ function route(req) {
   crCalls.length = 0;
   await page.reload({ waitUntil: 'load' }); await waitToday();
   const sinceUsed = (crCalls[0] && crCalls[0].f.match(/from-created-date:([\d-]+)/) || [])[1];
-  const expectSince = new Date(Date.now() - 864e5 - 864e5 / 2).toISOString().slice(0, 10);
-  check('the next day it looks again, from the last check', crCalls.length === 4 * nq && sinceUsed === expectSince, `${sinceUsed} vs ${expectSince}`);
+  const expectSince = new Date(Date.now() - 5 * 864e5).toISOString().slice(0, 10);
+  check('the next day it looks again, over the last 5 days', crCalls.length === 4 * nq && sinceUsed === expectSince, `${sinceUsed} vs ${expectSince}`);
   t = await today();
   check('papers already shown are not repeated', (await titles()).length === 0 && /Nothing new matching your topics/.test(t), t.slice(0, 160));
 
@@ -147,6 +153,47 @@ function route(req) {
   t = await today();
   check('after this update, a list saved by the old version is fetched again', crCalls.length > 0 && crCalls[0].q.startsWith('ultrafast spectroscopy'), crCalls.map(c => c.q).join(' | '));
   check('“ultrafast spectroscopy” finds transient-absorption papers', (await titles()).includes('Exciton diffusion in perylene diimide crystals') && /Mentions [^.]*transient absorption/.test(t), t.slice(0, 300));
+
+  // ---------- version 3: OpenAlex abstracts, older papers left out, labels, variety, Semantic Scholar opt-in
+  const day = d => new Date(now - d * 864e5).toISOString().slice(0, 10);
+  const oaw = (id, doi, title, abs, d = 1) => ({ id: 'https://openalex.org/' + id, doi: 'https://doi.org/' + doi, display_name: title, publication_year: now.getFullYear(), publication_date: day(d), type: 'article', cited_by_count: 0,
+    authorships: [{ author: { id: 'A1', display_name: 'Cy Dee' }, institutions: [] }], primary_location: { source: { display_name: 'Nature Chemistry', host_organization_name: 'Nature Portfolio' }, landing_page_url: 'https://doi.org/' + doi },
+    abstract_inverted_index: Object.fromEntries(abs.split(' ').map((w, i) => [w, [i]])) });
+  global.OA_WORKS = [
+    oaw('W1', '10.1038/s41557-oa1', 'Ultrafast charge separation at donor interfaces', 'We resolve exciton diffusion and charge separation with transient absorption in perylene diimide films.'),
+    oaw('W2', '10.1038/s41557-oa2', 'Ultrafast charge separation at donor interfaces (Nature Chem.)', 'We resolve exciton diffusion and charge separation with transient absorption in perylene diimide films.'),
+    oaw('W3', '10.9999/other-publisher', 'Exciton diffusion in a journal you did not choose', 'Exciton diffusion everywhere.'),
+  ];
+  DATA['member:221'] = [Object.assign(item('10.1126/science.old', 'Exciton diffusion in perylene diimide, a 2009 classic', 'Science', 'Old paper with a new DOI record.'), { 'published-online': { 'date-parts': [[2009, 3, 2]] } })];
+  global.S2_PAPERS = [{ title: 'Hydrogen bonding networks in ionic liquids', externalIds: { DOI: '10.1021/acs.jpcb.s2x' }, publicationDate: day(2), venue: 'J. Phys. Chem. B', abstract: 'Ionic liquids form networks.', authors: [{ name: 'Ed Fox' }], citationCount: 0 },
+    { title: 'A paper from last spring', externalIds: { DOI: '10.1021/acs.old' }, publicationDate: day(200), venue: 'JACS', authors: [] }];
+  await page.evaluate(() => { const st = JSON.parse(localStorage.getItem('paperscope-lab.settings') || '{}'); st.todayTopics = 'exciton diffusion, transient absorption, perylene diimide'; st.todayPubs = ['acs', 'wiley', 'nature', 'science']; st.todayS2 = false; localStorage.setItem('paperscope-lab.settings', JSON.stringify(st)); localStorage.removeItem('paperscope-lab.today'); });
+  crCalls.length = 0; oaCalls.length = 0; s2Calls.length = 0;
+  await page.reload({ waitUntil: 'load' }); await waitToday();
+  t = await today(); let tl = await titles();
+  check('one OpenAlex keyword search covers all chosen publishers, published in the last 5 days', oaCalls.length === 1 && /host_organization_lineage:P4310320006\|P4310320595\|P4310319908\|P4310315823/.test(oaCalls[0].f) && oaCalls[0].f.includes(`from_publication_date:${day(5)}`) && /"exciton diffusion" OR "transient absorption" OR "perylene diimide"/.test(oaCalls[0].q), JSON.stringify(oaCalls[0]));
+  check('papers found through their abstracts (OpenAlex) are listed', tl.includes('Ultrafast charge separation at donor interfaces'), tl.join(' | '));
+  check('a paper from a publisher you did not choose is left out', !tl.some(x => /did not choose/.test(x)));
+  check('an old paper with a new DOI record is left out, and the count says so', !tl.some(x => /2009 classic/.test(x)) && /older papers with new DOI records were left out/.test(t), t.slice(0, 400));
+  check('near-identical titles appear once', tl.filter(x => /^Ultrafast charge separation/.test(x)).length === 1, tl.join(' | '));
+  const labels = await page.$$eval('.today-list .tlabel', l => l.map(x => x.textContent));
+  check('each paper is labelled as your topic, your method or nearby', labels.length > 0 && labels.every(x => ['Your topic', 'Your method', 'Nearby'].includes(x)) && labels.includes('Your topic'), labels.join(','));
+  check('each paper says which source found it', await page.$$eval('.today-list .via', l => l.length > 0 && l.every(x => /^Found by (Crossref|OpenAlex|Semantic Scholar)/.test(x.textContent))));
+  check('Semantic Scholar is not asked unless you turn it on', s2Calls.length === 0);
+  // turn on "papers like my saved ones"
+  await page.$eval('.today-set', d => { d.open = true; }); await page.$eval('#today-s2', i => { i.checked = true; });
+  crCalls.length = 0; oaCalls.length = 0;
+  await page.$eval('#today-save', b => b.click()); await waitToday();
+  t = await today(); tl = await titles();
+  const sent = s2Calls[0] && s2Calls[0].positivePaperIds || [];
+  check('with it on, the DOIs of your saved papers go to Semantic Scholar', s2Calls.length === 1 && sent.length >= 1 && sent.every(x => /^DOI:10\./.test(x)), JSON.stringify(sent));
+  await page.$eval('#today-more', b => b.click()).catch(() => {}); await sleep(100); tl = await titles(); t = await today();
+  check('its recent suggestion appears as “Nearby”, with the reason; older ones do not', tl.includes('Hydrogen bonding networks in ionic liquids') && !tl.includes('A paper from last spring') && /Suggested by Semantic Scholar as similar to your saved papers/.test(t), tl.join(' | '));
+  check('the privacy table lists Semantic Scholar', await page.evaluate(() => /Semantic Scholar, once a day/.test(document.querySelector('#view-about').textContent)));
+  check('papers of the day v3: no WCAG A/AA violations', (await axe()).length === 0, (await axe()).join(' | '));
+  await page.evaluate(() => document.querySelector('#today').scrollIntoView()); await sleep(150);
+  await page.screenshot({ path: path.join(OUT, 'lab-today-v3.png') });
+  global.OA_WORKS = null; global.S2_PAPERS = null; delete DATA['member:221'];
 
   await page.$eval('#lab-note-hide', b => b.click()); await page.reload({ waitUntil: 'load' }); await sleep(300);
   check('the Lab note can be dismissed for good', await page.$eval('.lab-note', n => n.hidden));

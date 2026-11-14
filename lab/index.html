@@ -669,6 +669,13 @@ fieldset.scoring { border: 1px solid var(--rule); border-radius: 10px; padding: 
 fieldset.scoring legend { font-weight: 600; padding: 0 4px; }
 fieldset.scoring .radio { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: .92rem; }
 fieldset.scoring .radio input { margin-top: 4px; }
+
+/* papers of the day labels (Lab) */
+.tlabel { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--rule); font-weight: 600; margin-right: 4px; }
+.tlabel.direct { color: var(--close); border-color: color-mix(in srgb, var(--close) 45%, var(--rule)); }
+.tlabel.method { color: var(--ink-2); }
+.tlabel.adjacent { color: var(--adj); border-color: color-mix(in srgb, var(--adj) 45%, var(--rule)); }
+.today-list .via { margin-left: auto; color: var(--ink-3); }
 </style>
 </head>
 <body>
@@ -799,7 +806,8 @@ fieldset.scoring .radio input { margin-top: 4px; }
         <tr><td>Your OpenAlex API key, if you add one</td><td>OpenAlex only, with each request.</td></tr>
         <tr><td>Your ORCID iD, if you import from ORCID</td><td>OpenAlex, to find your publications.</td></tr>
         <tr><td>An author name, ORCID iD or DOI you search for</td><td>OpenAlex (and Crossref for a DOI that OpenAlex lacks).</td></tr>
-        <tr><td>Your “papers of the day” topics and chosen publishers (Lab)</td><td>Crossref, once a day when you open the app, to find new papers.</td></tr>
+        <tr><td>Your “papers of the day” topics and chosen publishers (Lab)</td><td>Crossref and OpenAlex, once a day when you open the app, to find new papers.</td></tr>
+        <tr><td>The DOIs of your 10 most recently saved papers, only if you turn on “papers like my saved ones” (Lab)</td><td>Semantic Scholar, once a day, to suggest similar new papers.</td></tr>
         <tr><td>The ORCID iD of an author you open (to check their papers)</td><td>ORCID, to read that person’s public record; Crossref, to find papers tagged with the iD; OpenAlex, to fetch the papers it lists.</td></tr>
         <tr><td>For “Write a short answer” (off unless you set it up): your search and the titles and abstracts of the top papers</td><td>The AI provider you choose, with your own key, billed to you. Never your CV or profile.</td></tr>
         <tr><td>Followed searches</td><td>Nowhere. Kept in this browser; checking one runs a normal search.</td></tr>
@@ -2376,16 +2384,44 @@ fieldset.scoring .radio input { margin-top: 4px; }
   // ---------------------------------------------------------------- Lab: papers of the day
   // New papers from chosen publishers, found through Crossref (which lists papers the day their DOI is registered).
   const PUBLISHERS = [
-    { id: 'acs', name: 'ACS', full: 'American Chemical Society journals', filter: 'member:316', on: true },
-    { id: 'wiley', name: 'Wiley', full: 'Wiley journals', filter: 'member:311', on: true },
-    { id: 'nature', name: 'Nature', full: 'Nature Portfolio journals', filter: 'prefix:10.1038', on: true },
-    { id: 'science', name: 'Science', full: 'Science family (AAAS)', filter: 'member:221', on: true },
-    { id: 'rsc', name: 'RSC', full: 'Royal Society of Chemistry', filter: 'member:292', on: false },
-    { id: 'aip', name: 'AIP', full: 'AIP Publishing (J. Chem. Phys. and more)', filter: 'member:317', on: false },
-    { id: 'aps', name: 'APS', full: 'American Physical Society (Phys. Rev.)', filter: 'member:16', on: false },
-    { id: 'elsevier', name: 'Elsevier', full: 'Elsevier journals', filter: 'member:78', on: false },
-    { id: 'springer', name: 'Springer', full: 'Other Springer journals', filter: 'member:297', on: false },
+    { id: 'acs', name: 'ACS', full: 'American Chemical Society journals', filter: 'member:316', oa: 'P4310320006', prefixes: ['10.1021'], on: true },
+    { id: 'wiley', name: 'Wiley', full: 'Wiley journals', filter: 'member:311', oa: 'P4310320595', prefixes: ['10.1002', '10.1111'], on: true },
+    { id: 'nature', name: 'Nature', full: 'Nature Portfolio journals', filter: 'prefix:10.1038', oa: 'P4310319908', prefixes: ['10.1038'], on: true },
+    { id: 'science', name: 'Science', full: 'Science family (AAAS)', filter: 'member:221', oa: 'P4310315823', prefixes: ['10.1126'], on: true },
+    { id: 'rsc', name: 'RSC', full: 'Royal Society of Chemistry', filter: 'member:292', oa: 'P4310320556', prefixes: ['10.1039'], on: false },
+    { id: 'aip', name: 'AIP', full: 'AIP Publishing (J. Chem. Phys. and more)', filter: 'member:317', oa: 'P4310320061', prefixes: ['10.1063', '10.1116'], on: false },
+    { id: 'aps', name: 'APS', full: 'American Physical Society (Phys. Rev.)', filter: 'member:16', oa: 'P4310320261', prefixes: ['10.1103'], on: false },
+    { id: 'elsevier', name: 'Elsevier', full: 'Elsevier journals', filter: 'member:78', oa: 'P4310320990', prefixes: ['10.1016'], on: false },
+    { id: 'springer', name: 'Springer', full: 'Other Springer journals', filter: 'member:297', oa: 'P4310319965', prefixes: ['10.1007', '10.1186'], on: false },
   ];
+  // Which chosen publisher a DOI belongs to (by DOI prefix), or null.
+  function pubOfDoi(doi, pubs) { const pre = String(doi || '').toLowerCase().split('/')[0]; const p = pubs.find(x => x.prefixes.includes(pre)); return p ? p.id : null; }
+  // The window papers of the day look at: the last `days` days, as a UTC date.
+  function todayWindow(now = Date.now(), days = 5) { return new Date(now - days * 864e5).toISOString().slice(0, 10); }
+  // Crossref registers DOIs for old papers too (back issues, corrections to old records). A paper counts as new when it
+  // went online within a week of the window (or, with no online date, its earliest date is no older than a month).
+  function crossrefRecent(it, since) {
+    const dp = k => (it[k] && it[k]['date-parts'] && it[k]['date-parts'][0]) || null;
+    const iso = a => a.map((x, i) => (i ? String(x).padStart(2, '0') : String(x))).join('-');
+    const start = Date.parse(since + 'T00:00:00Z');
+    const on = dp('published-online');
+    if (on && on.length === 3) return Date.parse(iso(on) + 'T00:00:00Z') >= start - 7 * 864e5;
+    const pub = dp('published') || dp('issued');
+    if (!pub) return true;
+    if (pub.length === 3) return Date.parse(iso(pub) + 'T00:00:00Z') >= start - 31 * 864e5;
+    if (pub.length === 2) return Date.UTC(pub[0], pub[1], 1) >= start - 31 * 864e5; // end of that month
+    return pub[0] >= new Date(start).getUTCFullYear();
+  }
+  function normS2(p, rank) {
+    const doi = cleanDoi(p.externalIds && p.externalIds.DOI);
+    return {
+      key: '', openalexId: '', doi, title: normSpace(p.title || ''), year: p.year || (p.publicationDate ? Number(p.publicationDate.slice(0, 4)) : null), date: p.publicationDate || '',
+      authors: (p.authors || []).map(a => a.name).filter(Boolean), venue: (p.journal && p.journal.name) || p.venue || '',
+      abstract: normSpace(p.abstract || ''), abstractFrom: p.abstract ? 'Semantic Scholar' : '', oaType: '', crType: '', epmcTypes: [], isOA: false, oaStatus: '',
+      landing: doi ? `https://doi.org/${doi}` : (p.url || ''), oaUrl: '', pdf: '', oaHost: '', cites: p.citationCount || 0, pct: null, top1: false, top10: false,
+      topic: null, keywords: [], retracted: false, sources: ['Semantic Scholar'], ranks: { s2: rank },
+    };
+  }
   // Topics you type (comma or line separated) come first, then your profile's terms.
   // Papers of the day. Crossref searches titles only, and titles rarely carry an umbrella term such as "ultrafast
   // spectroscopy", so each topic also counts a few related phrasings (shown to the user). Kept small and curated.
@@ -2479,7 +2515,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
     const best = (w, g) => {
       const p = todayPrep(w); let b = null;
       for (const t of groupOf.get(g)) { if (!t.sp.length) continue; const m = matchToday(p, t.sp); if (!m) continue;
-        const s = m.s * t.weight * (t.sp.length > 1 ? 1 : 0.6); if (!b || s > b.s) b = { s, text: t.text, where: m.where, of: t.of }; }
+        const s = m.s * t.weight * (t.sp.length > 1 ? 1 : 0.6); if (!b || s > b.s) b = { s, text: t.text, where: m.where, of: t.of, g, related: t.kind === 'related' }; }
       return b;
     };
     const per = new Map(list.map(w => [w, [...groupOf.keys()].map(g => [g, best(w, g)])]));
@@ -2495,6 +2531,45 @@ fieldset.scoring .radio input { margin-top: 4px; }
       .sort((a, b) => b.score - a.score || String(b.w.created || b.w.date).localeCompare(String(a.w.created || a.w.date)))
       .filter(x => { const k = normTitle(x.w.title); if (seenTitles.has(k)) return false; seenTitles.add(k); return true; });
   }
+  // Papers of the day, step 4: combine the topic score with the sources' own ranks (rank fusion), label each paper,
+  // and pick a varied list: no more than a few papers on the same topic in a row, no near-duplicate titles, at most
+  // 5 that only share your methods and 3 that are only nearby.
+  const METHOD_RE = /(spectroscop|microscop|scattering|diffraction|tomograph|imaging|simulation|molecular dynamics|density functional|\bdft\b|calculation|computation|\bnmr\b|\bepr\b|transient absorption|pump-probe|\b2d ?-?ir\b|\b2des\b|two-dimensional (electronic|infrared)|femtosecond|time-resolved|ultrafast|mass spectrometry|chromatograph|voltammetry|impedance|machine learning|crystallograph|interferometr|photoemission|calorimetr)/i;
+  const TODAY_LABELS = { direct: 'Your topic', method: 'Your method', adjacent: 'Nearby' };
+  function rankTodayV2(works, terms, { max = 15, minScore = 0.15 } = {}) {
+    const lex = rankToday(works, terms, 0);
+    const rrf = w => Object.entries(w.ranks || {}).reduce((a, [, r]) => a + 1 / (20 + r), 0);
+    const maxR = Math.max(1e-9, ...lex.map(x => rrf(x.w)));
+    const isMethod = new Map(); terms.forEach(t => { const g = t.group == null ? t.text : t.group; if (!isMethod.has(g)) isMethod.set(g, METHOD_RE.test(t.of || t.text)); });
+    const anySubject = [...isMethod.values()].some(m => !m);
+    const cands = lex.map(x => {
+      const r = rrf(x.w) / maxR;
+      let label = 'direct';
+      if (!x.hits.length) label = 'adjacent';
+      else if (anySubject && x.hits.every(h => isMethod.get(h.g))) label = 'method';
+      else if (x.hits.every(h => h.related) && x.score < 0.3) label = 'adjacent';
+      const pass = x.score >= minScore || (!x.hits.length && x.w.ranks && x.w.ranks.s2 != null);
+      return Object.assign({}, x, { rrf: r, label, final: x.score + 0.15 * r + (x.hits.length ? 0 : 0.1), pass });
+    }).filter(x => x.pass);
+    const caps = { direct: max, method: 5, adjacent: 3 }; const perLabel = {}; const perGroup = new Map(); const picked = [];
+    const left = cands.slice();
+    while (picked.length < max && left.length) {
+      let bi = -1, bv = -Infinity;
+      left.forEach((x, i) => {
+        if ((perLabel[x.label] || 0) >= caps[x.label]) return;
+        const g = x.hits[0] ? x.hits[0].g : '_';
+        const sim = picked.reduce((m, y) => Math.max(m, titleSimilarity(x.w.title, y.w.title)), 0);
+        if (sim >= 0.85) return; // the same paper under another title or DOI
+        const v = x.final - 0.06 * (perGroup.get(g) || 0) - (sim > 0.6 ? 0.3 : 0);
+        if (v > bv) { bv = v; bi = i; }
+      });
+      if (bi < 0) break;
+      const x = left.splice(bi, 1)[0]; picked.push(x);
+      perLabel[x.label] = (perLabel[x.label] || 0) + 1; const g = x.hits[0] ? x.hits[0].g : '_'; perGroup.set(g, (perGroup.get(g) || 0) + 1);
+    }
+    return picked;
+  }
+
   // ---------------------------------------------------------------- benchmark (researcher-graded searches)
   // Grades: 0 not relevant, 1 slightly, 2 relevant, 3 exactly what was asked. Ungraded papers count as 0 in nDCG
   // (the ideal ordering uses all grades given), and the share of graded papers in the top k is reported beside it.
@@ -2530,6 +2605,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
     questStep, questSuggest, trailCode, parseTrailCode, trailStats,
     PUBLISHERS, todayTerms, todayQuery, todayQueries, todayRelated, rankToday, todaySince,
+    rankTodayV2, TODAY_LABELS, METHOD_RE, pubOfDoi, todayWindow, crossrefRecent, normS2,
     tokens, chemNorm, matchTermV2, groupStats, scoreQueryV2, nearAll, TIER_W, ndcgAt, precisionAt, judgedAt, benchMetrics, meanMetrics,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
@@ -2548,6 +2624,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
   const CR = 'https://api.crossref.org';
   const ORCID_API = 'https://pub.orcid.org/v3.0';
   const EP = 'https://www.ebi.ac.uk/europepmc/webservices/rest';
+  const S2 = 'https://api.semanticscholar.org';
   const OA_SELECT = 'id,doi,display_name,publication_year,publication_date,type,cited_by_count,authorships,primary_location,best_oa_location,open_access,primary_topic,keywords,abstract_inverted_index,citation_normalized_percentile,is_retracted';
   const LIBS = {
     pdfjs: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.5.438/build/pdf.min.mjs',
@@ -4086,7 +4163,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
       S.settings.todayTopics = $('#today-topics').value.trim();
       const on = [...document.querySelectorAll('input[name="today-pub"]:checked')].map(i => i.value);
       if (!on.length) { toast('Choose at least one publisher'); return; }
-      S.settings.todayPubs = on; saveSettings();
+      S.settings.todayPubs = on; S.settings.todayS2 = !!($('#today-s2') && $('#today-s2').checked); saveSettings();
       if (!todayTermsNow().length) { toast('Add a topic or a profile first'); return; }
       fetchToday(true); return;
     }
@@ -4372,44 +4449,66 @@ fieldset.scoring .radio input { margin-top: 4px; }
   const pubsOn = () => C.PUBLISHERS.filter(p => (S.settings.todayPubs || C.PUBLISHERS.filter(x => x.on).map(x => x.id)).includes(p.id));
   const todayTermsNow = () => C.todayTerms(S.profile, S.settings.todayTopics || '');
   let todayBusy = false; let todayShowAll = false; let todayProgress = '';
+  // Papers of the day, in four steps like a search:
+  // 1. your topics, their related wording and synonyms; 2. new papers from the last 5 days: Crossref (titles, listed
+  // the day the DOI is registered), OpenAlex keyword search (titles and abstracts, a day or two behind) and, if you
+  // turn it on, Semantic Scholar's suggestions from your saved papers; 3. score each against your topics;
+  // 4. combine with the sources' ranks, label (your topic / your method / nearby) and pick a varied list.
   async function fetchToday(force) {
     const terms = todayTermsNow(); if (!terms.length || todayBusy) { renderToday(); return; }
     const prev = store.get('today', null);
     if (!force && prev && prev.day === localDay() && prev.sig === todaySig()) { S.today = prev; renderToday(); return; }
     todayBusy = true; renderToday();
-    const since = prev && prev.day === localDay() && prev.since ? prev.since : C.todaySince(prev && prev.at);
+    const since = C.todayWindow();
     const queries = C.todayQueries(terms);
-    const pubs = pubsOn(); const pool = new Map(); const counts = {}; const errors = [];
-    // One request at a time: Crossref's public service allows only one at a time per user.
+    const pubs = pubsOn(); const pool = new Map(); const counts = { crossref: 0, openalex: 0, s2: 0, old: 0 }; const errors = []; let cost = 0;
+    const bySrc = { crossref: new Set(), openalex: new Set(), s2: new Set() }; const oldDois = new Set();
+    const add = (works, src) => { const ok = works.filter(w => w.pub); ok.forEach(w => bySrc[src].add(w.doi || w.title)); counts[src] = bySrc[src].size; C.dedupeInto(pool, ok); };
+    // Crossref: one request at a time (its public service allows only one at a time per user).
     let first = true;
     for (const p of pubs) {
-      todayProgress = `Looking through new papers from ${p.name}…`; renderToday();
+      todayProgress = `Looking through new papers from ${p.name} (Crossref)…`; renderToday();
       for (const q of queries) {
         if (!first) await sleep(300); first = false;
         const r = await getJSON(`${CR}/works?${new URLSearchParams({ filter: `${p.filter},from-created-date:${since},type:journal-article`, 'query.bibliographic': q, rows: 40,
-          select: 'DOI,title,abstract,type,issued,published,created,container-title,author,is-referenced-by-count,URL,subject' })}`, { timeout: 25000, retries: 2 });
+          select: 'DOI,title,abstract,type,issued,published,published-online,created,container-title,author,is-referenced-by-count,URL,subject' })}`, { timeout: 25000, retries: 2 });
         if (!r.ok) { errors.push(`${p.name}: ${failText('Crossref', r)}`); break; }
         const items = (r.data.message && r.data.message.items) || [];
-        counts[p.id] = (counts[p.id] || 0) + items.length;
-        C.dedupeInto(pool, items.map((it, j) => Object.assign(C.normCrossref(it, j + 1), { pub: p.id, created: it.created && it.created['date-time'] || '' })));
+        const fresh = items.filter(it => C.crossrefRecent(it, since)); items.filter(it => !fresh.includes(it)).forEach(it => oldDois.add(it.DOI)); counts.old = oldDois.size;
+        add(fresh.map((it, j) => Object.assign(C.normCrossref(it, j + 1), { pub: p.id, created: it.created && it.created['date-time'] || '' })), 'crossref');
       }
     }
+    // OpenAlex: one keyword search over titles and abstracts for all chosen publishers, published in the window.
+    todayProgress = 'Searching abstracts of new papers (OpenAlex)…'; renderToday();
+    const phrases = [...new Set([...terms.filter(t => t.kind !== 'related'), ...terms.filter(t => t.kind === 'related')].map(t => t.text.replace(/"/g, '')))].slice(0, 24);
+    const oa = await getJSON(oaURL({ search: phrases.map(x => /\s|-/.test(x) ? `"${x}"` : x).join(' OR '), filter: `primary_location.source.host_organization_lineage:${pubs.map(p => p.oa).join('|')},from_publication_date:${since},type:article`, per_page: 100, select: OA_SELECT }));
+    if (oa.ok) { cost += (oa.data.meta && oa.data.meta.cost_usd) || 0; add((oa.data.results || []).map((r, i) => { const w = C.normOpenAlex(r, 'oa_kw', i + 1); w.pub = C.pubOfDoi(w.doi, pubs); w.created = w.date || ''; return w; }), 'openalex'); }
+    else errors.push(`OpenAlex: ${failText('OpenAlex', oa)}`);
+    // Semantic Scholar (optional): papers like your saved ones, from its pool of recent papers.
+    const seeds = S.settings.todayS2 ? [...S.saved.values()].filter(w => w.doi).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || ''))).slice(0, 10) : [];
+    if (seeds.length) {
+      todayProgress = 'Asking Semantic Scholar for papers like your saved ones…'; renderToday();
+      try {
+        const res = await fetch(`${S2}/recommendations/v1/papers?fields=title,externalIds,publicationDate,year,venue,journal,abstract,authors,citationCount,url&limit=100`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ positivePaperIds: seeds.map(w => `DOI:${w.doi}`) }) });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) errors.push(`Semantic Scholar: ${res.status === 429 ? 'busy right now (its free service is shared); try again later.' : (data && data.error) || `HTTP ${res.status}`}`);
+        else add((data.recommendedPapers || []).filter(x => x.publicationDate && x.publicationDate >= since).map((x, i) => { const w = C.normS2(x, i + 1); w.pub = C.pubOfDoi(w.doi, pubs); w.created = w.date; return w; }), 's2');
+      } catch (e) { errors.push('Semantic Scholar: could not be reached.'); }
+    }
     const seen = new Set(prev && prev.day !== localDay() ? (prev.seen || []) : (prev && prev.seenBefore) || []);
-    const ranked = C.rankToday([...pool.values()].filter(w => !seen.has(w.doi)), terms);
-    const items = ranked.slice(0, 15).map(x => Object.assign(C.slim(x.w), { pub: x.w.pub, created: x.w.created, score: Math.round(x.score * 100) / 100, hits: x.hits.slice(0, 3).map(h => h.text) }));
+    const picked = C.rankTodayV2([...pool.values()].filter(w => !seen.has(w.doi)), terms);
+    const items = picked.map(x => Object.assign(C.slim(x.w), { pub: x.w.pub, created: x.w.created, ranks: x.w.ranks, score: Math.round(x.score * 100) / 100, label: x.label,
+      hits: x.hits.slice(0, 3).map(h => h.text), via: Object.keys(x.w.ranks || {}) }));
     const seenBefore = [...seen];
-    S.today = { day: localDay(), at: new Date().toISOString(), since, sig: todaySig(), pubs: pubs.map(p => p.id), considered: pool.size, items, errors, seenBefore,
-      seen: [...new Set([...seenBefore, ...items.map(w => w.doi)])].slice(-400) };
+    S.today = { v: 3, day: localDay(), at: new Date().toISOString(), since, sig: todaySig(), pubs: pubs.map(p => p.id), considered: pool.size, counts, cost, items, errors, seenBefore, seeds: seeds.length,
+      seen: [...new Set([...seenBefore, ...items.map(w => w.doi)])].slice(-600) };
     if (!errors.length || items.length) store.set('today', S.today);
     todayBusy = false; renderToday();
   }
   // The leading number changes when the way papers are found changes, so the day's list is fetched again.
-  const todaySig = () => `2|${pubsOn().map(p => p.id).join(',')}|${C.todayQuery(todayTermsNow())}`;
+  const todaySig = () => `3|${pubsOn().map(p => p.id).join(',')}|${C.todayQuery(todayTermsNow())}|${S.settings.todayS2 ? 's2' : ''}`;
   function todayWork(w) { if (!w._prep) C.prepWork(w); return w; }
-  function sinceText(iso) {
-    const d = new Date(iso + 'T12:00:00Z'); const days = Math.round((Date.now() - d) / 864e5);
-    return days <= 1 ? 'since yesterday' : days < 7 ? `since ${d.toLocaleDateString([], { weekday: 'long' })}` : `since ${d.toLocaleDateString([], { day: 'numeric', month: 'long' })}`;
-  }
+  const VIA = { crossref: 'Crossref', oa_kw: 'OpenAlex', s2: 'Semantic Scholar' };
   function renderToday() {
     const box = $('#today'); if (!box) return;
     const terms = todayTermsNow(); const pubs = pubsOn(); const t = S.today; const related = C.todayRelated(terms);
@@ -4419,36 +4518,43 @@ fieldset.scoring .radio input { margin-top: 4px; }
         <label for="today-topics" class="small">Your topics, separated by commas</label>
         <textarea id="today-topics" rows="3" placeholder="e.g. exciton diffusion, transient absorption, perylene diimide">${esc(S.settings.todayTopics || '')}</textarea>
         ${related.length ? `<p class="tiny" id="today-related">Related wording that also counts: ${esc(related.slice(0, 10).join(', '))}${related.length > 10 ? ` and ${related.length - 10} more` : ''}.</p>` : ''}
-        <p class="tiny">${hasProfile() ? 'Your profile’s terms are used too.' : 'Tip: a profile (Profile tab, or “Bring over” above) adds your terms automatically.'} These words, and the publishers, are sent to Crossref to find new papers.</p>
+        <label class="switch small"><input type="checkbox" id="today-s2" ${S.settings.todayS2 ? 'checked' : ''}><span>Also suggest papers like my saved ones<br><span class="tiny">Sends the DOIs of your 10 most recently saved papers to Semantic Scholar, which suggests similar new papers. ${S.saved.size ? `You have ${S.saved.size} saved.` : 'Save some papers first.'}</span></span></label>
+        <p class="tiny">${hasProfile() ? 'Your profile’s terms are used too.' : 'Tip: a profile (Profile tab, or “Bring over” above) adds your terms automatically.'} Your topics and the publishers are sent to Crossref and OpenAlex to find new papers.</p>
         <button type="button" class="btn small primary" id="today-save">Save and check now</button></details>`;
     if (!terms.length) {
       box.innerHTML = `<section class="today" aria-labelledby="today-h"><h2 id="today-h">Papers of the day</h2>
         <p class="small">Tell Paperscope what you work on, and each day it picks new papers for you from ${esc(pubList)} when you open the app.</p>${settings}</section>`;
       return;
     }
-    if (todayBusy) { box.innerHTML = `<section class="today" aria-labelledby="today-h" aria-busy="true"><h2 id="today-h">Papers of the day</h2><p class="small" role="status">${esc(todayProgress || `Looking through today’s papers from ${pubList}…`)}</p></section>`; return; }
+    if (todayBusy) { box.innerHTML = `<section class="today" aria-labelledby="today-h" aria-busy="true"><h2 id="today-h">Papers of the day</h2><p class="small" role="status">${esc(todayProgress || `Looking through new papers from ${pubList}…`)}</p></section>`; return; }
     if (!t) { box.innerHTML = `<section class="today" aria-labelledby="today-h"><h2 id="today-h">Papers of the day</h2><p class="small">Not checked yet.</p><button type="button" class="btn small primary" id="today-refresh">Check now</button>${settings}</section>`; return; }
-    const shown = todayShowAll ? t.items : t.items.slice(0, 5);
+    const items = t.items || [];
+    const shown = todayShowAll ? items : items.slice(0, 5);
     const pubName = id => (C.PUBLISHERS.find(p => p.id === id) || {}).name || '';
+    const n = k => items.filter(w => (w.label || 'direct') === k).length;
+    const parts = [[n('direct'), 'on your topics'], [n('method'), 'using your methods'], [n('adjacent'), 'nearby']].filter(([k]) => k).map(([k, x]) => `${k} ${x}`);
+    const days = Math.round((Date.now() - Date.parse((t.since || localDay()) + 'T12:00:00Z')) / 864e5);
+    const src = t.counts ? `Looked at ${fmt(t.considered)} new papers: ${fmt(t.counts.crossref)} from Crossref, ${fmt(t.counts.openalex)} from OpenAlex${t.seeds ? `, ${fmt(t.counts.s2)} from Semantic Scholar` : ''}${t.counts.old ? `; ${fmt(t.counts.old)} older papers with new DOI records were left out` : ''}.` : '';
     box.innerHTML = `<section class="today" aria-labelledby="today-h">
       <div class="today-head"><h2 id="today-h">Papers of the day</h2><span class="tiny">${esc(new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' }))}</span></div>
-      <p class="small">${t.items.length ? `${t.items.length} new paper${t.items.length === 1 ? '' : 's'} matching your work, from ${fmt(t.considered)} new in ${esc(pubList)} ${sinceText(t.since)}.` : `Nothing new matching your topics in ${esc(pubList)} ${sinceText(t.since)}. Try adding topics or publishers.`}</p>
+      <p class="small">${items.length ? `${items.length} new paper${items.length === 1 ? '' : 's'} from ${esc(pubList)} in the last ${days} days${parts.length ? `: ${parts.join(', ')}` : ''}.` : `Nothing new matching your topics in ${esc(pubList)} in the last ${days} days. Try adding topics or publishers.`}</p>
+      ${src ? `<p class="tiny">${esc(src)}</p>` : ''}
       ${t.errors && t.errors.length ? `<p class="small warn-text" role="alert">${esc(t.errors.join(' '))}</p>` : ''}
-      ${t.items.length ? `<ol class="today-list">${shown.map(w => { todayWork(w); const link = primaryLink(w); const saved = S.saved.has(w.key); return `<li>
-          <p class="tj tiny">${esc(w.venue || pubName(w.pub))}</p>
+      ${items.length ? `<ol class="today-list">${shown.map(w => { todayWork(w); const link = primaryLink(w); const saved = S.saved.has(w.key); const lab = w.label || 'direct'; return `<li>
+          <p class="tj tiny"><span class="tlabel ${esc(lab)}">${esc(C.TODAY_LABELS[lab])}</span> ${esc(w.venue || pubName(w.pub))}${w.date ? ` · ${esc(new Date(w.date + 'T12:00:00Z').toLocaleDateString([], { day: 'numeric', month: 'short' }))}` : ''}</p>
           <h3>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
           <p class="byline">${esc((w.authors || []).slice(0, 3).join(', '))}${(w.authors || []).length > 3 ? ' et al.' : ''}</p>
-          ${w.hits && w.hits.length ? `<p class="tw small">Mentions ${esc(w.hits.join(', '))}${w.abstract ? '' : '. No abstract yet, so this is from the title'}.</p>` : ''}
-          <div class="actions"><button type="button" class="save" data-today-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Read it</a>` : ''}</div></li>`; }).join('')}</ol>
-        ${t.items.length > 5 ? `<button type="button" class="btn link" id="today-more">${todayShowAll ? 'Show fewer' : `Show all ${t.items.length}`}</button>` : ''}` : ''}
-      <div class="row today-btns">${t.items.length ? '<button type="button" class="btn small primary" id="today-swipe">Swipe through them</button>' : ''}<button type="button" class="btn small" id="today-refresh">Check again</button></div>
+          <p class="tw small">${w.hits && w.hits.length ? `Mentions ${esc(w.hits.join(', '))}${w.abstract ? '' : '. No abstract yet, so this is from the title'}.` : (w.via || []).includes('s2') ? 'Suggested by Semantic Scholar as similar to your saved papers; it shares none of your topic words.' : ''}</p>
+          <div class="actions"><button type="button" class="save" data-today-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Read it</a>` : ''}<span class="tiny via">Found by ${esc((w.via || []).map(v => VIA[v] || v).join(' and '))}</span></div></li>`; }).join('')}</ol>
+        ${items.length > 5 ? `<button type="button" class="btn link" id="today-more">${todayShowAll ? 'Show fewer' : `Show all ${items.length}`}</button>` : ''}` : ''}
+      <div class="row today-btns">${items.length ? '<button type="button" class="btn small primary" id="today-swipe">Swipe through them</button>' : ''}<button type="button" class="btn small" id="today-refresh">Check again</button></div>
       ${settings}</section>`;
   }
   function todayDeck() {
     const t = S.today; if (!t || !t.items.length) return;
     const pool = new Map(t.items.map(w => [w.key, todayWork(w)]));
     openDeck({ pool, keys: t.items.map(w => w.key), title: 'Papers of the day', onClose: renderToday,
-      explain: w => ({ reasons: [w.hits && w.hits.length ? { kind: 'profile', text: `Mentions ${w.hits.join(', ')}.` } : null, { kind: '', text: `New in ${w.venue || 'a journal'}${w.created ? `, ${new Date(w.created).toLocaleDateString([], { day: 'numeric', month: 'short' })}` : ''}.` }].filter(Boolean),
+      explain: w => ({ reasons: [{ kind: w.label === 'adjacent' ? 'adjacent' : 'profile', text: `${C.TODAY_LABELS[w.label || 'direct']}.` }, w.hits && w.hits.length ? { kind: 'profile', text: `Mentions ${w.hits.join(', ')}.` } : null, { kind: '', text: `New in ${w.venue || 'a journal'}${w.created ? `, ${new Date(w.created).toLocaleDateString([], { day: 'numeric', month: 'short' })}` : ''}.` }].filter(Boolean),
         evidence: w.abstract ? { text: C.splitSentences(w.abstract).slice(0, 2).join(' '), truncated: C.splitSentences(w.abstract).length > 2 } : null }) });
   }
 

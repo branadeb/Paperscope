@@ -1502,16 +1502,44 @@
   // ---------------------------------------------------------------- Lab: papers of the day
   // New papers from chosen publishers, found through Crossref (which lists papers the day their DOI is registered).
   const PUBLISHERS = [
-    { id: 'acs', name: 'ACS', full: 'American Chemical Society journals', filter: 'member:316', on: true },
-    { id: 'wiley', name: 'Wiley', full: 'Wiley journals', filter: 'member:311', on: true },
-    { id: 'nature', name: 'Nature', full: 'Nature Portfolio journals', filter: 'prefix:10.1038', on: true },
-    { id: 'science', name: 'Science', full: 'Science family (AAAS)', filter: 'member:221', on: true },
-    { id: 'rsc', name: 'RSC', full: 'Royal Society of Chemistry', filter: 'member:292', on: false },
-    { id: 'aip', name: 'AIP', full: 'AIP Publishing (J. Chem. Phys. and more)', filter: 'member:317', on: false },
-    { id: 'aps', name: 'APS', full: 'American Physical Society (Phys. Rev.)', filter: 'member:16', on: false },
-    { id: 'elsevier', name: 'Elsevier', full: 'Elsevier journals', filter: 'member:78', on: false },
-    { id: 'springer', name: 'Springer', full: 'Other Springer journals', filter: 'member:297', on: false },
+    { id: 'acs', name: 'ACS', full: 'American Chemical Society journals', filter: 'member:316', oa: 'P4310320006', prefixes: ['10.1021'], on: true },
+    { id: 'wiley', name: 'Wiley', full: 'Wiley journals', filter: 'member:311', oa: 'P4310320595', prefixes: ['10.1002', '10.1111'], on: true },
+    { id: 'nature', name: 'Nature', full: 'Nature Portfolio journals', filter: 'prefix:10.1038', oa: 'P4310319908', prefixes: ['10.1038'], on: true },
+    { id: 'science', name: 'Science', full: 'Science family (AAAS)', filter: 'member:221', oa: 'P4310315823', prefixes: ['10.1126'], on: true },
+    { id: 'rsc', name: 'RSC', full: 'Royal Society of Chemistry', filter: 'member:292', oa: 'P4310320556', prefixes: ['10.1039'], on: false },
+    { id: 'aip', name: 'AIP', full: 'AIP Publishing (J. Chem. Phys. and more)', filter: 'member:317', oa: 'P4310320061', prefixes: ['10.1063', '10.1116'], on: false },
+    { id: 'aps', name: 'APS', full: 'American Physical Society (Phys. Rev.)', filter: 'member:16', oa: 'P4310320261', prefixes: ['10.1103'], on: false },
+    { id: 'elsevier', name: 'Elsevier', full: 'Elsevier journals', filter: 'member:78', oa: 'P4310320990', prefixes: ['10.1016'], on: false },
+    { id: 'springer', name: 'Springer', full: 'Other Springer journals', filter: 'member:297', oa: 'P4310319965', prefixes: ['10.1007', '10.1186'], on: false },
   ];
+  // Which chosen publisher a DOI belongs to (by DOI prefix), or null.
+  function pubOfDoi(doi, pubs) { const pre = String(doi || '').toLowerCase().split('/')[0]; const p = pubs.find(x => x.prefixes.includes(pre)); return p ? p.id : null; }
+  // The window papers of the day look at: the last `days` days, as a UTC date.
+  function todayWindow(now = Date.now(), days = 5) { return new Date(now - days * 864e5).toISOString().slice(0, 10); }
+  // Crossref registers DOIs for old papers too (back issues, corrections to old records). A paper counts as new when it
+  // went online within a week of the window (or, with no online date, its earliest date is no older than a month).
+  function crossrefRecent(it, since) {
+    const dp = k => (it[k] && it[k]['date-parts'] && it[k]['date-parts'][0]) || null;
+    const iso = a => a.map((x, i) => (i ? String(x).padStart(2, '0') : String(x))).join('-');
+    const start = Date.parse(since + 'T00:00:00Z');
+    const on = dp('published-online');
+    if (on && on.length === 3) return Date.parse(iso(on) + 'T00:00:00Z') >= start - 7 * 864e5;
+    const pub = dp('published') || dp('issued');
+    if (!pub) return true;
+    if (pub.length === 3) return Date.parse(iso(pub) + 'T00:00:00Z') >= start - 31 * 864e5;
+    if (pub.length === 2) return Date.UTC(pub[0], pub[1], 1) >= start - 31 * 864e5; // end of that month
+    return pub[0] >= new Date(start).getUTCFullYear();
+  }
+  function normS2(p, rank) {
+    const doi = cleanDoi(p.externalIds && p.externalIds.DOI);
+    return {
+      key: '', openalexId: '', doi, title: normSpace(p.title || ''), year: p.year || (p.publicationDate ? Number(p.publicationDate.slice(0, 4)) : null), date: p.publicationDate || '',
+      authors: (p.authors || []).map(a => a.name).filter(Boolean), venue: (p.journal && p.journal.name) || p.venue || '',
+      abstract: normSpace(p.abstract || ''), abstractFrom: p.abstract ? 'Semantic Scholar' : '', oaType: '', crType: '', epmcTypes: [], isOA: false, oaStatus: '',
+      landing: doi ? `https://doi.org/${doi}` : (p.url || ''), oaUrl: '', pdf: '', oaHost: '', cites: p.citationCount || 0, pct: null, top1: false, top10: false,
+      topic: null, keywords: [], retracted: false, sources: ['Semantic Scholar'], ranks: { s2: rank },
+    };
+  }
   // Topics you type (comma or line separated) come first, then your profile's terms.
   // Papers of the day. Crossref searches titles only, and titles rarely carry an umbrella term such as "ultrafast
   // spectroscopy", so each topic also counts a few related phrasings (shown to the user). Kept small and curated.
@@ -1605,7 +1633,7 @@
     const best = (w, g) => {
       const p = todayPrep(w); let b = null;
       for (const t of groupOf.get(g)) { if (!t.sp.length) continue; const m = matchToday(p, t.sp); if (!m) continue;
-        const s = m.s * t.weight * (t.sp.length > 1 ? 1 : 0.6); if (!b || s > b.s) b = { s, text: t.text, where: m.where, of: t.of }; }
+        const s = m.s * t.weight * (t.sp.length > 1 ? 1 : 0.6); if (!b || s > b.s) b = { s, text: t.text, where: m.where, of: t.of, g, related: t.kind === 'related' }; }
       return b;
     };
     const per = new Map(list.map(w => [w, [...groupOf.keys()].map(g => [g, best(w, g)])]));
@@ -1621,6 +1649,45 @@
       .sort((a, b) => b.score - a.score || String(b.w.created || b.w.date).localeCompare(String(a.w.created || a.w.date)))
       .filter(x => { const k = normTitle(x.w.title); if (seenTitles.has(k)) return false; seenTitles.add(k); return true; });
   }
+  // Papers of the day, step 4: combine the topic score with the sources' own ranks (rank fusion), label each paper,
+  // and pick a varied list: no more than a few papers on the same topic in a row, no near-duplicate titles, at most
+  // 5 that only share your methods and 3 that are only nearby.
+  const METHOD_RE = /(spectroscop|microscop|scattering|diffraction|tomograph|imaging|simulation|molecular dynamics|density functional|\bdft\b|calculation|computation|\bnmr\b|\bepr\b|transient absorption|pump-probe|\b2d ?-?ir\b|\b2des\b|two-dimensional (electronic|infrared)|femtosecond|time-resolved|ultrafast|mass spectrometry|chromatograph|voltammetry|impedance|machine learning|crystallograph|interferometr|photoemission|calorimetr)/i;
+  const TODAY_LABELS = { direct: 'Your topic', method: 'Your method', adjacent: 'Nearby' };
+  function rankTodayV2(works, terms, { max = 15, minScore = 0.15 } = {}) {
+    const lex = rankToday(works, terms, 0);
+    const rrf = w => Object.entries(w.ranks || {}).reduce((a, [, r]) => a + 1 / (20 + r), 0);
+    const maxR = Math.max(1e-9, ...lex.map(x => rrf(x.w)));
+    const isMethod = new Map(); terms.forEach(t => { const g = t.group == null ? t.text : t.group; if (!isMethod.has(g)) isMethod.set(g, METHOD_RE.test(t.of || t.text)); });
+    const anySubject = [...isMethod.values()].some(m => !m);
+    const cands = lex.map(x => {
+      const r = rrf(x.w) / maxR;
+      let label = 'direct';
+      if (!x.hits.length) label = 'adjacent';
+      else if (anySubject && x.hits.every(h => isMethod.get(h.g))) label = 'method';
+      else if (x.hits.every(h => h.related) && x.score < 0.3) label = 'adjacent';
+      const pass = x.score >= minScore || (!x.hits.length && x.w.ranks && x.w.ranks.s2 != null);
+      return Object.assign({}, x, { rrf: r, label, final: x.score + 0.15 * r + (x.hits.length ? 0 : 0.1), pass });
+    }).filter(x => x.pass);
+    const caps = { direct: max, method: 5, adjacent: 3 }; const perLabel = {}; const perGroup = new Map(); const picked = [];
+    const left = cands.slice();
+    while (picked.length < max && left.length) {
+      let bi = -1, bv = -Infinity;
+      left.forEach((x, i) => {
+        if ((perLabel[x.label] || 0) >= caps[x.label]) return;
+        const g = x.hits[0] ? x.hits[0].g : '_';
+        const sim = picked.reduce((m, y) => Math.max(m, titleSimilarity(x.w.title, y.w.title)), 0);
+        if (sim >= 0.85) return; // the same paper under another title or DOI
+        const v = x.final - 0.06 * (perGroup.get(g) || 0) - (sim > 0.6 ? 0.3 : 0);
+        if (v > bv) { bv = v; bi = i; }
+      });
+      if (bi < 0) break;
+      const x = left.splice(bi, 1)[0]; picked.push(x);
+      perLabel[x.label] = (perLabel[x.label] || 0) + 1; const g = x.hits[0] ? x.hits[0].g : '_'; perGroup.set(g, (perGroup.get(g) || 0) + 1);
+    }
+    return picked;
+  }
+
   // ---------------------------------------------------------------- benchmark (researcher-graded searches)
   // Grades: 0 not relevant, 1 slightly, 2 relevant, 3 exactly what was asked. Ungraded papers count as 0 in nDCG
   // (the ideal ordering uses all grades given), and the share of graded papers in the top k is reported beside it.
@@ -1656,6 +1723,7 @@
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
     questStep, questSuggest, trailCode, parseTrailCode, trailStats,
     PUBLISHERS, todayTerms, todayQuery, todayQueries, todayRelated, rankToday, todaySince,
+    rankTodayV2, TODAY_LABELS, METHOD_RE, pubOfDoi, todayWindow, crossrefRecent, normS2,
     tokens, chemNorm, matchTermV2, groupStats, scoreQueryV2, nearAll, TIER_W, ndcgAt, precisionAt, judgedAt, benchMetrics, meanMetrics,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
