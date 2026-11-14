@@ -133,6 +133,7 @@
       <tbody>
         <tr><td>Your CV or statement, and the profile made from it</td><td>Nowhere. Read and stored only in this browser (stored only if you turn on “Remember”).</td></tr>
         <tr><td>Your search words, any acronym meaning you pick, the field you choose, and filters</td><td>OpenAlex (api.openalex.org), plus Crossref (api.crossref.org) and Europe PMC (ebi.ac.uk) if those sources are on.</td></tr>
+        <tr><td>Your email, only if you ask for a free OpenAlex key</td><td>OpenAlex, to create the key and email you the activation link. Kept on this device only until the key is active.</td></tr>
         <tr><td>Your OpenAlex API key, if you add one</td><td>OpenAlex only, with each request.</td></tr>
         <tr><td>Your ORCID iD, if you import from ORCID</td><td>OpenAlex, to find your publications.</td></tr>
         <tr><td>An author name, ORCID iD or DOI you search for</td><td>OpenAlex (and Crossref for a DOI that OpenAlex lacks).</td></tr>
@@ -158,11 +159,21 @@
       <label class="ap"><input type="radio" name="appearance" value="auto"><span class="ap-prev auto" aria-hidden="true"><b></b><i></i></span>Auto</label>
     </fieldset>
     <p class="tiny">Auto follows your device’s light or dark setting, like other apps.</p>
-    <div class="field">
-      <label for="api-key">OpenAlex API key (free, optional)</label>
-      <input id="api-key" type="password" autocomplete="off" placeholder="Paste key from openalex.org/settings/api">
-      <span class="tiny">Get one free at <a href="https://openalex.org/settings/api" target="_blank" rel="noopener">openalex.org/settings/api</a>. Kept in this browser only.</span>
-    </div>
+    <section class="keybox" id="key-box" aria-labelledby="key-h">
+      <h4 id="key-h">Free OpenAlex key: 10× more searches</h4>
+      <div id="key-status" role="status"></div>
+      <form id="key-form" class="add-term" novalidate>
+        <label for="key-email" class="sr-only">Your email address</label>
+        <input id="key-email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="Your email address">
+        <button class="btn small primary" type="submit">Email me a key</button>
+      </form>
+      <p class="tiny" id="key-note">Your email goes to OpenAlex only, to create the key. OpenAlex emails you a link, and the key starts working when you click it. The key is kept in this browser.</p>
+      <details class="key-own"><summary>Use a key you already have</summary>
+        <label for="api-key" class="small">OpenAlex API key</label>
+        <input id="api-key" type="password" autocomplete="off" placeholder="Paste your key">
+        <span class="tiny">Find it at <a href="https://openalex.org/settings/api-key" target="_blank" rel="noopener">openalex.org/settings/api-key</a>.</span>
+      </details>
+    </section>
     <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>

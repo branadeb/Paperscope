@@ -83,6 +83,7 @@
       try {
         const res = await fetch(url, headers ? { signal: ctl.signal, headers } : { signal: ctl.signal });
         clearTimeout(timer);
+        if (url.startsWith(OA)) noteBudget(res, url);
         if (res.status === 429 && attempt < retries) { await sleep(1300 * (attempt + 1)); continue; }
         if (!res.ok) { let body = ''; try { body = (await res.text()).slice(0, 300); } catch (e) { /* ignore */ } return { ok: false, status: res.status, error: body }; }
         return { ok: true, status: res.status, data: await res.json() };
@@ -93,6 +94,20 @@
       }
     }
     return { ok: false, status: 0, error: 'unknown' };
+  }
+  // OpenAlex reports the caller's daily allowance on every response, in credits of $0.0001.
+  function noteBudget(res, url) {
+    const lim = Number(res.headers.get('x-ratelimit-limit')), rem = Number(res.headers.get('x-ratelimit-remaining')), reset = Number(res.headers.get('x-ratelimit-reset'));
+    if (!lim || Number.isNaN(rem)) return;
+    S.budget = { limit: lim / 10000, remaining: Math.max(0, rem) / 10000, resetAt: Date.now() + (reset || 0) * 1000, keyed: /[?&]api_key=/.test(url), at: Date.now() };
+  }
+  const SEARCH_COST = 0.0025; // typical OpenAlex cost of one Paperscope search, measured
+  function budgetText(short) {
+    const b = S.budget; if (!b) return '';
+    const left = Math.floor(b.remaining / SEARCH_COST);
+    const at = new Date(b.resetAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return short ? `About ${fmt(left)} search${left === 1 ? '' : 'es'} left today${b.keyed ? '' : ' without a key'}.`
+      : `Today: $${b.remaining >= 0.1 ? b.remaining.toFixed(2) : b.remaining.toFixed(3)} of $${b.limit.toFixed(2)} left, about ${fmt(left)} searches. Resets at ${at}.`;
   }
   function oaURL(params) {
     const p = new URLSearchParams();
@@ -109,7 +124,7 @@
   }
   function addCost(r) { if (r && r.ok && r.data && r.data.meta && typeof r.data.meta.cost_usd === 'number') { S.sessionCost += r.data.meta.cost_usd; if (S.search) S.search.cost += r.data.meta.cost_usd; } }
   function failText(src, r) {
-    if (r.status === 429) return src.startsWith('OpenAlex') ? 'OpenAlex refused the request: the free daily allowance is used up or requests came too fast. It resets at midnight UTC; a free API key (About › Settings) gives 10× more.' : `${src} is limiting requests. Try again in a minute.`;
+    if (r.status === 429) return src.startsWith('OpenAlex') ? `OpenAlex refused the request: the free daily allowance is used up or requests came too fast. It resets at ${new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} (midnight UTC)${S.settings.apiKey ? '.' : '; a free key gives 10× more.'}` : `${src} is limiting requests. Try again in a minute.`;
     if (r.status === 401 || r.status === 403) return `${src} refused the request (${r.status}). If you added an API key, check it in About › Settings.`;
     if (r.status === 400) return `${src} could not read this query (400). Try simpler wording.`;
     if (r.status === 0 && navigator.onLine === false) return 'You’re offline. Saved papers and your profile still work; searching needs a connection.';
@@ -150,14 +165,14 @@
   const VIEWS = ['search', 'profile', 'saved', 'about'];
   function route() {
     const v = (location.hash || '#search').slice(1);
-    const view = v === 'install' ? 'about' : VIEWS.includes(v) ? v : 'search'; // #install: a link to share for installing the app
+    const view = v === 'install' || v === 'key' ? 'about' : VIEWS.includes(v) ? v : 'search'; // #install, #key: links into About
     VIEWS.forEach(x => { $('#view-' + x).hidden = x !== view; });
     document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.view === view ? 'page' : 'false'));
     if (view === 'saved') { renderSaved(); renderFollows(); }
     if (view === 'search') renderFollows();
     if (view === 'profile') { renderProfileEditor(); renderAI(); }
     if (view === 'about') renderAbout();
-    if (v === 'install') { renderInstall(); const h = $('#install-h'); if (h) setTimeout(() => h.scrollIntoView({ block: 'start' }), 0); return; }
+    if (v === 'install' || v === 'key') { renderInstall(); const h = $(v === 'key' ? '#key-box' : '#install-h'); if (h) setTimeout(() => h.scrollIntoView({ block: 'start' }), 0); return; }
     window.scrollTo(0, 0);
   }
 
@@ -465,9 +480,10 @@
       return `<li>${esc(x.label)}: ${fmt(x.n)} fetched${x.total != null ? ` of ${fmt(x.total)} matches` : ''}</li>`;
     });
     bits.push(`<ul class="sources">${rows.join('')}</ul>`);
-    bits.push(`<p class="tiny">${fmt(s.pool.size)} unique papers after merging ${fmt(s.dupes)} duplicates. OpenAlex cost for this search: $${s.cost.toFixed(3)} (session $${S.sessionCost.toFixed(3)}; free allowance $${S.settings.apiKey ? '1.00' : '0.10'} a day${S.settings.apiKey ? ' with your key' : ' without a key'}).${S.ai.status === 'ready' ? ' Re-ranked with the on-device model.' : ''}</p>`);
+    bits.push(`<p class="tiny">${fmt(s.pool.size)} unique papers after merging ${fmt(s.dupes)} duplicates. OpenAlex cost for this search: $${s.cost.toFixed(3)} (session $${S.sessionCost.toFixed(3)}; free allowance $${S.settings.apiKey ? '1.00' : '0.10'} a day${S.settings.apiKey ? ' with your key' : ' without a key'}). ${esc(budgetText(true))}${!S.settings.apiKey ? ' <a href="#key">Get a free key</a> for 10× more.' : ''}${S.ai.status === 'ready' ? ' Re-ranked with the on-device model.' : ''}</p>`);
     const failed = Object.values(st).filter(x => x && x.ok === false);
-    const warn = failed.length ? `<div class="panel warn" role="alert"><strong>These results are incomplete.</strong> ${failed.map(x => esc(x.msg)).join(' ')}</div>` : '';
+    const keyLink = !S.settings.apiKey && failed.some(x => /free daily allowance/.test(x.msg)) ? ' <a href="#key">Get a free key now</a>.' : '';
+    const warn = failed.length ? `<div class="panel warn" role="alert"><strong>These results are incomplete.</strong> ${[...new Set(failed.map(x => x.msg))].map(esc).join(' ')}${keyLink}</div>` : '';
     const fi = followIndex(s);
     const since = s.since ? `<div class="panel since"><strong>Papers published since ${esc(s.since)}</strong> for “${esc(s.q)}”. ${s.pool.size ? '' : 'Nothing new yet.'} <span class="tiny">Uses publication dates, so papers indexed late with older dates can be missed.</span></div>` : '';
     const follow = `<div class="row follow-row"><button type="button" class="btn small" id="follow-toggle" aria-pressed="${fi >= 0}">${fi >= 0 ? 'Following this search' : 'Follow this search'}</button><span class="tiny">${fi >= 0 ? 'Check it for new papers from the Saved tab.' : 'Keep it on this device and check later for new papers.'}</span></div>`;
@@ -633,6 +649,8 @@
       else more.push(`<span class="small muted">That is everything these sources returned for this search.</span>`);
     }
     if (s.kind === 'search' && filtersActive() && vis.length < 8 && s.ranked.length && !s.serverFilters) more.push(serverFilterButton());
+    const b = S.budget;
+    if (b && (!b.keyed || b.remaining < b.limit * 0.2)) more.push(`<p class="tiny allowance">${esc(budgetText(true))}${b.keyed ? '' : ' <a href="#key">Get a free key</a> for 10× more.'}</p>`);
     $('#more').innerHTML = more.join('');
   }
   function serverFilterButton() {
@@ -1408,6 +1426,7 @@
   function renderAbout() {
     $('#version').textContent = VERSION;
     $('#api-key').value = S.settings.apiKey || '';
+    renderKey(); if (S.settings.pendingKey) checkKey(false); else if (!S.budget || Date.now() - S.budget.at > 60000) refreshBudget();
     $('#set-semantic').checked = S.settings.semantic; $('#set-crossref').checked = S.settings.crossref; $('#set-epmc').checked = S.settings.epmc;
     $('#llm-provider').value = S.settings.llmProvider; $('#llm-key').value = S.settings.llmKey || ''; $('#llm-model').value = S.settings.llmModel || '';
     $('#llm-base').value = S.settings.llmBase || ''; $('#llm-consent').checked = !!S.settings.llmConsent;
@@ -1478,6 +1497,10 @@
     }
     if (t.id === 'home-link') { goHome(); return; }
     if (t.id === 'install-btn' || t.id === 'install-btn2') { promptInstall(); return; }
+    if (t.id === 'key-check') { checkKey(true); return; }
+    if (t.id === 'key-cancel') { S.settings.pendingKey = null; saveSettings(); keyMsg = null; renderKey(); return; }
+    if (t.id === 'key-remove') { S.settings.apiKey = ''; saveSettings(); S.budget = null; keyMsg = { text: 'Key removed from this browser. You can paste it again any time.' }; renderKey(); refreshBudget(); return; }
+    if (t.id === 'key-copy') { copyText(S.settings.apiKey, 'Key'); return; }
     if (t.id === 'install-dismiss') { store.set('installHintDismissed', true); renderInstall(); return; }
     if (d.pathway && t.closest('.pathways')) {
       S.pathway = d.pathway; store.set('pathway', S.pathway); renderPathway(); $('#q').focus(); return;
@@ -1585,6 +1608,7 @@
   document.addEventListener('submit', e => {
     e.preventDefault();
     const f = e.target;
+    if (f.id === 'key-form') { requestKey($('#key-email').value); return; }
     if (f.id === 'search-form') {
       const q = $('#q').value.trim(); $('#q').blur();
       if (!q) return;
@@ -1607,7 +1631,7 @@
     if (t.id === 'cv-file' && t.files[0]) readFile(t.files[0]);
     if (t.name === 'appearance') { applyAppearance(t.value); return; }
     if (t.id === 'remember') { S.settings.rememberProfile = t.checked; saveSettings(); persistProfile(); toast(t.checked ? 'Profile will be remembered on this device' : 'Profile removed from this device’s storage'); }
-    if (t.id === 'api-key') { S.settings.apiKey = t.value.trim(); saveSettings(); toast(S.settings.apiKey ? 'API key saved in this browser' : 'API key removed'); }
+    if (t.id === 'api-key') { S.settings.apiKey = t.value.trim(); if (S.settings.apiKey) S.settings.pendingKey = null; saveSettings(); S.budget = null; keyMsg = null; toast(S.settings.apiKey ? 'API key saved in this browser' : 'API key removed'); refreshBudget(); }
     if (t.id === 'set-semantic') { S.settings.semantic = t.checked; saveSettings(); }
     if (t.id === 'set-crossref') { S.settings.crossref = t.checked; saveSettings(); }
     if (t.id === 'set-epmc') { S.settings.epmc = t.checked; saveSettings(); }
@@ -1633,6 +1657,90 @@
   ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) readFile(f); });
   window.addEventListener('hashchange', route);
+
+  // ---------------------------------------------------------------- free OpenAlex key, requested from inside the app
+  // OpenAlex creates a key for an email address and emails an activation link; the key works once the link is clicked.
+  const PROBE = `${OA}/works/W2741809807?select=id`; // a single-record lookup: free, and it tells whether a key is active
+  let keyMsg = null; let checking = false; let lastCheck = 0;
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'p-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
+  async function requestKey(email) {
+    email = String(email || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { keyMsg = { warn: true, text: 'That doesn’t look like an email address. Check for typos.' }; renderKey(); return; }
+    const pend = S.settings.pendingKey && S.settings.pendingKey.email === email ? S.settings.pendingKey : null;
+    const idem = pend ? pend.idem : uuid();
+    keyMsg = { text: 'Asking OpenAlex for a key…' }; renderKey();
+    let res, body = {};
+    try {
+      res = await fetch(`${OA}/api-keys`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idem }, body: JSON.stringify({ email, agent: 'Paperscope (https://branadeb.github.io/Paperscope/)' }) });
+      try { body = await res.json(); } catch (e) { /* no body */ }
+    } catch (e) {
+      keyMsg = { warn: true, text: navigator.onLine === false ? 'You’re offline. Try again when you’re connected.' : 'OpenAlex could not be reached. Try again in a moment.' }; renderKey(); return;
+    }
+    const code = body.code || body.error || '';
+    if (res.status === 201 && body.api_key) {
+      S.settings.pendingKey = { key: body.api_key, email, idem, at: Date.now() };
+      saveSettings(); keyMsg = null; renderKey(); return;
+    }
+    if (res.status === 409 && /account_exists/.test(JSON.stringify(body))) {
+      keyMsg = { warn: true, text: 'This address already has an OpenAlex account with a key. Sign in at openalex.org, copy the key from Settings › API key, and paste it under “Use a key you already have”.', own: true };
+    } else if (res.status === 409) {
+      keyMsg = pend ? null : { warn: true, text: 'A key for this address is already waiting. Click the link in OpenAlex’s email “Activate your OpenAlex API key” (check spam). If you asked on another device, finish there.' };
+    } else if (res.status === 400) {
+      keyMsg = { warn: true, text: body.message || 'OpenAlex says that address is not valid. Use your real email address.' };
+    } else if (res.status === 429) {
+      keyMsg = { warn: true, text: 'OpenAlex has given out as many keys to this network or email domain as it allows today. Try tomorrow, or sign up at openalex.org/signup and paste your key below.', own: true };
+    } else {
+      keyMsg = { warn: true, text: `OpenAlex could not create a key (${res.status}${code ? ', ' + code : ''}). Try again later, or sign up at openalex.org/signup.` };
+    }
+    renderKey();
+  }
+  // Is the pending key active yet? Once it is, Paperscope starts using it.
+  async function checkKey(force) {
+    const pend = S.settings.pendingKey; if (!pend || checking) return;
+    if (!force && Date.now() - lastCheck < 15000) return;
+    checking = true; lastCheck = Date.now();
+    try {
+      const res = await fetch(`${PROBE}&api_key=${encodeURIComponent(pend.key)}`);
+      if (res.ok) {
+        noteBudget(res, `?api_key=${pend.key}`);
+        S.settings.apiKey = pend.key; S.settings.pendingKey = null; saveSettings();
+        keyMsg = null; toast('Your free OpenAlex key is active');
+      } else if (res.status === 401) {
+        S.settings.pendingKey = null; saveSettings();
+        keyMsg = { warn: true, text: 'OpenAlex no longer recognises that key (it may have been revoked or expired). Ask for a new one.' };
+      } else if (force) keyMsg = { text: 'Not active yet. Click the link in the email from OpenAlex, then check again.' };
+    } catch (e) { if (force) keyMsg = { warn: true, text: 'Could not reach OpenAlex to check. Try again in a moment.' }; }
+    checking = false; renderKey();
+  }
+  async function refreshBudget() {
+    const k = S.settings.apiKey;
+    try { const res = await fetch(k ? `${PROBE}&api_key=${encodeURIComponent(k)}` : PROBE); if (res.ok || res.status === 429) noteBudget(res, k ? '?api_key=1' : ''); } catch (e) { /* ignore */ }
+    renderKey();
+  }
+  function renderKey() {
+    const box = $('#key-status'); if (!box) return;
+    const st = S.settings; const pend = st.pendingKey;
+    const form = $('#key-form'), note = $('#key-note');
+    let html = '';
+    if (st.apiKey) {
+      html = `<p class="small"><strong>Your free key is active:</strong> $1 a day of OpenAlex use, about 300–500 searches.${S.budget && S.budget.keyed ? ` ${esc(budgetText(false))}` : ''}</p>
+        <div class="row"><button type="button" class="btn small" id="key-copy">Copy key</button><button type="button" class="btn small quiet" id="key-remove">Remove key</button></div>
+        <p class="tiny">To use it on another phone or computer, copy it here and paste it there under “Use a key you already have”.</p>`;
+    } else if (pend) {
+      html = `<div class="key-pending"><p class="small"><strong>Check your email.</strong> OpenAlex sent “Activate your OpenAlex API key” to <strong>${esc(pend.email)}</strong>. Click the link in it (look in spam too), then come back: Paperscope switches to the key by itself.</p>
+        <div class="row"><button type="button" class="btn small primary" id="key-check">I clicked the link</button><button type="button" class="btn small quiet" id="key-cancel">Cancel</button></div>
+        <p class="tiny">The link works for 7 days. Until then Paperscope keeps using the no-key allowance.</p></div>`;
+    } else {
+      html = `<p class="small">Without a key you get about $0.10 of OpenAlex use a day, roughly 30–50 searches${S.budget && !S.budget.keyed ? `. ${esc(budgetText(false))}` : '.'} A free key gives 10× that, just for you.</p>`;
+    }
+    if (keyMsg) html += `<p class="small ${keyMsg.warn ? 'key-warn' : ''}">${esc(keyMsg.text)}</p>`;
+    box.innerHTML = html;
+    const showForm = !st.apiKey && !pend;
+    form.hidden = !showForm; note.hidden = !showForm;
+    const own = $('.key-own'); if (own) { own.hidden = !!st.apiKey; if (keyMsg && keyMsg.own) own.open = true; }
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && S.settings.pendingKey) checkKey(false); });
+  window.addEventListener('focus', () => { if (S.settings.pendingKey) checkKey(false); });
 
   // ---------------------------------------------------------------- install as an app (progressive web app)
   let installEvent = null;
@@ -1683,6 +1791,7 @@
 
   // ---------------------------------------------------------------- init
   updateSavedCount(); renderModes(); route(); renderFollows(); renderAppearance(); renderInstall();
+  if (S.settings.pendingKey) checkKey(true);
   if (S.settings.ai) loadAI(true);
   window.Paperscope = { S, runSearch, version: VERSION }; // for debugging and tests
 })();

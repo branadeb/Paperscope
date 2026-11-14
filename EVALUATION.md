@@ -189,3 +189,28 @@ Every screen was screenshotted at 320×640, 375×812 and 430×932 in light and d
 - A shareable link, `#install`, opens the install steps.
 
 All suites pass after the changes: 43, 32, 93 and 27 browser checks and 49 unit tests.
+
+## Free OpenAlex key from inside the app (14 November 2026)
+
+OpenAlex offers an endpoint for requesting a free key on a user's behalf: `POST https://api.openalex.org/api-keys` with `{"email": ...}`. It returns the key, emails an activation link, and the key works once the link is clicked (`403 key_not_activated` until then). These were checked live from the Paperscope page in a browser:
+
+- The endpoint accepts requests from the page (a malformed address got a readable `400` with OpenAlex's message).
+- `GET /api-keys` returns the instructions.
+- `X-RateLimit-Limit`, `-Remaining` and `-Reset` are readable from JavaScript. The keyless limit read `1000` credits, which is $0.10 at $0.0001 a credit.
+
+Paperscope now has an email field under About › Settings (link: `#key`). It also shows how much of the day's allowance is left, under the results and in Settings. When OpenAlex refuses, a "Get a free key now" link appears in the warning.
+
+**Tested** (`test/key.test.cjs`, 26/26, OpenAlex mocked):
+
+- Allowance shown with and without a key.
+- A typo is caught before anything is sent.
+- The placeholder address, existing account, pending activation and too-many-keys cases each get the right message.
+- The request carries only the email and the app's name, with an idempotency key.
+- A pending key is not used. It activates when the user returns to the app, or on reopening it.
+- The email is not kept after activation.
+- Searches then send the key.
+- Keys can be removed or pasted.
+- The out-of-allowance warning gives the local reset time and a link to a key.
+- No WCAG 2 A/AA violations.
+
+**Not tested live:** an actual key request with a real address and its activation. That needs a real person's email and inbox.
