@@ -19,6 +19,17 @@ It is a progressive web app: install it from the browser and it gets its own ico
 
 App-store versions are not needed and are not planned. For reference, they would need developer accounts (Google Play $25 once, Apple $99 a year; check the Microsoft Store's current terms). Google Play and the Microsoft Store accept a packaged web app (PWABuilder or Bubblewrap); Apple generally rejects apps that only wrap a website (guideline 4.2), so an iOS store version would need native features first.
 
+## Paperscope Lab (experiments)
+
+**https://branadeb.github.io/Paperscope/lab/** is a copy of the app for trying new ideas before they reach the main app. It keeps its own saved papers, profile, settings and offline copy: storage keys start `paperscope-lab.`, its cache is named `pslab-…`, and its service worker covers only `/lab/`. A button on its start screen copies saved papers, a remembered profile and an OpenAlex key from the main app; that copy only reads from the main app and never changes it.
+
+Experiments in the Lab now:
+
+- **Swipe to sort.** From any results list, sort papers one card at a time. Swipe right (or →) to keep, left (←) to skip, up (↑) for a read-later list; buttons do the same, and Undo takes back the last choice. Papers you keep or put aside nudge later searches a little (at most ±0.08 on the ranking score) towards papers with the same words. Profile shows the words it learned, and they can be forgotten in one tap. Respects reduced-motion settings.
+- **Your sky.** The Saved view draws saved papers as stars, with fields as constellations. Brighter stars are more cited, read-later papers are faint, and new ones pulse. Tap a star for its paper. The sky can be saved as a PNG.
+
+Build it with `node tools/build.mjs lab/src dist/lab`; the source is in `lab/src`. Tests: `test/lab.test.cjs` and `test/lab-core.test.cjs`.
+
 ## Running it
 
 Paperscope has to be served from an ordinary web address, because it calls the database APIs directly from your browser.

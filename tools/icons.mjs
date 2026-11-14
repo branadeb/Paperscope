@@ -4,12 +4,15 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const puppeteer = require('/home/claude/vendor/node_modules/puppeteer-core');
-const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'pwa', 'icons');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const out = join(ROOT, process.argv[2] || 'src/pwa/icons'); // node tools/icons.mjs lab/src/pwa/icons lab
+const LAB = process.argv[3] === 'lab';
+const SKY = LAB ? ['#3a2163', '#24143f', '#140b26'] : ['#1c2b5e', '#111c42', '#0a1129'];
 
 // The Paperscope mark (teal and amber rings, a bright core) on the night sky used in the app's header.
 const art = ({ rounded, scale = 1 }) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <radialGradient id="sky" cx="50%" cy="42%" r="70%"><stop offset="0" stop-color="#1c2b5e"/><stop offset=".55" stop-color="#111c42"/><stop offset="1" stop-color="#0a1129"/></radialGradient>
+    <radialGradient id="sky" cx="50%" cy="42%" r="70%"><stop offset="0" stop-color="${SKY[0]}"/><stop offset=".55" stop-color="${SKY[1]}"/><stop offset="1" stop-color="${SKY[2]}"/></radialGradient>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#f0ac4b" stop-opacity=".14"/><stop offset="1" stop-color="#f0ac4b" stop-opacity="0"/></radialGradient>
     <clipPath id="tile"><rect width="512" height="512" rx="${rounded ? 112 : 0}"/></clipPath>
   </defs>

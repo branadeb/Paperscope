@@ -2,7 +2,7 @@
 'use strict';
 const http = require('http'); const fs = require('fs'); const path = require('path');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.json': 'application/json' };
-module.exports = function serve(port, root = path.join(__dirname, '..', 'dist')) {
+module.exports = function serve(port, root = path.join(__dirname, '..', process.env.PS_ROOT || 'dist')) {
   return http.createServer((req, res) => {
     let p = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     if (p.endsWith('/')) p += 'index.html';

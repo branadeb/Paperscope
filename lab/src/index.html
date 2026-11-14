@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#1d1233">
+<script>try{var a=JSON.parse(localStorage.getItem('paperscope-lab.appearance')||'"auto"');if(a==='light'||a==='dark')document.documentElement.setAttribute('data-appearance',a);}catch(e){}</script>
+<meta name="description" content="Free research discovery: search OpenAlex, Crossref and Europe PMC, ranked against your own research profile, which never leaves your device.">
+<title>Paperscope Lab: experimental copy</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='none' stroke='%230b7480' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='7.5' fill='none' stroke='%23c47f12' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%230c1430'/%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="PS Lab">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>/*@@CSS@@*/</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <a class="brand" href="#search" id="home-link" aria-label="Paperscope Lab, back to the start">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="#4fc8d2" stroke-width="2.4"/><circle cx="16" cy="16" r="7.5" fill="none" stroke="#f0ac4b" stroke-width="2.4"/><circle cx="16" cy="16" r="3" fill="#eef2ff"/></svg>
+      <span>Paperscope <span class="lab-chip">Lab</span></span>
+    </a>
+    <button type="button" class="icon-btn" id="appearance-btn" aria-label="Appearance: Auto. Tap to change."></button>
+  </div>
+</header>
+<div class="tabbar">
+  <nav class="tabs" aria-label="Sections">
+    <a href="#search" data-view="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Search</span></a>
+    <a href="#profile" data-view="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.8 4-5.6 7.5-5.6s6.3 1.8 7.5 5.6"/></svg><span>Profile</span></a>
+    <a href="#saved" data-view="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.8h11v16.7l-5.5-3.9-5.5 3.9z"/></svg><span>Saved <span class="count" id="saved-count"></span></span></a>
+    <a href="#about" data-view="about"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.1"/></svg><span>About</span></a>
+  </nav>
+</div>
+
+<main>
+  <!-- SEARCH -->
+  <section id="view-search" aria-labelledby="search-h">
+    <div class="hero" id="hero">
+    <svg class="hero-rings" viewBox="0 0 200 200" aria-hidden="true"><circle class="r" cx="100" cy="100" r="96"/><circle class="r" cx="100" cy="100" r="70"/><circle class="r" cx="100" cy="100" r="44"/><circle class="r" cx="100" cy="100" r="18"/><circle class="o1" cx="44" cy="141" r="4.5"/><circle class="o2" cx="181" cy="58" r="3.5"/><circle class="o1" cx="118" cy="57" r="2.5"/></svg>
+    <h1 id="search-h" class="hero-title">Find the papers that matter to your work.</h1>
+    <p class="hero-lede" id="hero-lede">Search open scholarly databases and see, for each paper, why it may matter to you.</p>
+    <div class="pathways" role="radiogroup" aria-label="Search by">
+      <button type="button" role="radio" data-pathway="topic" aria-checked="true">Topics</button>
+      <button type="button" role="radio" data-pathway="author" aria-checked="false">Authors</button>
+    </div>
+    <form id="search-form" class="searchbar" role="search">
+      <label for="q" class="sr-only">Search terms, research question or DOI</label>
+      <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Topic, question or DOI">
+      <button class="btn primary" type="submit">Search</button>
+    </form>
+    <p class="profile-line" id="profile-line"></p>
+    <div class="modes" role="radiogroup" aria-label="Which papers to favour" id="modes">
+      <button type="button" role="radio" data-mode="close" aria-checked="false">Close to my work</button>
+      <button type="button" role="radio" data-mode="all" aria-checked="true">Everything</button>
+      <button type="button" role="radio" data-mode="adjacent" aria-checked="false">Adjacent &amp; emerging</button>
+    </div>
+    <p class="mode-hint" id="mode-hint"></p>
+    </div>
+
+    <div id="start">
+      <div class="lab-note" role="note">
+        <p><strong>You’re in Paperscope Lab</strong>, a copy for trying new ideas: swipe through results, and see your saved papers as a night sky. It keeps its own saved papers and settings, separate from <a href="../">the main app</a>.</p>
+        <div class="row"><button type="button" class="btn small" id="lab-import">Bring over my saved papers and profile</button></div>
+      </div>
+      <div id="install-hint"></div>
+      <div id="follows-start"></div>
+      <h2 class="start-h">Try a search</h2>
+      <p class="muted small">Add a profile first for personalised ranking, or tap an example:</p>
+      <ul class="examples" id="examples">
+        <li><button type="button">exciton migration in molecular crystals</button></li>
+        <li><button type="button">coherence</button></li>
+        <li><button type="button">How do ion channels drive confined cancer cell migration?</button></li>
+        <li><button type="button">MD simulations of polymer electrolytes</button></li>
+      </ul>
+      <h2 class="start-h">Or look up a researcher</h2>
+      <p class="muted small">See everything an author has published, grouped by field. You can also tap any author’s name on a result.</p>
+      <ul class="examples authors-ex">
+        <li><button type="button" data-author-example="Jennifer Doudna">Jennifer Doudna</button></li>
+        <li><button type="button" data-author-example="Frances Arnold">Frances Arnold</button></li>
+      </ul>
+    </div>
+
+    <div id="clarify"></div>
+    <div id="interp"></div>
+    <div id="map-holder"></div>
+    <div id="answer-holder"></div>
+    <div id="filterbar"></div>
+    <div id="loading" class="loading" hidden><span class="spinner" aria-hidden="true"></span><span id="loading-text">Searching…</span></div>
+    <ol class="results" id="results" aria-live="polite"></ol>
+    <div class="more" id="more"></div>
+    <div id="compare-holder"></div>
+  </section>
+
+  <!-- PROFILE -->
+  <section id="view-profile" aria-labelledby="profile-h" hidden>
+    <h2 id="profile-h">Your research profile</h2>
+    <p class="lede">Upload a CV or paste a research statement. Paperscope reads it in this browser and lists your interests, methods and areas. Nothing from it is uploaded.</p>
+    <h3>Import from ORCID</h3>
+    <p class="small muted">Builds your profile from your publications in OpenAlex. Your ORCID iD is sent to OpenAlex; your publications are public there already.</p>
+    <form id="orcid-form" class="add-term"><label for="orcid" class="sr-only">ORCID iD</label><input id="orcid" autocomplete="off" inputmode="text" placeholder="0000-0002-1825-0097"><button class="btn small primary" type="submit">Import</button></form>
+    <p id="orcid-status" class="small muted" role="status"></p>
+    <h3>Or use a CV or research statement</h3>
+    <div class="drop" id="drop">
+      <p><label class="btn" for="cv-file">Choose a file</label> <span class="muted small">or drop it here: PDF, Word (.docx) or plain text</span></p>
+      <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" class="sr-only">
+      <p class="tiny" id="file-note">Opening a PDF or Word file downloads a free reader library (pdf.js or mammoth.js, about 1 MB) from jsDelivr. Your file itself stays on this device.</p>
+    </div>
+    <p class="muted small" style="margin-top:14px">Or paste text:</p>
+    <label for="cv-text" class="sr-only">CV or research statement text</label>
+    <textarea id="cv-text" placeholder="Paste a CV, research statement or a few sentences about your work"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn primary" id="read-text" type="button">Read profile</button><span id="parse-status" class="small muted" role="status"></span></div>
+    <div id="profile-editor"></div>
+    <div id="taste-box"></div>
+
+    <h2>On-device relevance model <span class="tiny">(optional)</span></h2>
+    <div class="panel" id="ai-panel"></div>
+  </section>
+
+  <!-- SAVED -->
+  <section id="view-saved" aria-labelledby="saved-h" hidden>
+    <h2 id="saved-h">Saved papers</h2>
+    <div id="saved-body"></div>
+    <div id="follows-saved"></div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="view-about" aria-labelledby="about-h" hidden>
+    <h2 id="about-h">About Paperscope</h2>
+    <p>Paperscope searches free scholarly databases, merges the results and ranks them against your query and, if you add one, your research profile. It is not Google Scholar and does not search the same sources or reproduce its ranking. It is free to use and needs no paid AI service.</p>
+
+    <h3>What leaves your device</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Information</th><th>Sent to</th></tr></thead>
+      <tbody>
+        <tr><td>Your CV or statement, and the profile made from it</td><td>Nowhere. Read and stored only in this browser (stored only if you turn on “Remember”).</td></tr>
+        <tr><td>Your search words, any acronym meaning you pick, the field you choose, and filters</td><td>OpenAlex (api.openalex.org), plus Crossref (api.crossref.org) and Europe PMC (ebi.ac.uk) if those sources are on.</td></tr>
+        <tr><td>Your email, only if you ask for a free OpenAlex key</td><td>OpenAlex, to create the key and email you the activation link. Kept on this device only until the key is active.</td></tr>
+        <tr><td>Your OpenAlex API key, if you add one</td><td>OpenAlex only, with each request.</td></tr>
+        <tr><td>Your ORCID iD, if you import from ORCID</td><td>OpenAlex, to find your publications.</td></tr>
+        <tr><td>An author name, ORCID iD or DOI you search for</td><td>OpenAlex (and Crossref for a DOI that OpenAlex lacks).</td></tr>
+        <tr><td>The ORCID iD of an author you open (to check their papers)</td><td>ORCID, to read that person’s public record; Crossref, to find papers tagged with the iD; OpenAlex, to fetch the papers it lists.</td></tr>
+        <tr><td>For “Write a short answer” (off unless you set it up): your search and the titles and abstracts of the top papers</td><td>The AI provider you choose, with your own key, billed to you. Never your CV or profile.</td></tr>
+        <tr><td>Followed searches</td><td>Nowhere. Kept in this browser; checking one runs a normal search.</td></tr>
+        <tr><td>Titles you paste into “Compare with Google Scholar”</td><td>Nowhere, unless you tap “Check OpenAlex”; then the missing titles go to OpenAlex.</td></tr>
+        <tr><td>Saved papers</td><td>Nowhere. Kept in this browser.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted">Code libraries are downloaded only when needed: pdf.js or mammoth.js from jsDelivr when you open a PDF or Word file, and the optional relevance model from jsDelivr and Hugging Face. These downloads do not include your data. Each service sees your IP address, as with any website.</p>
+
+    <h3>Cost and limits</h3>
+    <p class="small">Paperscope has no server: your browser asks the databases directly, so everyone gets their own free allowance and one person’s searching never uses up anyone else’s. OpenAlex meters its free API in dollars: without a key you get about $0.10 of free use a day, with a free key $1 a day. A search here usually uses $0.002–0.003, so that is roughly <strong>30–50 searches a day without a key, or 300–500 with one</strong>; looking up an author uses about the same, and browsing citations or loading more results uses a little more. Paperscope shows what each search used. Without a key the allowance appears to be per network address, so people on the same campus or office network may share it; a free key avoids that. When the allowance runs out, OpenAlex refuses requests until midnight UTC; Paperscope keeps searching Crossref and Europe PMC and marks the results as incomplete. Nobody is billed unless they have bought prepaid credit on openalex.org. Crossref, Europe PMC and ORCID are free and need no key, but may slow down very busy users.</p>
+
+    <h3 id="install-h">Install as an app</h3>
+    <div id="install-panel"></div>
+
+    <h3>Settings</h3>
+    <fieldset class="appearance" id="appearance-picker"><legend>Appearance</legend>
+      <label class="ap"><input type="radio" name="appearance" value="light"><span class="ap-prev light" aria-hidden="true"><b></b><i></i></span>Light</label>
+      <label class="ap"><input type="radio" name="appearance" value="dark"><span class="ap-prev dark" aria-hidden="true"><b></b><i></i></span>Dark</label>
+      <label class="ap"><input type="radio" name="appearance" value="auto"><span class="ap-prev auto" aria-hidden="true"><b></b><i></i></span>Auto</label>
+    </fieldset>
+    <p class="tiny">Auto follows your device’s light or dark setting, like other apps.</p>
+    <section class="keybox" id="key-box" aria-labelledby="key-h">
+      <h4 id="key-h">Free OpenAlex key: 10× more searches</h4>
+      <div id="key-status" role="status"></div>
+      <form id="key-form" class="add-term" novalidate>
+        <label for="key-email" class="sr-only">Your email address</label>
+        <input id="key-email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="Your email address">
+        <button class="btn small primary" type="submit">Email me a key</button>
+      </form>
+      <p class="tiny" id="key-note">Your email goes to OpenAlex only, to create the key. OpenAlex emails you a link, and the key starts working when you click it. The key is kept in this browser.</p>
+      <details class="key-own"><summary>Use a key you already have</summary>
+        <label for="api-key" class="small">OpenAlex API key</label>
+        <input id="api-key" type="password" autocomplete="off" placeholder="Paste your key">
+        <span class="tiny">Find it at <a href="https://openalex.org/settings/api-key" target="_blank" rel="noopener">openalex.org/settings/api-key</a>.</span>
+      </details>
+    </section>
+    <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
+    <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
+    <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>
+
+    <h3>AI answers (optional)</h3>
+    <p class="small">Paperscope can ask an AI model to write a short answer to your search from the abstracts of the top papers, citing each one. It uses your own account with the provider, which bills you directly; Paperscope adds no charge. Your key is kept in this browser only.</p>
+    <div class="field"><label for="llm-provider">Provider</label>
+      <select id="llm-provider"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI-compatible service or local model</option></select></div>
+    <div class="field"><label for="llm-key">API key</label><input id="llm-key" type="password" autocomplete="off" placeholder="Your own key (optional for a local model)"></div>
+    <div class="field"><label for="llm-model">Model</label><input id="llm-model" type="text" autocomplete="off" placeholder="Model name from your provider"></div>
+    <div class="field" id="llm-base-field"><label for="llm-base">Service address</label><input id="llm-base" type="text" autocomplete="off" placeholder="https://api.openai.com/v1 or http://localhost:11434/v1">
+      <span class="tiny">Any service with an OpenAI-style /chat/completions endpoint. A model running on your own computer costs nothing, but it must allow requests from this page.</span></div>
+    <label class="switch"><input type="checkbox" id="llm-consent"><span>I understand each answer sends my search and the top abstracts to this provider and may be billed to my account.</span></label>
+
+    <h3>Feature status</h3>
+    <div class="table-wrap"><table id="feature-table">
+      <thead><tr><th>Feature</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+
+    <h3>Known limitations</h3>
+    <ul class="small" id="limits"></ul>
+
+    <h3>Credits</h3>
+    <p class="small muted">Metadata from <a href="https://openalex.org" target="_blank" rel="noopener">OpenAlex</a> (CC0), <a href="https://www.crossref.org" target="_blank" rel="noopener">Crossref</a> and <a href="https://europepmc.org" target="_blank" rel="noopener">Europe PMC</a>. Optional model: all-MiniLM-L6-v2 (Apache 2.0) run with Transformers.js and ONNX Runtime Web. PDF reading by pdf.js; Word reading by mammoth.js. Typeface: Spectral by Production Type (SIL Open Font License), built into the page. Version <span id="version"></span>.</p>
+  </section>
+</main>
+
+<div id="sheet-root"></div>
+<div id="deck" class="deck" role="dialog" aria-modal="true" aria-labelledby="deck-h" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script>/*@@CORE@@*/</script>
+<script>/*@@APP@@*/</script>
+</body>
+</html>

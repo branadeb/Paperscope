@@ -214,3 +214,23 @@ Paperscope now has an email field under About › Settings (link: `#key`). It al
 - No WCAG 2 A/AA violations.
 
 **Not tested live:** an actual key request with a real address and its activation. That needs a real person's email and inbox.
+
+## Paperscope Lab: swipe to sort and your sky (14 November 2026)
+
+The Lab at `/lab/` is a copy of the main app with its own storage, cache and service worker. The main app's service worker now ignores pages other than its own, so visiting the Lab can never replace the main app's offline copy (tested).
+
+**Tested** (`test/lab.test.cjs`, 41/41, and `test/lab-core.test.cjs`, 6/6, APIs mocked, phone viewport):
+
+- *Isolation:* the Lab starts empty. "Bring over" copies the main app's saved papers without changing them. After using the Lab, the main app still has its own papers, no Lab features, and its own offline copy.
+- *Swipe to sort:*
+  - The deck skips papers already saved, and focus starts on Keep.
+  - The keys → ↑ ← and z (undo) work, and so do drags right, left and up; a short drag snaps back and does nothing.
+  - The buttons work, the end screen gives totals, and Escape closes the deck.
+  - It works with reduced motion. The list just sorted keeps its order, and the next search leans towards kept papers, marked "Like papers you kept while swiping".
+- *Your sky:*
+  - One star per saved paper and a faint one per read-later paper, with new stars marked.
+  - Constellations are labelled by field. Layouts are identical whatever order the papers come in, and stars always stay inside the frame.
+  - Tapping or pressing Enter on a star shows its paper, "Keep it" turns a faint star bright, and the PNG export works.
+- *Taste:* Profile lists the learned words, and they can be forgotten.
+- axe-core found no WCAG 2 A/AA violations on the deck or the sky, in light or dark.
+- All main-app suites still pass: 43, 32, 93, 26 and 27 browser checks, and 49 unit tests.

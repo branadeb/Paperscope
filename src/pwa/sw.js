@@ -17,6 +17,8 @@ self.addEventListener('fetch', event => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // other sites: untouched
+  const root = new URL('./', self.registration.scope).pathname;
+  if (req.mode === 'navigate' && url.pathname !== root && url.pathname !== root + 'index.html') return; // other pages here (e.g. /lab/) look after themselves
   if (req.mode === 'navigate') {
     // The page itself: newest from the network when online, the stored copy when offline.
     event.respondWith(fetch(req).then(res => {
