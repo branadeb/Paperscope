@@ -68,7 +68,7 @@ function route(req) {
   let ts = await titles(); t = await today();
   check('papers matching your topics are listed, best first', ts[0] === 'Exciton diffusion in perylene diimide crystals' && ts.length === 3 && ts.includes('Long-range exciton diffusion in molecular crystals') && ts.includes('Transient absorption of singlet fission in organic semiconductors'), ts.join(' | '));
   check('corrections and unrelated papers are left out', !ts.some(x => /Correction|rivers|Battery|bird/.test(x)));
-  check('it says what was searched and why each paper is there', /3 new papers matching your work, from \d+ new in ACS, Wiley, Nature and Science since/.test(t) && /Mentions exciton diffusion, perylene diimide, transient absorption\./.test(t), t.slice(0, 260));
+  check('it says what was searched and why each paper is there', /3 new papers matching your work, from \d+ new in ACS, Wiley, Nature and Science since/.test(t) && /Mentions [^.]*exciton diffusion/.test(t) && /Mentions [^.]*perylene diimide/.test(t), t.slice(0, 260));
   check('a paper without an abstract says so', /No abstract yet, so this is from the title/.test(t));
   check('journal names are clean', !/&amp;/.test(t));
   check('papers of the day: no WCAG A/AA violations (light)', (await axe()).length === 0, (await axe()).join(' | '));

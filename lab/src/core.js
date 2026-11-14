@@ -1440,11 +1440,20 @@
   }
   function todayQuery(terms, max = 14) { return terms.slice(0, max).map(t => t.text).join(' '); }
   const NOT_PAPER = /^(correction|corrigendum|erratum|retraction|retracted article|expression of concern|issue information|masthead|(front|back|inside) cover|cover (picture|image|feature|story|art)|table of contents|graphical abstract|editorial board|in this issue|this week in|news in brief|research highlights?)\b/i;
-  function rankToday(works, terms) {
-    return works.filter(w => w.title && !NOT_PAPER.test(w.title))
-      .map(w => { const r = scoreProfile(w, terms); return { w, score: r.score, hits: r.hits }; })
-      .filter(x => x.score > 0)
-      .sort((a, b) => b.score - a.score || String(b.w.created || b.w.date).localeCompare(String(a.w.created || a.w.date)));
+  // Topics that match many of today's papers (e.g. "charge transfer") count for less than rarer ones, so a paper
+  // needs a specific match to make the list. The same title under two DOIs (e.g. Angewandte's two editions) appears once.
+  function rankToday(works, terms, minScore = 0.15) {
+    const list = works.filter(w => w.title && !NOT_PAPER.test(w.title));
+    const N = Math.max(1, list.length);
+    const weighted = terms.map(t => {
+      const df = list.filter(w => scoreProfile(w, [t]).score > 0).length;
+      return Object.assign({}, t, { weight: t.weight * (df > 1 && N > 4 ? Math.log(1 + N / df) / Math.log(1 + N) : 1) });
+    });
+    const seenTitles = new Set();
+    return list.map(w => { const r = scoreProfile(w, weighted); return { w, score: r.score, hits: r.hits }; })
+      .filter(x => x.score >= minScore)
+      .sort((a, b) => b.score - a.score || String(b.w.created || b.w.date).localeCompare(String(a.w.created || a.w.date)))
+      .filter(x => { const k = normTitle(x.w.title); if (seenTitles.has(k)) return false; seenTitles.add(k); return true; });
   }
   // Start of the window to check: the last check (at most 7 days back), or 2 days back the first time. UTC dates, as Crossref uses.
   function todaySince(lastRunAt, now = Date.now(), maxDays = 7) {

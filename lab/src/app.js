@@ -1803,7 +1803,7 @@
   const localDay = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const pubsOn = () => C.PUBLISHERS.filter(p => (S.settings.todayPubs || C.PUBLISHERS.filter(x => x.on).map(x => x.id)).includes(p.id));
   const todayTermsNow = () => C.todayTerms(S.profile, S.settings.todayTopics || '');
-  let todayBusy = false; let todayShowAll = false;
+  let todayBusy = false; let todayShowAll = false; let todayProgress = '';
   async function fetchToday(force) {
     const terms = todayTermsNow(); if (!terms.length || todayBusy) { renderToday(); return; }
     const prev = store.get('today', null);
@@ -1812,8 +1812,11 @@
     const since = prev && prev.day === localDay() && prev.since ? prev.since : C.todaySince(prev && prev.at);
     const q = C.todayQuery(terms);
     const pubs = pubsOn(); const pool = new Map(); const counts = {}; const errors = [];
-    for (let i = 0; i < pubs.length; i += 3) {
-      const batch = pubs.slice(i, i + 3);
+    // One publisher at a time: Crossref's public service allows only one request at a time per user.
+    for (let i = 0; i < pubs.length; i += 1) {
+      const batch = pubs.slice(i, i + 1);
+      if (i) await sleep(250);
+      todayProgress = `Looking through new papers from ${batch[0].name}…`; renderToday();
       const res = await Promise.all(batch.map(p => getJSON(`${CR}/works?${new URLSearchParams({ filter: `${p.filter},from-created-date:${since},type:journal-article`, 'query.bibliographic': q, rows: 40,
         select: 'DOI,title,abstract,type,issued,published,created,container-title,author,is-referenced-by-count,URL,subject' })}`, { timeout: 25000 })));
       res.forEach((r, k) => {
@@ -1854,7 +1857,7 @@
         <p class="small">Tell Paperscope what you work on, and each day it picks new papers for you from ${esc(pubList)} when you open the app.</p>${settings}</section>`;
       return;
     }
-    if (todayBusy) { box.innerHTML = `<section class="today" aria-labelledby="today-h" aria-busy="true"><h2 id="today-h">Papers of the day</h2><p class="small" role="status">Looking through today’s papers from ${esc(pubList)}…</p></section>`; return; }
+    if (todayBusy) { box.innerHTML = `<section class="today" aria-labelledby="today-h" aria-busy="true"><h2 id="today-h">Papers of the day</h2><p class="small" role="status">${esc(todayProgress || `Looking through today’s papers from ${pubList}…`)}</p></section>`; return; }
     if (!t) { box.innerHTML = `<section class="today" aria-labelledby="today-h"><h2 id="today-h">Papers of the day</h2><p class="small">Not checked yet.</p><button type="button" class="btn small primary" id="today-refresh">Check now</button>${settings}</section>`; return; }
     const shown = todayShowAll ? t.items : t.items.slice(0, 5);
     const pubName = id => (C.PUBLISHERS.find(p => p.id === id) || {}).name || '';
