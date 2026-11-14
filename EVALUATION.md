@@ -278,3 +278,21 @@ The checks also cover:
 - Many topics are sent in short groups to every publisher, and a paper found by two groups is listed once. Corrections and cover pages are left out.
 - Profile terms are used when no topics are typed, and the Lab note can be dismissed.
 - No WCAG 2 A/AA violations in light or dark. All other suites still pass.
+
+## Lab: ranking v2 and graded searches (14 November 2026)
+
+A review of the search algorithm, which the user shared, pointed out that every idea in a query counted the same, that a strong title match on a common word could make up for a missing material or mechanism, and that "migration" was treated as a synonym of "diffusion" even for ions. Ranking v2 (described in README) addresses these points. It is not yet shown to be better: that needs the user's grades, and the grading screen was built for this.
+
+**Tested** (`test/lab-core.test.cjs`, 17/17; `test/lab-bench.test.cjs`, 20/20 in the browser with mocked databases):
+- Chemical notation tokens: SCN⁻, Fe²⁺, MoS₂, Li+.
+- Synonym levels: exciton migration = diffusion; ion migration is only related.
+- A paper missing a specific idea ranks below one with all of them, with a stated reason, and is penalised less in *Adjacent & emerging*.
+- Rare ideas weigh more than ones every candidate shares, and words together beat words far apart.
+- v1 stays available.
+- nDCG, precision and judged share are computed correctly.
+- The grading list mixes three rankings, and grades are stored with the candidates. A second tap clears a grade.
+- The Profile panel compares rankings, and export/import round-trips.
+- Deleting needs two taps, and the ranking setting is remembered.
+- No WCAG 2 A/AA violations.
+
+**On saved live data** for "exciton migration in molecular crystals" (36 papers), v2 kept "Exciton Migration in Molecular Crystals" first. It moved down papers that lack an idea, such as "Exciton migration dynamics in a dendritic molecular aggregate" (no crystals). It also moved down "Excitonic processes in molecular crystalline materials", from 9th to 12th, because the light stemmer does not equate "excitonic" with "exciton". The main app's unit test that expects every paper found by both OpenAlex searches in the top 12 fails for v2 on that one paper; that test applies to the main app, which still uses v1.

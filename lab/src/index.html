@@ -90,6 +90,7 @@
     <div id="map-holder"></div>
     <div id="answer-holder"></div>
     <div id="filterbar"></div>
+    <div id="grade-note"></div>
     <div id="loading" class="loading" hidden><span class="spinner" aria-hidden="true"></span><span id="loading-text">Searching…</span></div>
     <ol class="results" id="results" aria-live="polite"></ol>
     <div class="more" id="more"></div>
@@ -116,6 +117,7 @@
     <div class="row" style="margin-top:8px"><button class="btn primary" id="read-text" type="button">Read profile</button><span id="parse-status" class="small muted" role="status"></span></div>
     <div id="profile-editor"></div>
     <div id="taste-box"></div>
+    <div id="bench-box"></div>
 
     <h2>On-device relevance model <span class="tiny">(optional)</span></h2>
     <div class="panel" id="ai-panel"></div>
@@ -181,6 +183,10 @@
         <span class="tiny">Find it at <a href="https://openalex.org/settings/api-key" target="_blank" rel="noopener">openalex.org/settings/api-key</a>.</span>
       </details>
     </section>
+    <fieldset class="scoring"><legend>Ranking method</legend>
+      <label class="radio"><input type="radio" name="scoring" value="v2"><span><strong>New</strong> (Lab): specific and rare ideas in your search count more, a paper missing one ranks lower, words close together count more, and synonyms count by how close they are.</span></label>
+      <label class="radio"><input type="radio" name="scoring" value="v1"><span><strong>Previous</strong>: every idea in your search counts the same.</span></label>
+      <p class="tiny">Compare them on your own graded searches under Profile › Graded searches.</p></fieldset>
     <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>

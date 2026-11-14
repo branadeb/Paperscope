@@ -48,7 +48,7 @@
   // ---------------------------------------------------------------- state
   const S = {
     settings: Object.assign({ apiKey: '', crossref: true, epmc: true, semantic: true, rememberProfile: false, ai: false,
-      llmProvider: 'anthropic', llmKey: '', llmModel: 'claude-haiku-5-5', llmBase: 'https://api.openai.com/v1', llmConsent: false }, store.get('settings', {})),
+      llmProvider: 'anthropic', llmKey: '', llmModel: 'claude-haiku-5-5', llmBase: 'https://api.openai.com/v1', llmConsent: false, scoring: 'v2' }, store.get('settings', {})),
     sort: 'best',
     pathway: 'topic',
     follows: store.get('follows', []) || [],
@@ -60,7 +60,8 @@
     search: null,
     sessionCost: 0,
     ai: { status: 'off', pipe: null, cache: new Map(), qcache: new Map(), progress: 0, lastRun: null, error: '' },
-    ui: { openDetails: new Set() },
+    ui: { openDetails: new Set(), grading: false },
+    bench: store.get('bench', []) || [],
   };
   if (S.settings.rememberProfile) S.profile = store.get('profile', null);
   (store.get('saved', []) || []).forEach(w => { if (w && w.key) { C.prepWork(w); S.saved.set(w.key, w); } });
@@ -174,7 +175,7 @@
     document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.view === view ? 'page' : 'false'));
     if (view === 'saved') { renderSaved(); renderFollows(); }
     if (view === 'search') renderFollows();
-    if (view === 'profile') { renderProfileEditor(); renderAI(); const tb = $('#taste-box'); if (tb) tb.innerHTML = tasteHTML(); }
+    if (view === 'profile') { renderProfileEditor(); renderAI(); const tb = $('#taste-box'); if (tb) tb.innerHTML = tasteHTML(); renderBench(); }
     if (view === 'about') renderAbout();
     if (v.startsWith('trail=')) { const code = v.slice(6); history.replaceState(null, '', '#search'); openSharedTrail(code); return; }
     if (v === 'install' || v === 'key') { renderInstall(); const h = $(v === 'key' ? '#key-box' : '#install-h'); if (h) setTimeout(() => h.scrollIntoView({ block: 'start' }), 0); return; }
@@ -185,7 +186,7 @@
   let searchToken = 0;
   function ctx() {
     const s = S.search;
-    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile(), trail: s.kind === 'trail' ? s.trail : null, author: s.kind === 'author' || s.kind === 'doi' ? (s.author || true) : null };
+    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile(), scoring: S.settings.scoring === 'v1' ? 'v1' : 'v2', trail: s.kind === 'trail' ? s.trail : null, author: s.kind === 'author' || s.kind === 'doi' ? (s.author || true) : null };
   }
   function hasProfile() { return !!(S.profile && ((S.profile.interests || []).length + (S.profile.methods || []).length + (S.profile.areas || []).length)); }
 
@@ -570,9 +571,9 @@
     if (f.oaOnly) chips.push(`<li class="chip">Open access <button data-clear="oaOnly" aria-label="Clear">×</button></li>`);
     if (f.theme && s.themes) { const t = s.themes.themes.find(x => x.id === f.theme); if (t) chips.push(`<li class="chip">Theme: ${esc(t.name)} <button data-clear="theme" aria-label="Clear theme">×</button></li>`); }
     const canSwipe = s.kind !== 'author' && !inQuest() && vis.some(w => !S.saved.has(w.key) && !S.later.has(w.key));
-    $('#filterbar').innerHTML = `<div class="filterbar">${canSwipe ? '<button type="button" class="btn small swipe-btn" id="swipe-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="3"/><path d="M2.5 9.5 1 12l1.5 2.5M21.5 9.5 23 12l-1.5 2.5"/></svg>Swipe to sort</button>' : ''}<button type="button" class="btn small" id="open-filters">Filters${filtersActive() ? ' (on)' : ''}</button>
+    $('#filterbar').innerHTML = `<div class="filterbar">${canSwipe ? '<button type="button" class="btn small swipe-btn" id="swipe-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="3"/><path d="M2.5 9.5 1 12l1.5 2.5M21.5 9.5 23 12l-1.5 2.5"/></svg>Swipe to sort</button>' : ''}<button type="button" class="btn small" id="open-filters">Filters${filtersActive() ? ' (on)' : ''}</button>${s.kind === 'search' ? `<button type="button" class="btn small" id="grade-toggle" aria-pressed="${S.ui.grading}">${S.ui.grading ? 'Done grading' : 'Grade results'}</button>` : ''}
       <label class="sortsel"><span class="sr-only">Sort results</span><select id="sort">${sortOptions(s)}</select></label>
-      <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${s.kind === 'author' ? `${fmt(vis.length)} works` : `${Math.min(s.shown, vis.length)} of ${vis.length} shown`}</span></div>`;
+      <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${s.kind === 'author' ? `${fmt(vis.length)} works` : grading() ? `${gradingList().length} to grade` : `${Math.min(s.shown, vis.length)} of ${vis.length} shown`}</span></div>`;
   }
 
   function sortOptions(s) {
@@ -618,6 +619,7 @@
       <h3>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
       <p class="byline">${authors}${authors ? '. ' : ''}${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
       <div class="why"><ul>${reasons}</ul>${ev}${ex.note ? `<p class="note">${esc(ex.note)}</p>` : ''}</div>
+      ${grading() ? gradeHTML(w) : ''}
       <div class="actions">
         <button type="button" class="save" data-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>
         ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${w.doi ? 'Publisher page' : 'Source page'}</a>` : ''}
@@ -643,8 +645,9 @@
     renderFilterbar(vis);
     const c = ctx(); const hset = C.highlightStems(c);
     if (inQuest()) { const sg = questSuggestion(); [sg.leap, sg.close].forEach(x => { if (!x) return; const i = vis.findIndex(w => w.key === x.key); if (i > 0) vis.unshift(vis.splice(i, 1)[0]); }); }
-    const list = vis.slice(0, s.shown);
+    const list = grading() ? gradingList() : vis.slice(0, s.shown);
     c.topScore = vis.reduce((m, w) => Math.max(m, w.rank ? w.rank.score : 0), 0.0001);
+    $('#grade-note').innerHTML = grading() ? gradeNoteHTML(list) : '';
     if (!s.ranked.length) {
       const anyFail = Object.values(s.status).some(x => x && x.ok === false);
       $('#results').innerHTML = `<li class="panel">${anyFail ? 'No results could be fetched. See the messages above.' : 'No papers matched. Try fewer or broader words, or turn off a field restriction.'}</li>`;
@@ -654,6 +657,7 @@
       $('#results').innerHTML = list.map((w, i) => paperHTML(w, i, c, hset)).join('');
     }
     const more = [];
+    if (grading()) { $('#more').innerHTML = '<button type="button" class="btn" id="grade-done">Done grading</button>'; return; }
     if (vis.length > s.shown) more.push(`<button type="button" class="btn" id="show-more">Show ${Math.min(PAGE, vis.length - s.shown)} more</button>`);
     else if (s.ranked.length) {
       const chans = s.kind === 'trail' ? ['oa_trail'] : ['oa_kw', 'oa_sem', 'crossref', 'epmc'];
@@ -1442,6 +1446,7 @@
     $('#api-key').value = S.settings.apiKey || '';
     renderKey(); if (S.settings.pendingKey) checkKey(false); else if (!S.budget || Date.now() - S.budget.at > 60000) refreshBudget();
     $('#set-semantic').checked = S.settings.semantic; $('#set-crossref').checked = S.settings.crossref; $('#set-epmc').checked = S.settings.epmc;
+    document.querySelectorAll('input[name="scoring"]').forEach(i => { i.checked = i.value === (S.settings.scoring === 'v1' ? 'v1' : 'v2'); });
     $('#llm-provider').value = S.settings.llmProvider; $('#llm-key').value = S.settings.llmKey || ''; $('#llm-model').value = S.settings.llmModel || '';
     $('#llm-base').value = S.settings.llmBase || ''; $('#llm-consent').checked = !!S.settings.llmConsent;
     $('#llm-base-field').hidden = S.settings.llmProvider === 'anthropic';
@@ -1513,6 +1518,27 @@
     if (t.id === 'lab-import') { labImport(); return; }
     if (t.id === 'lab-note-hide') { store.set('labNoteHidden', true); const n = $('.lab-note'); if (n) n.hidden = true; return; }
     if (t.id === 'swipe-open') { openDeck(); return; }
+    if (t.id === 'grade-toggle' || t.id === 'grade-done') {
+      S.ui.grading = t.id === 'grade-toggle' ? !S.ui.grading : false; gradingCache = null; renderResults();
+      if (!S.ui.grading) toast(benchEntry(S.search) ? 'Grades saved on this device' : 'Grading off');
+      else $('#grade-note').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (d.grade !== undefined && d.key) {
+      gradeWork(d.key, Number(d.grade));
+      const e = benchEntry(S.search); const g = e && e.grades[d.key];
+      t.closest('.grade').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.grade) === g)));
+      const note = $('#grade-note'); if (note) note.innerHTML = gradeNoteHTML(gradingList());
+      return;
+    }
+    if (t.id === 'bench-export') { exportBench(); return; }
+    if (d.benchOpen !== undefined) { const e = benchResults().rows[Number(d.benchOpen)].e; location.hash = '#search'; S.ui.grading = true; S.mode = e.mode || S.mode; renderModes(); runSearch(e.q, { choices: e.choices, sense: e.sense, allFields: e.allFields }); return; }
+    if (d.benchDel !== undefined) {
+      const e = benchResults().rows[Number(d.benchDel)].e;
+      if (S.ui.benchDel !== e.id) { S.ui.benchDel = e.id; t.textContent = 'Tap again to delete'; return; }
+      S.ui.benchDel = null;
+      S.bench = S.bench.filter(x => x !== e); persistBench(); renderBench(); toast('Grades deleted'); return;
+    }
     if (t.id === 'today-refresh') { fetchToday(true); return; }
     if (t.id === 'today-swipe') { todayDeck(); return; }
     if (t.id === 'today-more') { todayShowAll = !todayShowAll; renderToday(); return; }
@@ -1688,6 +1714,8 @@
     if (t.id === 'remember') { S.settings.rememberProfile = t.checked; saveSettings(); persistProfile(); toast(t.checked ? 'Profile will be remembered on this device' : 'Profile removed from this device’s storage'); }
     if (t.id === 'api-key') { S.settings.apiKey = t.value.trim(); if (S.settings.apiKey) S.settings.pendingKey = null; saveSettings(); S.budget = null; keyMsg = null; toast(S.settings.apiKey ? 'API key saved in this browser' : 'API key removed'); refreshBudget(); }
     if (t.id === 'set-semantic') { S.settings.semantic = t.checked; saveSettings(); }
+    if (t.id === 'bench-import' && t.files[0]) { importBench(t.files[0]); t.value = ''; }
+    if (t.name === 'scoring') { S.settings.scoring = t.value === 'v1' ? 'v1' : 'v2'; saveSettings(); gradingCache = null; if (S.search && S.search.pool) { rerank(); } toast(S.settings.scoring === 'v1' ? 'Using the previous ranking' : 'Using the new ranking'); }
     if (t.id === 'set-crossref') { S.settings.crossref = t.checked; saveSettings(); }
     if (t.id === 'set-epmc') { S.settings.epmc = t.checked; saveSettings(); }
     if (t.id === 'sort') {
@@ -2288,6 +2316,105 @@
       <p class="byline">${esc(w.authors.slice(0, 3).join(', '))}${w.authors.length > 3 ? ' et al.' : ''}${w.venue ? `. <span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
       <div class="actions"><button type="button" class="btn small primary" data-later-save="${esc(w.key)}">Keep it</button><button type="button" class="btn small quiet" data-later-rm="${esc(w.key)}">Remove</button></div></li>`).join('')}</ul>`;
   }
+  // ---------------------------------------------------------------- grading and the benchmark (Lab)
+  // Grade the top papers of a search 0–3. To grade fairly, the list mixes the top 12 of the new ranking, the previous
+  // ranking and the databases' own order, in a fixed shuffled order, so neither version decides what gets graded.
+  const GRADES = [[0, 'No'], [1, 'Slightly'], [2, 'Yes'], [3, 'Exactly']];
+  const GRADE_HELP = 'No: not relevant. Slightly: touches the topic. Yes: relevant. Exactly: what you were looking for.';
+  const grading = () => !!(S.ui.grading && S.search && S.search.kind === 'search');
+  function benchId(s) { return JSON.stringify([String(s.q).toLowerCase(), s.choices || {}, s.sense ? s.sense.id : null, !!s.allFields]); }
+  const benchEntry = s => S.bench.find(e => e.id === benchId(s));
+  const rrfOf = w => Object.entries(w.ranks || {}).reduce((a, [ch, r]) => a + (ch === 'oa_rel' ? 0.6 : 1) / (20 + r), 0);
+  function rankAs(works, scoring, extra = {}) {
+    return C.rankWorks(works.map(w => Object.assign({}, w)), Object.assign({}, ctx(), { scoring }, extra));
+  }
+  let gradingCache = null;
+  function gradingList() {
+    const s = S.search; const base = visibleWorks();
+    const sig = `${searchToken}|${base.length}|${S.mode}|${S.settings.scoring}`;
+    if (gradingCache && gradingCache.sig === sig) return gradingCache.list.map(k => s.pool.get(k)).filter(Boolean);
+    const keys = new Set([...rankAs(base, 'v2').slice(0, 12), ...rankAs(base, 'v1').slice(0, 12), ...base.slice().sort((a, b) => rrfOf(b) - rrfOf(a)).slice(0, 12)].map(w => w.key));
+    const list = base.filter(w => keys.has(w.key)).sort((a, b) => C.hash32(a.key + '|' + s.q) - C.hash32(b.key + '|' + s.q)).map(w => w.key);
+    gradingCache = { sig, list };
+    return list.map(k => s.pool.get(k)).filter(Boolean);
+  }
+  function gradeHTML(w) {
+    const e = benchEntry(S.search); const g = e && e.grades[w.key];
+    return `<div class="grade" role="group" aria-label="How relevant is this paper to your search?"><span class="tiny grade-q" aria-hidden="true">How relevant is it to your search?</span>${GRADES.map(([v, label]) => `<button type="button" data-grade="${v}" data-key="${esc(w.key)}" aria-pressed="${g === v}">${label}</button>`).join('')}</div>`;
+  }
+  function gradeNoteHTML(list) {
+    const e = benchEntry(S.search); const n = e ? list.filter(w => e.grades[w.key] != null).length : 0;
+    return `<div class="panel grade-note" role="status"><p class="small"><strong>Grading: ${n} of ${list.length} done.</strong> These are the top papers from the new ranking, the previous one and the databases’ own order, mixed so the order doesn’t sway you. ${GRADE_HELP}</p>
+      <p class="tiny">Grades stay on this device. See how each ranking does under <a href="#profile">Profile › Graded searches</a>.</p></div>`;
+  }
+  function benchSlim(w) {
+    const o = Object.assign(C.slim(w), { ranks: w.ranks, keywords: w.keywords, pct: w.pct, abstract: String(w.abstract || '').slice(0, 900) });
+    delete o.savedAt; return o;
+  }
+  function persistBench() {
+    if (!store.set('bench', S.bench)) { toast('Storage is full: export your grades, then delete some graded searches'); return false; }
+    return true;
+  }
+  function gradeWork(key, g) {
+    const s = S.search; if (!s || s.kind !== 'search') return;
+    let e = benchEntry(s);
+    if (!e) { e = { id: benchId(s), q: s.q, choices: s.choices || {}, sense: s.sense || null, allFields: !!s.allFields, mode: S.mode, at: new Date().toISOString(), pool: [], grades: {} }; S.bench.push(e); }
+    // Keep the candidates (the current top 60 and every graded paper), so later ranking versions are compared on the same papers.
+    const map = new Map(e.pool.map(w => [w.key, w]));
+    s.ranked.slice(0, 60).concat(gradingList()).forEach(w => { if (!map.has(w.key)) map.set(w.key, benchSlim(w)); });
+    if (e.grades[key] === g) delete e.grades[key]; else e.grades[key] = g;
+    e.pool = [...map.values()]; e.mode = S.mode; e.at = new Date().toISOString();
+    persistBench();
+  }
+  function benchRank(e, how) {
+    const works = e.pool.map(w => { const c = Object.assign({}, w); delete c._prep; C.prepWork(c); return c; });
+    if (how === 'source') return works.sort((a, b) => rrfOf(b) - rrfOf(a)).map(w => w.key);
+    const analysis = C.analyzeQuery(e.q, S.profile, e.choices || {});
+    return C.rankWorks(works, { analysis, profile: S.profile, mode: e.mode || 'all', nowYear: new Date().getFullYear(), scoring: how, sem: null }).map(w => w.key);
+  }
+  function benchResults() {
+    const rows = S.bench.filter(e => Object.keys(e.grades).length).map(e => ({ e, n: Object.keys(e.grades).length,
+      m: { source: C.benchMetrics(benchRank(e, 'source'), e.grades), v1: C.benchMetrics(benchRank(e, 'v1'), e.grades), v2: C.benchMetrics(benchRank(e, 'v2'), e.grades) } }));
+    const mean = k => C.meanMetrics(rows.map(r => r.m[k]));
+    return { rows, mean: rows.length ? { source: mean('source'), v1: mean('v1'), v2: mean('v2') } : null };
+  }
+  const pct = x => `${Math.round(100 * x)}%`;
+  function benchHTML() {
+    const { rows, mean } = benchResults();
+    const intro = `<p class="small">Grade the results of searches you know well, and Paperscope measures which ranking puts the papers you rate highly near the top. Run a search and tap <strong>Grade results</strong>. About 20 searches with 15–30 grades each is enough to compare the rankings. ${GRADE_HELP}</p>`;
+    const tools = `<div class="row"><button type="button" class="btn small" id="bench-export" ${S.bench.length ? '' : 'disabled'}>Export grades</button><label class="btn small" for="bench-import">Import grades</label><input id="bench-import" type="file" accept=".json,application/json" class="sr-only"></div>`;
+    if (!rows.length) return `<section class="panel bench" aria-labelledby="bench-h"><h3 id="bench-h">Graded searches</h3>${intro}<p class="small muted">No graded searches yet.</p>${tools}</section>`;
+    const cell = (m, k) => `${k === 'p5' ? pct(m[k]) : m[k].toFixed(2)}`;
+    const better = (a, b) => (b - a > 0.005 ? ' class="up"' : a - b > 0.005 ? ' class="down"' : '');
+    return `<section class="panel bench" aria-labelledby="bench-h"><h3 id="bench-h">Graded searches</h3>${intro}
+      <p class="small"><strong>Across ${rows.length} search${rows.length === 1 ? '' : 'es'}:</strong> quality of the top 10 (nDCG, 0–1): databases’ order ${mean.source.ndcg10.toFixed(2)}, previous ranking ${mean.v1.ndcg10.toFixed(2)}, new ranking <strong>${mean.v2.ndcg10.toFixed(2)}</strong>. Relevant papers in the top 5: ${pct(mean.source.p5)}, ${pct(mean.v1.p5)}, <strong>${pct(mean.v2.p5)}</strong>.</p>
+      <ul class="bench-list">${rows.map(({ e, n, m }, i) => `<li><p class="bq">${esc(e.q)} <span class="tiny">${n} graded</span></p>
+        <p class="small">Top 10 quality: previous ${cell(m.v1, 'ndcg10')} → new <span${better(m.v1.ndcg10, m.v2.ndcg10)}>${cell(m.v2, 'ndcg10')}</span>. Relevant in top 5: ${cell(m.v1, 'p5')} → <span${better(m.v1.p5, m.v2.p5)}>${cell(m.v2, 'p5')}</span>.</p>
+        <div class="row bench-act"><button type="button" class="btn link" data-bench-open="${i}">Open and grade more</button><button type="button" class="btn link" data-bench-del="${i}" aria-label="Delete grades for ${esc(e.q)}">Delete</button></div></li>`).join('')}</ul>
+      <p class="tiny">nDCG compares each ranking’s top 10 with the best possible order of your grades; ungraded papers count as not relevant. Graded share of each top 10: previous ${pct(mean.v1.judged10)}, new ${pct(mean.v2.judged10)}. Grades are kept on this device.</p>${tools}</section>`;
+  }
+  function renderBench() { const b = $('#bench-box'); if (b) b.innerHTML = benchHTML(); }
+  function exportBench() {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ app: 'Paperscope Lab', kind: 'graded-searches', version: 1, exported: new Date().toISOString(), searches: S.bench }, null, 1)], { type: 'application/json' }));
+    a.download = 'paperscope-graded-searches.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  async function importBench(file) {
+    try {
+      const data = JSON.parse(await file.text()); const list = Array.isArray(data) ? data : data.searches;
+      if (!Array.isArray(list)) throw new Error('not a grades file');
+      let added = 0;
+      list.forEach(x => {
+        if (!x || !x.q || !x.grades || !Array.isArray(x.pool)) return;
+        const id = x.id || benchId(x); const e = S.bench.find(y => y.id === id);
+        if (!e) { S.bench.push(Object.assign({}, x, { id })); added++; return; }
+        const map = new Map(e.pool.map(w => [w.key, w])); x.pool.forEach(w => { if (w && w.key && !map.has(w.key)) map.set(w.key, w); });
+        e.pool = [...map.values()]; Object.assign(e.grades, x.grades); added++;
+      });
+      persistBench(); renderBench(); toast(`Imported grades for ${added} search${added === 1 ? '' : 'es'}`);
+    } catch (err) { toast('That file is not a Paperscope grades file'); }
+  }
+
   function tasteHTML() {
     const t = C.topTaste(S.taste, 10);
     if (!t.liked.length && !t.disliked.length) return '';
@@ -2366,5 +2493,5 @@
   S.today = store.get('today', null); renderToday(); if (!location.hash.startsWith('#trail=')) fetchToday(false);
   if (S.settings.pendingKey) checkKey(true);
   if (S.settings.ai) loadAI(true);
-  window.Paperscope = { S, runSearch, version: VERSION }; // for debugging and tests
+  window.Paperscope = { S, runSearch, benchResults, version: VERSION }; // for debugging and tests
 })();

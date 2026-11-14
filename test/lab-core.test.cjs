@@ -63,4 +63,51 @@ t('papers of the day: corrections and cover pages are not papers', () => {
   const ws = ['Author Correction: Ion transport in pores', 'Publisher Correction: Ion transport', 'Directional Confinement Governed Ion Transport for Efficient Actuation (Adv. Mater. 63/2026)', 'Ion transport in nanoconfined membranes', 'Ion transport (in 2D) across graphene'].map(title => ({ title, doi: title }));
   assert.deepStrictEqual(C.rankToday(ws, terms).map(x => x.w.title), ['Ion transport in nanoconfined membranes', 'Ion transport (in 2D) across graphene']);
 });
+// ---------------- scoring v2
+const W = (title, abstract, ranks) => Object.assign({ key: title, title, abstract: abstract || '', ranks: ranks || { oa_kw: 1 }, year: 2024, cites: 10 });
+const rank = (q, works, opts = {}) => C.rankWorks(works, Object.assign({ analysis: C.analyzeQuery(q, null), profile: null, mode: 'all', nowYear: 2026 }, opts));
+t('v2: chemical notation keeps charges and formulas', () => {
+  assert.deepStrictEqual(C.tokens('SCN⁻ and Fe²⁺ in MoS₂; anion- and Li+ ions'), ['SCN-', 'and', 'Fe2+', 'in', 'MoS2', 'anion', 'and', 'Li+', 'ions']);
+  assert.deepStrictEqual(C.stems('SCN⁻ Fe²⁺ MoS₂ CdS spectroscopies'), ['scn-', 'fe2+', 'mos2', 'cds', 'spectroscopy']);
+  const r = rank('SCN⁻ exchange', [W('Thiocyanate SCN− exchange in membranes'), W('Exchange of SeCN− ions')]);
+  assert.strictEqual(r[0].title, 'Thiocyanate SCN− exchange in membranes');
+});
+t('v2: synonyms by level; exciton migration = diffusion, ion migration is only related', () => {
+  const ion = C.analyzeQuery('ion migration', null).groups[1].alts; const exc = C.analyzeQuery('exciton migration', null).groups[1].alts;
+  assert.strictEqual(ion.find(a => a.text === 'diffusion').tier, 'related'); assert.strictEqual(exc.find(a => a.text === 'diffusion').tier, 'same');
+  const r = rank('ion migration in membranes', [W('Ion diffusion in membranes'), W('Ion migration in membranes')]);
+  assert.strictEqual(r[0].title, 'Ion migration in membranes'); assert(r[0].rank.q > r[1].rank.q);
+});
+t('v2: a paper missing a specific idea ranks below one that has them all, and says what is missing', () => {
+  const works = [W('Anion transport in hydrated membranes', 'We study anion transport.'), W('Ion-pair exchange controls anion transport in ordered membranes', 'Ion-pair exchange kinetics.')];
+  const r = rank('ion-pair exchange anion transport membranes', works);
+  assert.strictEqual(r[0].title, works[1].title);
+  assert(r[1].rank.missing.includes('ion-pair') || r[1].rank.missing.includes('exchange'), JSON.stringify(r[1].rank.missing));
+  const ex = C.explain(r[1], { analysis: C.analyzeQuery('ion-pair exchange anion transport membranes', null) });
+  assert(ex.reasons.some(x => x.kind === 'missing' && /Does not mention/.test(x.text)));
+  const prof = C.extractProfile('Research interests: singlet fission; organic semiconductors. Methods: transient absorption spectroscopy.');
+  const all = rank('ion-pair exchange anion transport membranes', works.map(w => Object.assign({}, w, { _prep: null })), { mode: 'all', profile: prof });
+  const adj = rank('ion-pair exchange anion transport membranes', works.map(w => Object.assign({}, w, { _prep: null })), { mode: 'adjacent', profile: prof });
+  assert(adj.find(w => w.title === works[0].title).rank.q > all.find(w => w.title === works[0].title).rank.q, 'adjacent mode is more forgiving');
+});
+t('v2: an idea every candidate mentions counts less than a rare one', () => {
+  const works = [...Array(8)].map((_, i) => W(`Membranes study ${i}`)).concat([W('Thiocyanate probes in water')]);
+  const gs = C.groupStats(works, C.analyzeQuery('membranes thiocyanate', null));
+  assert(gs[1].w > gs[0].w, JSON.stringify(gs));
+});
+t('v2: words together count more than words far apart', () => {
+  const r = rank('anion exchange membrane', [W('Membrane water uptake and anion conductivity under exchange of humidity'), W('Anion exchange membrane conductivity')]);
+  assert.strictEqual(r[0].title, 'Anion exchange membrane conductivity');
+});
+t('v2 is the default; v1 is still available for comparison', () => {
+  assert.strictEqual(rank('exciton', [W('Exciton')])[0].rank.scoring, 'v2');
+  assert.strictEqual(rank('exciton', [W('Exciton')], { scoring: 'v1' })[0].rank.scoring, 'v1');
+});
+t('benchmark: nDCG, precision and judged share', () => {
+  const g = { a: 3, b: 0, c: 2, d: 1 };
+  assert.strictEqual(C.ndcgAt(['a', 'c', 'd', 'b'], g), 1);
+  assert(C.ndcgAt(['b', 'd', 'c', 'a'], g) < 0.7);
+  assert.strictEqual(C.precisionAt(['a', 'c', 'x', 'y', 'b'], g, 5), 0.4);
+  assert.strictEqual(C.judgedAt(['a', 'x'], g, 10), 0.5);
+});
 console.log(`\n${n}/${n} Lab unit checks passed`);

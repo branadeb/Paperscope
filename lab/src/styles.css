@@ -235,6 +235,7 @@ details.map .muted { color: var(--star-2); }
 .why li.profile { color: var(--close); }
 .why li.adjacent { color: var(--adj); }
 .why li.warning { color: var(--warn); font-weight: 600; }
+.why li.missing { color: var(--ink-2); list-style-type: circle; }
 .why blockquote { margin: 10px 0 0; padding: 4px 0 4px 13px; border-left: 2px solid; border-image: var(--spectrum-v) 1; font: italic 400 .98rem/1.5 var(--display); color: var(--ink); }
 .why blockquote cite { display: block; font: normal .75rem var(--sans); color: var(--ink-3); margin-top: 3px; }
 .why .note { color: var(--ink-3); font-size: .84rem; font-style: italic; }
@@ -629,3 +630,22 @@ body.deck-open { overflow: hidden; }
 .today-set .pub .tiny { display: block; color: var(--ink-2); }
 .today-set textarea { min-height: 70px; margin: 4px 0 2px; }
 .warn-text { color: var(--warn); }
+
+/* grading and graded searches (Lab) */
+.grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 10px 0 4px; }
+.grade .grade-q { grid-column: 1 / -1; }
+.grade button { min-height: 40px; padding: 4px 6px; border-radius: 999px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); font: inherit; font-size: .88rem; cursor: pointer; }
+.grade button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.grade button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.grade-note p { margin: 0 0 4px; }
+.bench-list { list-style: none; padding: 0; margin: 10px 0; }
+.bench-list li { border-top: 1px solid var(--rule); padding: 8px 0; }
+.bench-list .bq { margin: 0 0 2px; font-weight: 600; }
+.bench-list .small { margin: 0; }
+.bench-list .up { font-weight: 700; }
+.bench-list .down { text-decoration: underline dotted; }
+.bench-act { gap: 14px; }
+fieldset.scoring { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; margin: 12px 0; }
+fieldset.scoring legend { font-weight: 600; padding: 0 4px; }
+fieldset.scoring .radio { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: .92rem; }
+fieldset.scoring .radio input { margin-top: 4px; }

@@ -255,6 +255,7 @@ details.map .muted { color: var(--star-2); }
 .why li.profile { color: var(--close); }
 .why li.adjacent { color: var(--adj); }
 .why li.warning { color: var(--warn); font-weight: 600; }
+.why li.missing { color: var(--ink-2); list-style-type: circle; }
 .why blockquote { margin: 10px 0 0; padding: 4px 0 4px 13px; border-left: 2px solid; border-image: var(--spectrum-v) 1; font: italic 400 .98rem/1.5 var(--display); color: var(--ink); }
 .why blockquote cite { display: block; font: normal .75rem var(--sans); color: var(--ink-3); margin-top: 3px; }
 .why .note { color: var(--ink-3); font-size: .84rem; font-style: italic; }
@@ -649,6 +650,25 @@ body.deck-open { overflow: hidden; }
 .today-set .pub .tiny { display: block; color: var(--ink-2); }
 .today-set textarea { min-height: 70px; margin: 4px 0 2px; }
 .warn-text { color: var(--warn); }
+
+/* grading and graded searches (Lab) */
+.grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 10px 0 4px; }
+.grade .grade-q { grid-column: 1 / -1; }
+.grade button { min-height: 40px; padding: 4px 6px; border-radius: 999px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); font: inherit; font-size: .88rem; cursor: pointer; }
+.grade button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.grade button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.grade-note p { margin: 0 0 4px; }
+.bench-list { list-style: none; padding: 0; margin: 10px 0; }
+.bench-list li { border-top: 1px solid var(--rule); padding: 8px 0; }
+.bench-list .bq { margin: 0 0 2px; font-weight: 600; }
+.bench-list .small { margin: 0; }
+.bench-list .up { font-weight: 700; }
+.bench-list .down { text-decoration: underline dotted; }
+.bench-act { gap: 14px; }
+fieldset.scoring { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; margin: 12px 0; }
+fieldset.scoring legend { font-weight: 600; padding: 0 4px; }
+fieldset.scoring .radio { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: .92rem; }
+fieldset.scoring .radio input { margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -724,6 +744,7 @@ body.deck-open { overflow: hidden; }
     <div id="map-holder"></div>
     <div id="answer-holder"></div>
     <div id="filterbar"></div>
+    <div id="grade-note"></div>
     <div id="loading" class="loading" hidden><span class="spinner" aria-hidden="true"></span><span id="loading-text">Searching…</span></div>
     <ol class="results" id="results" aria-live="polite"></ol>
     <div class="more" id="more"></div>
@@ -750,6 +771,7 @@ body.deck-open { overflow: hidden; }
     <div class="row" style="margin-top:8px"><button class="btn primary" id="read-text" type="button">Read profile</button><span id="parse-status" class="small muted" role="status"></span></div>
     <div id="profile-editor"></div>
     <div id="taste-box"></div>
+    <div id="bench-box"></div>
 
     <h2>On-device relevance model <span class="tiny">(optional)</span></h2>
     <div class="panel" id="ai-panel"></div>
@@ -815,6 +837,10 @@ body.deck-open { overflow: hidden; }
         <span class="tiny">Find it at <a href="https://openalex.org/settings/api-key" target="_blank" rel="noopener">openalex.org/settings/api-key</a>.</span>
       </details>
     </section>
+    <fieldset class="scoring"><legend>Ranking method</legend>
+      <label class="radio"><input type="radio" name="scoring" value="v2"><span><strong>New</strong> (Lab): specific and rare ideas in your search count more, a paper missing one ranks lower, words close together count more, and synonyms count by how close they are.</span></label>
+      <label class="radio"><input type="radio" name="scoring" value="v1"><span><strong>Previous</strong>: every idea in your search counts the same.</span></label>
+      <p class="tiny">Compare them on your own graded searches under Profile › Graded searches.</p></fieldset>
     <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>
@@ -897,11 +923,21 @@ body.deck-open { overflow: hidden; }
   const NUMWORDS = { one: '1', two: '2', three: '3', four: '4', five: '5' };
 
   const WORD_RE = /[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu;
+  // Chemical notation: superscript and subscript digits become plain digits, and a charge sign right after a formula
+  // stays on the token, so SCN⁻ is "scn-", Fe²⁺ is "fe2+" and MoS₂ is "mos2" (and they are not stemmed).
+  const SUPSUB = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9', '⁺': '+', '⁻': '-', '₊': '+', '₋': '-' };
+  const chemNorm = s => String(s || '').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹₀-₉⁺⁻₊₋]/g, c => SUPSUB[c]).replace(/([A-Za-z0-9])\u2212/g, '$1-');
+  const TOKEN_RE = /[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*(?:[+-](?=$|[\s,.;:)\]/]))?/gu;
+  const FORMULA_RE = /^(?:[A-Z][a-z]?\d*)+$/;
+  function tokens(text) {
+    return (chemNorm(text).match(TOKEN_RE) || []).map(t => { const c = t.slice(-1); return (c === '+' || c === '-') && !FORMULA_RE.test(t.slice(0, -1)) ? t.slice(0, -1) : t; });
+  }
 
   function normSpace(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
 
   function stem(w) {
     let s = String(w).toLowerCase().replace(/[’']/g, '');
+    if (/[+-]$/.test(s) || (/\d/.test(s) && /[a-z]/.test(s) && s.length <= 10 && !s.includes('-'))) return s; // formulas, ions: as written
     if (s.length > 4 && s.endsWith('ies')) s = s.slice(0, -3) + 'y';
     else if (s.endsWith('sses')) s = s.slice(0, -2);
     else if (s.length > 3 && s.endsWith('s') && !/(ss|us|is|ys)$/.test(s)) s = s.slice(0, -1);
@@ -913,7 +949,7 @@ body.deck-open { overflow: hidden; }
     return s;
   }
 
-  function words(text) { return String(text || '').match(WORD_RE) || []; }
+  function words(text) { return tokens(text); }
   function stems(text) { return words(text).map(stem); }
   function contentStems(text) { return words(text).filter(w => !STOP.has(w.toLowerCase())).map(stem); }
   // Stems of a phrase with leading/trailing stop words removed (inner ones kept, e.g. "equations of motion").
@@ -997,23 +1033,30 @@ body.deck-open { overflow: hidden; }
     'organic electronics', 'energy storage', 'energy science', 'chemical biology', 'bioinformatics', 'systems biology']
     .map(a => stems(a));
 
-  // Curated near-synonyms and spelling variants (deterministic, small, transparent to the user).
-  const SYNONYMS = [
-    ['migration', 'diffusion', 'transport'], ['mechanism', 'pathway'], ['synthesis', 'fabrication', 'preparation'],
-    ['degradation', 'decomposition'], ['modeling', 'modelling', 'simulation'], ['behavior', 'behaviour'], ['color', 'colour'],
-    ['tumor', 'tumour', 'cancer'], ['metastasis', 'metastatic'], ['heart attack', 'myocardial infarction'],
-    ['elderly', 'older adults'], ['children', 'pediatric', 'paediatric'], ['solar cell', 'photovoltaic'],
-    ['ultrafast', 'femtosecond', 'time-resolved'], ['global warming', 'climate change'],
-    ['covid-19', 'sars-cov-2'], ['nanoconfinement', 'nanoconfined', 'nanochannel'], ['photocatalysis', 'photocatalytic'],
-    ['well-being', 'wellbeing'], ['socioeconomic', 'socio-economic'], ['students', 'learners'], ['teacher', 'educator'],
-    ['conductivity', 'conductance'], ['fiber', 'fibre'], ['center', 'centre'],
-    ['anemia', 'anaemia'], ['estrogen', 'oestrogen'], ['optimization', 'optimisation'], ['ionization', 'ionisation'],
-    ['crystallization', 'crystallisation'], ['polarization', 'polarisation'], ['aluminum', 'aluminium'], ['sulfur', 'sulphur'],
-    ['charge separation', 'charge transfer'], ['excitation energy transfer', 'energy transfer'], ['qubit', 'quantum bit'],
-    ['decoherence', 'dephasing'], ['vibronic coupling', 'electron-vibration coupling'], ['drug delivery', 'drug carrier'],
-    ['wastewater', 'waste water'], ['deep learning', 'neural network'], ['large language model', 'llm'],
-    ['crystal', 'crystalline'], ['catalyst', 'catalysis', 'catalytic'],
-  ].map(g => g.map(t => ({ text: t, stems: stems(t) })));
+  // Curated synonyms, by level: "same" (spelling variants and true equivalents), "related" (close but not the same
+  // thing, e.g. conductivity and conductance), "broader" (only for finding more). Deterministic, small, shown to the user.
+  const SYN_DEF = [
+    ['related', ['migration', 'diffusion', 'transport']], ['related', ['mechanism', 'pathway']], ['related', ['synthesis', 'fabrication', 'preparation']],
+    ['related', ['degradation', 'decomposition']], ['same', ['modeling', 'modelling']], ['related', ['modeling', 'simulation']], ['same', ['behavior', 'behaviour']], ['same', ['color', 'colour']],
+    ['same', ['tumor', 'tumour']], ['related', ['tumor', 'cancer']], ['same', ['metastasis', 'metastatic']], ['same', ['heart attack', 'myocardial infarction']],
+    ['same', ['elderly', 'older adults']], ['same', ['children', 'pediatric', 'paediatric']], ['same', ['solar cell', 'photovoltaic']],
+    ['related', ['ultrafast', 'femtosecond', 'time-resolved']], ['related', ['global warming', 'climate change']],
+    ['same', ['covid-19', 'sars-cov-2']], ['same', ['nanoconfinement', 'nanoconfined']], ['related', ['nanoconfinement', 'nanochannel']], ['same', ['photocatalysis', 'photocatalytic']],
+    ['same', ['well-being', 'wellbeing']], ['same', ['socioeconomic', 'socio-economic']], ['related', ['students', 'learners']], ['related', ['teacher', 'educator']],
+    ['related', ['conductivity', 'conductance']], ['same', ['fiber', 'fibre']], ['same', ['center', 'centre']],
+    ['same', ['anemia', 'anaemia']], ['same', ['estrogen', 'oestrogen']], ['same', ['optimization', 'optimisation']], ['same', ['ionization', 'ionisation']],
+    ['same', ['crystallization', 'crystallisation']], ['same', ['polarization', 'polarisation']], ['same', ['aluminum', 'aluminium']], ['same', ['sulfur', 'sulphur']],
+    ['related', ['charge separation', 'charge transfer']], ['broader', ['excitation energy transfer', 'energy transfer']], ['same', ['qubit', 'quantum bit']],
+    ['related', ['decoherence', 'dephasing']], ['same', ['vibronic coupling', 'electron-vibration coupling']], ['related', ['drug delivery', 'drug carrier']],
+    ['same', ['wastewater', 'waste water']], ['related', ['deep learning', 'neural network']], ['same', ['large language model', 'llm']],
+    ['same', ['crystal', 'crystalline']], ['same', ['catalyst', 'catalysis', 'catalytic']],
+    ['same', ['2dir', '2d ir', '2d-ir', 'two-dimensional infrared']], ['same', ['2des', '2d electronic spectroscopy', 'two-dimensional electronic spectroscopy']],
+    ['same', ['perylene diimide', 'perylene bisimide']], ['same', ['anion-exchange membrane', 'anion exchange membrane']],
+  ];
+  const SYNONYMS = SYN_DEF.map(([tier, g]) => Object.assign(g.map(t => ({ text: t, stems: stems(t) })), { tier }));
+  const TIER_W = { same: 1, related: 0.7, broader: 0.45 };
+  // Exciton migration and exciton diffusion are used interchangeably; ion migration (field-driven) and ion diffusion are not.
+  const SYN_SAME_AFTER = new Map([['migration', ['exciton', 'energy', 'triplet', 'singlet', 'polaron', 'excitation']]]);
   // Some synonym groups only make sense in a physical-science context ("cell migration" is not "cell diffusion").
   const SYN_GUARD = new Map([['migration', ['exciton', 'ion', 'charge', 'energy', 'electron', 'hole', 'proton', 'polaron', 'lithium', 'sodium', 'molecular', 'molecule', 'atom', 'defect', 'vacancy', 'triplet', 'singlet']]]);
 
@@ -1285,7 +1328,7 @@ body.deck-open { overflow: hidden; }
   function analyzeQuery(q, profile, choices = {}) {
     const raw = normSpace(q);
     const expert = /["()]|\b(AND|OR|NOT)\b/.test(raw);
-    const toks = raw.match(/[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu) || [];
+    const toks = tokens(raw);
     const content = toks.filter(t => !STOP.has(t.toLowerCase()));
     const glossary = (profile && profile.glossary) || {};
     const pTerms = profileTerms(profile);
@@ -1320,7 +1363,7 @@ body.deck-open { overflow: hidden; }
       const lo = lowerToks[i];
       const acr = acronyms.find(a => a.acr === t);
       if (acr) {
-        groups.push({ label: t, alts: [{ text: t, stems: [stem(t)], weight: 1 }, { text: acr.long, stems: phraseStems(acr.long), weight: 1 }] });
+        groups.push({ label: t, alts: [{ text: t, stems: [stem(t)], weight: 1, tier: 'same' }, { text: acr.long, stems: phraseStems(acr.long), weight: 1, tier: 'same' }] });
         pieces.push(`(${t} OR "${acr.long.replace(/"/g, '')}")`);
         i++; continue;
       }
@@ -1342,14 +1385,18 @@ body.deck-open { overflow: hidden; }
         const others = matched.g.filter(a => { const k = a.stems.join(' '); if (seenSt.has(k)) return false; seenSt.add(k); return true; });
         const active = others.filter(a => !disabled.has(a.text));
         const surf = toks.slice(i, i + matched.n).join(' ');
-        groups.push({ label: surf, alts: [{ text: surf, stems: stemToks.slice(i, i + matched.n), weight: 1 }, ...active.map(a => ({ text: a.text, stems: a.stems, weight: 0.8 }))] });
-        others.forEach(a => { if (!usedSyn.has(a.text)) { usedSyn.add(a.text); expansions.push({ for: surf, text: a.text, on: !disabled.has(a.text) }); } });
+        const sameAfter = SYN_SAME_AFTER.get(matched.alt.text) || SYN_SAME_AFTER.get(matched.g[0].text);
+        const tier = sameAfter && sameAfter.some(x => stemToks.slice(Math.max(0, i - 2), i).includes(stem(x))) ? 'same' : matched.g.tier;
+        groups.push({ label: surf, alts: [{ text: surf, stems: stemToks.slice(i, i + matched.n), weight: 1, tier: 'same' }, ...active.map(a => ({ text: a.text, stems: a.stems, weight: 0.8, tier }))] });
+        others.forEach(a => { if (!usedSyn.has(a.text)) { usedSyn.add(a.text); expansions.push({ for: surf, text: a.text, on: !disabled.has(a.text), tier }); } });
         const q1 = matched.n > 1 ? `"${surf}"` : surf;
         pieces.push(active.length ? `(${[q1, ...active.map(a => a.stems.length > 1 || /[-\s]/.test(a.text) ? `"${a.text}"` : a.text)].join(' OR ')})` : q1);
         i += matched.n; continue;
       }
-      groups.push({ label: t, alts: [{ text: t, stems: [stemToks[i]], weight: 1 }] });
-      pieces.push(t);
+      // An ion such as SCN⁻ also counts, a little less, when written without its charge.
+      const charged = /[+-]$/.test(t) && t.length > 1;
+      groups.push({ label: t, alts: [{ text: t, stems: [stemToks[i]], weight: 1, tier: 'same' }, ...(charged ? [{ text: t.slice(0, -1), stems: [stem(t.slice(0, -1))], weight: 0.8, tier: 'related' }] : [])] });
+      pieces.push(charged ? t.slice(0, -1) : t);
       i++;
     }
     const keywordQuery = expert ? raw : pieces.join(' ');
@@ -1586,6 +1633,63 @@ body.deck-open { overflow: hidden; }
     return { score, hits, relHits };
   }
 
+  // ---- Scoring v2. Each idea in the query is weighted by how rare it is among the fetched papers (an idea that every
+  // candidate mentions tells them apart less), single generic words count half, words of a phrase count more when
+  // they sit together, synonyms count by level, and a paper missing a specific idea loses part of its match score
+  // (less so in "Adjacent & emerging"). Version 1 is kept so the two can be compared on graded searches.
+  const splitSt = arr => arr.flatMap(x => /[+-]$/.test(x) || !x.includes('-') ? [x] : x.split('-').filter(Boolean));
+  function prepV2(w) {
+    const p = prepWork(w);
+    if (!p.tS) { p.tS = splitSt(p.titleSt); p.aS = splitSt(p.absSt); p.kS = splitSt(p.kwSt); p.tSet2 = new Set(p.tS); p.aSet2 = new Set(p.aS); }
+    return p;
+  }
+  function matchTermV2(p, st0) {
+    const st = splitSt(st0); if (!st.length) return null;
+    if (hasPhrase(p.tS, st)) return { s: 1, where: 'title' };
+    if (hasPhrase(p.aS, st)) return { s: 0.7, where: 'abstract' };
+    if (st.length > 1 && nearAll(p.tS, st)) return { s: 0.65, where: 'title' };
+    if (st.length > 1 && nearAll(p.aS, st)) return { s: 0.5, where: 'abstract' };
+    if (hasPhrase(p.kS, st)) return { s: 0.45, where: 'keywords' };
+    if (st.length > 1 && hasAll(p.tSet2, st)) return { s: 0.4, where: 'title' };
+    if (st.length > 1 && hasAll(p.aSet2, st)) return { s: 0.25, where: 'abstract' };
+    return null;
+  }
+  function groupStats(works, analysis) {
+    const groups = (analysis && analysis.groups) || []; const N = works.length;
+    const df = groups.map(() => 0);
+    works.forEach(w => { const p = prepV2(w); groups.forEach((g, i) => { if (g.alts.some(a => a.stems.length && matchTermV2(p, a.stems))) df[i]++; }); });
+    const raw = groups.map((g, i) => {
+      const generic = g.alts[0].stems.length === 1 && (GENERIC_SINGLE.has(String(g.label).toLowerCase()) || String(g.label).length < 3);
+      const idf = N > 4 && df[i] > 0 ? Math.log(1 + N / df[i]) / Math.log(1 + N) : 1;
+      return { w: Math.max(0.25, idf) * (generic ? 0.5 : 1), required: !generic, df: df[i], label: g.label };
+    });
+    const top = Math.max(0.0001, ...raw.map(x => x.w));
+    raw.forEach(x => { x.w /= top; });
+    if (raw.length && !raw.some(x => x.required)) raw.forEach(x => { x.required = true; });
+    return raw;
+  }
+  function scoreQueryV2(w, analysis, gs, mode) {
+    const p = prepV2(w); const hits = []; const missing = [];
+    let sum = 0, tot = 0, reqTot = 0, reqHit = 0;
+    (analysis.groups || []).forEach((g, i) => {
+      const st = gs[i]; let best = null;
+      for (const alt of g.alts) {
+        if (!alt.stems.length) continue;
+        const m = matchTermV2(p, alt.stems); if (!m) continue;
+        const s = m.s * (TIER_W[alt.tier] != null ? TIER_W[alt.tier] : alt.weight);
+        if (!best || s > best.s) best = { s, where: m.where, text: alt.text, original: alt.text === g.label, label: g.label };
+      }
+      tot += st.w; if (st.required) reqTot += st.w;
+      if (best) { sum += st.w * best.s; hits.push(best); if (st.required) reqHit += st.w; } else if (st.required) missing.push(g.label);
+    });
+    const coverage = reqTot ? reqHit / reqTot : 1;
+    let score = (tot ? sum / tot : 0) * (mode === 'adjacent' ? 0.75 + 0.25 * coverage : 0.35 + 0.65 * coverage);
+    const ph = splitSt(analysis.phrase || []);
+    if (ph.length > 1) { if (hasPhrase(p.tS, ph)) score += 0.15; else if (nearAll(p.tS, ph, 3)) score += 0.08; else if (nearAll(p.aS, ph, 4)) score += 0.05; }
+    const relHits = (analysis.related || []).filter(r => matchTermV2(p, r.stems)).map(r => r.text);
+    return { score: Math.min(1, score), hits, relHits, missing, coverage };
+  }
+
   function scoreProfile(w, pTerms) {
     if (!pTerms.length) return { score: 0, hits: [] };
     const p = prepWork(w);
@@ -1619,8 +1723,10 @@ body.deck-open { overflow: hidden; }
       for (const [ch, rank] of Object.entries(w.ranks || {})) r += (CHANNEL_WEIGHT[ch] != null ? CHANNEL_WEIGHT[ch] : 0.6) / (K + rank);
       w._rrf = r; if (r > maxRrf) maxRrf = r;
     }
+    const v2 = ctx.scoring !== 'v1';
+    const gs = v2 ? groupStats(works, ctx.analysis) : null;
     for (const w of works) {
-      const q = scoreQuery(w, ctx.analysis);
+      const q = v2 ? scoreQueryV2(w, ctx.analysis, gs, mode) : scoreQuery(w, ctx.analysis);
       const pr = scoreProfile(w, pTerms);
       const rrf = maxRrf ? w._rrf / maxRrf : 0;
       const age = w.year ? Math.max(0, nowYear - w.year) : 10;
@@ -1641,7 +1747,7 @@ body.deck-open { overflow: hidden; }
       if (w.retracted) score -= 0.5;
       if (/^(dataset|software|book-review|paratext|erratum|grant|libguides|reference-entry|peer-review|supplementary-materials)$/.test(w.oaType || '')) score -= 0.12;
       if (!ctx.trail && !ctx.author && !q.hits.length && !(w.ranks && (w.ranks.oa_sem !== undefined))) score -= 0.15; // nothing matched and not a meaning-based hit
-      w.rank = { score, qrel, q: q.score, rrf, prof, profRaw: pr.score, impact, recency, qHits: q.hits, relHits: q.relHits, pHits: pr.hits, sem: sem || null };
+      w.rank = { score, qrel, q: q.score, rrf, prof, profRaw: pr.score, impact, recency, qHits: q.hits, relHits: q.relHits, pHits: pr.hits, sem: sem || null, missing: q.missing || [], coverage: q.coverage, scoring: v2 ? 'v2' : 'v1' };
     }
     return works.slice().sort((a, b) => b.rank.score - a.rank.score);
   }
@@ -1663,6 +1769,7 @@ body.deck-open { overflow: hidden; }
     if (inAbs.length) reasons.push({ kind: 'query', text: `Abstract mentions ${listify(inAbs)}.` });
     if (inKw.length && !inTitle.length && !inAbs.length) reasons.push({ kind: 'query', text: `Tagged by OpenAlex with ${listify(inKw)}.` });
     if (syn.length) reasons.push({ kind: 'synonym', text: `Uses ${listify(syn.map(h => `“${h.text}”`))} for ${listify([...new Set(syn.map(h => `“${h.label}”`))])}.` });
+    if (qh.length && r.missing && r.missing.length) reasons.push({ kind: 'missing', text: `Does not mention ${listify(r.missing.map(t => `“${t}”`))} in its title or abstract.` });
     if (r.relHits && r.relHits.length) reasons.push({ kind: 'query', text: `Mentions the related term${r.relHits.length > 1 ? 's' : ''} ${listify(r.relHits.map(t => `“${t}”`))}.` });
     else if (w.ranks && w.ranks.oa_rel !== undefined && Object.keys(w.ranks).length === 1) reasons.push({ kind: 'semantic', text: 'Found through a related term you added.' });
     if (ctx && ctx.trail) { /* trail results are explained by their link to the starting paper */ }
@@ -2388,6 +2495,24 @@ body.deck-open { overflow: hidden; }
       .sort((a, b) => b.score - a.score || String(b.w.created || b.w.date).localeCompare(String(a.w.created || a.w.date)))
       .filter(x => { const k = normTitle(x.w.title); if (seenTitles.has(k)) return false; seenTitles.add(k); return true; });
   }
+  // ---------------------------------------------------------------- benchmark (researcher-graded searches)
+  // Grades: 0 not relevant, 1 slightly, 2 relevant, 3 exactly what was asked. Ungraded papers count as 0 in nDCG
+  // (the ideal ordering uses all grades given), and the share of graded papers in the top k is reported beside it.
+  function ndcgAt(keys, grades, k = 10) {
+    const g = x => (grades[x] != null ? grades[x] : 0);
+    const dcg = keys.slice(0, k).reduce((s, x, i) => s + (Math.pow(2, g(x)) - 1) / Math.log2(i + 2), 0);
+    const ideal = Object.values(grades).sort((a, b) => b - a).slice(0, k).reduce((s, v, i) => s + (Math.pow(2, v) - 1) / Math.log2(i + 2), 0);
+    return ideal ? dcg / ideal : 0;
+  }
+  function precisionAt(keys, grades, k = 5, min = 2) { const top = keys.slice(0, k); return top.length ? top.filter(x => (grades[x] || 0) >= min).length / k : 0; }
+  function judgedAt(keys, grades, k = 10) { const top = keys.slice(0, k); return top.length ? top.filter(x => grades[x] != null).length / top.length : 0; }
+  function benchMetrics(keys, grades) { return { ndcg10: ndcgAt(keys, grades, 10), p5: precisionAt(keys, grades, 5), judged10: judgedAt(keys, grades, 10) }; }
+  function meanMetrics(list) {
+    const n = list.length || 1; const o = { ndcg10: 0, p5: 0, judged10: 0 };
+    list.forEach(m => { o.ndcg10 += m.ndcg10 / n; o.p5 += m.p5 / n; o.judged10 += m.judged10 / n; });
+    return o;
+  }
+
   // Start of the window to check: the last check (at most 7 days back), or 2 days back the first time. UTC dates, as Crossref uses.
   function todaySince(lastRunAt, now = Date.now(), maxDays = 7) {
     const day = 864e5;
@@ -2405,6 +2530,7 @@ body.deck-open { overflow: hidden; }
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
     questStep, questSuggest, trailCode, parseTrailCode, trailStats,
     PUBLISHERS, todayTerms, todayQuery, todayQueries, todayRelated, rankToday, todaySince,
+    tokens, chemNorm, matchTermV2, groupStats, scoreQueryV2, nearAll, TIER_W, ndcgAt, precisionAt, judgedAt, benchMetrics, meanMetrics,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };
@@ -2462,7 +2588,7 @@ body.deck-open { overflow: hidden; }
   // ---------------------------------------------------------------- state
   const S = {
     settings: Object.assign({ apiKey: '', crossref: true, epmc: true, semantic: true, rememberProfile: false, ai: false,
-      llmProvider: 'anthropic', llmKey: '', llmModel: 'claude-haiku-5-5', llmBase: 'https://api.openai.com/v1', llmConsent: false }, store.get('settings', {})),
+      llmProvider: 'anthropic', llmKey: '', llmModel: 'claude-haiku-5-5', llmBase: 'https://api.openai.com/v1', llmConsent: false, scoring: 'v2' }, store.get('settings', {})),
     sort: 'best',
     pathway: 'topic',
     follows: store.get('follows', []) || [],
@@ -2474,7 +2600,8 @@ body.deck-open { overflow: hidden; }
     search: null,
     sessionCost: 0,
     ai: { status: 'off', pipe: null, cache: new Map(), qcache: new Map(), progress: 0, lastRun: null, error: '' },
-    ui: { openDetails: new Set() },
+    ui: { openDetails: new Set(), grading: false },
+    bench: store.get('bench', []) || [],
   };
   if (S.settings.rememberProfile) S.profile = store.get('profile', null);
   (store.get('saved', []) || []).forEach(w => { if (w && w.key) { C.prepWork(w); S.saved.set(w.key, w); } });
@@ -2588,7 +2715,7 @@ body.deck-open { overflow: hidden; }
     document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.view === view ? 'page' : 'false'));
     if (view === 'saved') { renderSaved(); renderFollows(); }
     if (view === 'search') renderFollows();
-    if (view === 'profile') { renderProfileEditor(); renderAI(); const tb = $('#taste-box'); if (tb) tb.innerHTML = tasteHTML(); }
+    if (view === 'profile') { renderProfileEditor(); renderAI(); const tb = $('#taste-box'); if (tb) tb.innerHTML = tasteHTML(); renderBench(); }
     if (view === 'about') renderAbout();
     if (v.startsWith('trail=')) { const code = v.slice(6); history.replaceState(null, '', '#search'); openSharedTrail(code); return; }
     if (v === 'install' || v === 'key') { renderInstall(); const h = $(v === 'key' ? '#key-box' : '#install-h'); if (h) setTimeout(() => h.scrollIntoView({ block: 'start' }), 0); return; }
@@ -2599,7 +2726,7 @@ body.deck-open { overflow: hidden; }
   let searchToken = 0;
   function ctx() {
     const s = S.search;
-    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile(), trail: s.kind === 'trail' ? s.trail : null, author: s.kind === 'author' || s.kind === 'doi' ? (s.author || true) : null };
+    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile(), scoring: S.settings.scoring === 'v1' ? 'v1' : 'v2', trail: s.kind === 'trail' ? s.trail : null, author: s.kind === 'author' || s.kind === 'doi' ? (s.author || true) : null };
   }
   function hasProfile() { return !!(S.profile && ((S.profile.interests || []).length + (S.profile.methods || []).length + (S.profile.areas || []).length)); }
 
@@ -2984,9 +3111,9 @@ body.deck-open { overflow: hidden; }
     if (f.oaOnly) chips.push(`<li class="chip">Open access <button data-clear="oaOnly" aria-label="Clear">×</button></li>`);
     if (f.theme && s.themes) { const t = s.themes.themes.find(x => x.id === f.theme); if (t) chips.push(`<li class="chip">Theme: ${esc(t.name)} <button data-clear="theme" aria-label="Clear theme">×</button></li>`); }
     const canSwipe = s.kind !== 'author' && !inQuest() && vis.some(w => !S.saved.has(w.key) && !S.later.has(w.key));
-    $('#filterbar').innerHTML = `<div class="filterbar">${canSwipe ? '<button type="button" class="btn small swipe-btn" id="swipe-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="3"/><path d="M2.5 9.5 1 12l1.5 2.5M21.5 9.5 23 12l-1.5 2.5"/></svg>Swipe to sort</button>' : ''}<button type="button" class="btn small" id="open-filters">Filters${filtersActive() ? ' (on)' : ''}</button>
+    $('#filterbar').innerHTML = `<div class="filterbar">${canSwipe ? '<button type="button" class="btn small swipe-btn" id="swipe-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="3"/><path d="M2.5 9.5 1 12l1.5 2.5M21.5 9.5 23 12l-1.5 2.5"/></svg>Swipe to sort</button>' : ''}<button type="button" class="btn small" id="open-filters">Filters${filtersActive() ? ' (on)' : ''}</button>${s.kind === 'search' ? `<button type="button" class="btn small" id="grade-toggle" aria-pressed="${S.ui.grading}">${S.ui.grading ? 'Done grading' : 'Grade results'}</button>` : ''}
       <label class="sortsel"><span class="sr-only">Sort results</span><select id="sort">${sortOptions(s)}</select></label>
-      <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${s.kind === 'author' ? `${fmt(vis.length)} works` : `${Math.min(s.shown, vis.length)} of ${vis.length} shown`}</span></div>`;
+      <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${s.kind === 'author' ? `${fmt(vis.length)} works` : grading() ? `${gradingList().length} to grade` : `${Math.min(s.shown, vis.length)} of ${vis.length} shown`}</span></div>`;
   }
 
   function sortOptions(s) {
@@ -3032,6 +3159,7 @@ body.deck-open { overflow: hidden; }
       <h3>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
       <p class="byline">${authors}${authors ? '. ' : ''}${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
       <div class="why"><ul>${reasons}</ul>${ev}${ex.note ? `<p class="note">${esc(ex.note)}</p>` : ''}</div>
+      ${grading() ? gradeHTML(w) : ''}
       <div class="actions">
         <button type="button" class="save" data-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>
         ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${w.doi ? 'Publisher page' : 'Source page'}</a>` : ''}
@@ -3057,8 +3185,9 @@ body.deck-open { overflow: hidden; }
     renderFilterbar(vis);
     const c = ctx(); const hset = C.highlightStems(c);
     if (inQuest()) { const sg = questSuggestion(); [sg.leap, sg.close].forEach(x => { if (!x) return; const i = vis.findIndex(w => w.key === x.key); if (i > 0) vis.unshift(vis.splice(i, 1)[0]); }); }
-    const list = vis.slice(0, s.shown);
+    const list = grading() ? gradingList() : vis.slice(0, s.shown);
     c.topScore = vis.reduce((m, w) => Math.max(m, w.rank ? w.rank.score : 0), 0.0001);
+    $('#grade-note').innerHTML = grading() ? gradeNoteHTML(list) : '';
     if (!s.ranked.length) {
       const anyFail = Object.values(s.status).some(x => x && x.ok === false);
       $('#results').innerHTML = `<li class="panel">${anyFail ? 'No results could be fetched. See the messages above.' : 'No papers matched. Try fewer or broader words, or turn off a field restriction.'}</li>`;
@@ -3068,6 +3197,7 @@ body.deck-open { overflow: hidden; }
       $('#results').innerHTML = list.map((w, i) => paperHTML(w, i, c, hset)).join('');
     }
     const more = [];
+    if (grading()) { $('#more').innerHTML = '<button type="button" class="btn" id="grade-done">Done grading</button>'; return; }
     if (vis.length > s.shown) more.push(`<button type="button" class="btn" id="show-more">Show ${Math.min(PAGE, vis.length - s.shown)} more</button>`);
     else if (s.ranked.length) {
       const chans = s.kind === 'trail' ? ['oa_trail'] : ['oa_kw', 'oa_sem', 'crossref', 'epmc'];
@@ -3856,6 +3986,7 @@ body.deck-open { overflow: hidden; }
     $('#api-key').value = S.settings.apiKey || '';
     renderKey(); if (S.settings.pendingKey) checkKey(false); else if (!S.budget || Date.now() - S.budget.at > 60000) refreshBudget();
     $('#set-semantic').checked = S.settings.semantic; $('#set-crossref').checked = S.settings.crossref; $('#set-epmc').checked = S.settings.epmc;
+    document.querySelectorAll('input[name="scoring"]').forEach(i => { i.checked = i.value === (S.settings.scoring === 'v1' ? 'v1' : 'v2'); });
     $('#llm-provider').value = S.settings.llmProvider; $('#llm-key').value = S.settings.llmKey || ''; $('#llm-model').value = S.settings.llmModel || '';
     $('#llm-base').value = S.settings.llmBase || ''; $('#llm-consent').checked = !!S.settings.llmConsent;
     $('#llm-base-field').hidden = S.settings.llmProvider === 'anthropic';
@@ -3927,6 +4058,27 @@ body.deck-open { overflow: hidden; }
     if (t.id === 'lab-import') { labImport(); return; }
     if (t.id === 'lab-note-hide') { store.set('labNoteHidden', true); const n = $('.lab-note'); if (n) n.hidden = true; return; }
     if (t.id === 'swipe-open') { openDeck(); return; }
+    if (t.id === 'grade-toggle' || t.id === 'grade-done') {
+      S.ui.grading = t.id === 'grade-toggle' ? !S.ui.grading : false; gradingCache = null; renderResults();
+      if (!S.ui.grading) toast(benchEntry(S.search) ? 'Grades saved on this device' : 'Grading off');
+      else $('#grade-note').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (d.grade !== undefined && d.key) {
+      gradeWork(d.key, Number(d.grade));
+      const e = benchEntry(S.search); const g = e && e.grades[d.key];
+      t.closest('.grade').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.grade) === g)));
+      const note = $('#grade-note'); if (note) note.innerHTML = gradeNoteHTML(gradingList());
+      return;
+    }
+    if (t.id === 'bench-export') { exportBench(); return; }
+    if (d.benchOpen !== undefined) { const e = benchResults().rows[Number(d.benchOpen)].e; location.hash = '#search'; S.ui.grading = true; S.mode = e.mode || S.mode; renderModes(); runSearch(e.q, { choices: e.choices, sense: e.sense, allFields: e.allFields }); return; }
+    if (d.benchDel !== undefined) {
+      const e = benchResults().rows[Number(d.benchDel)].e;
+      if (S.ui.benchDel !== e.id) { S.ui.benchDel = e.id; t.textContent = 'Tap again to delete'; return; }
+      S.ui.benchDel = null;
+      S.bench = S.bench.filter(x => x !== e); persistBench(); renderBench(); toast('Grades deleted'); return;
+    }
     if (t.id === 'today-refresh') { fetchToday(true); return; }
     if (t.id === 'today-swipe') { todayDeck(); return; }
     if (t.id === 'today-more') { todayShowAll = !todayShowAll; renderToday(); return; }
@@ -4102,6 +4254,8 @@ body.deck-open { overflow: hidden; }
     if (t.id === 'remember') { S.settings.rememberProfile = t.checked; saveSettings(); persistProfile(); toast(t.checked ? 'Profile will be remembered on this device' : 'Profile removed from this device’s storage'); }
     if (t.id === 'api-key') { S.settings.apiKey = t.value.trim(); if (S.settings.apiKey) S.settings.pendingKey = null; saveSettings(); S.budget = null; keyMsg = null; toast(S.settings.apiKey ? 'API key saved in this browser' : 'API key removed'); refreshBudget(); }
     if (t.id === 'set-semantic') { S.settings.semantic = t.checked; saveSettings(); }
+    if (t.id === 'bench-import' && t.files[0]) { importBench(t.files[0]); t.value = ''; }
+    if (t.name === 'scoring') { S.settings.scoring = t.value === 'v1' ? 'v1' : 'v2'; saveSettings(); gradingCache = null; if (S.search && S.search.pool) { rerank(); } toast(S.settings.scoring === 'v1' ? 'Using the previous ranking' : 'Using the new ranking'); }
     if (t.id === 'set-crossref') { S.settings.crossref = t.checked; saveSettings(); }
     if (t.id === 'set-epmc') { S.settings.epmc = t.checked; saveSettings(); }
     if (t.id === 'sort') {
@@ -4702,6 +4856,105 @@ body.deck-open { overflow: hidden; }
       <p class="byline">${esc(w.authors.slice(0, 3).join(', '))}${w.authors.length > 3 ? ' et al.' : ''}${w.venue ? `. <span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
       <div class="actions"><button type="button" class="btn small primary" data-later-save="${esc(w.key)}">Keep it</button><button type="button" class="btn small quiet" data-later-rm="${esc(w.key)}">Remove</button></div></li>`).join('')}</ul>`;
   }
+  // ---------------------------------------------------------------- grading and the benchmark (Lab)
+  // Grade the top papers of a search 0–3. To grade fairly, the list mixes the top 12 of the new ranking, the previous
+  // ranking and the databases' own order, in a fixed shuffled order, so neither version decides what gets graded.
+  const GRADES = [[0, 'No'], [1, 'Slightly'], [2, 'Yes'], [3, 'Exactly']];
+  const GRADE_HELP = 'No: not relevant. Slightly: touches the topic. Yes: relevant. Exactly: what you were looking for.';
+  const grading = () => !!(S.ui.grading && S.search && S.search.kind === 'search');
+  function benchId(s) { return JSON.stringify([String(s.q).toLowerCase(), s.choices || {}, s.sense ? s.sense.id : null, !!s.allFields]); }
+  const benchEntry = s => S.bench.find(e => e.id === benchId(s));
+  const rrfOf = w => Object.entries(w.ranks || {}).reduce((a, [ch, r]) => a + (ch === 'oa_rel' ? 0.6 : 1) / (20 + r), 0);
+  function rankAs(works, scoring, extra = {}) {
+    return C.rankWorks(works.map(w => Object.assign({}, w)), Object.assign({}, ctx(), { scoring }, extra));
+  }
+  let gradingCache = null;
+  function gradingList() {
+    const s = S.search; const base = visibleWorks();
+    const sig = `${searchToken}|${base.length}|${S.mode}|${S.settings.scoring}`;
+    if (gradingCache && gradingCache.sig === sig) return gradingCache.list.map(k => s.pool.get(k)).filter(Boolean);
+    const keys = new Set([...rankAs(base, 'v2').slice(0, 12), ...rankAs(base, 'v1').slice(0, 12), ...base.slice().sort((a, b) => rrfOf(b) - rrfOf(a)).slice(0, 12)].map(w => w.key));
+    const list = base.filter(w => keys.has(w.key)).sort((a, b) => C.hash32(a.key + '|' + s.q) - C.hash32(b.key + '|' + s.q)).map(w => w.key);
+    gradingCache = { sig, list };
+    return list.map(k => s.pool.get(k)).filter(Boolean);
+  }
+  function gradeHTML(w) {
+    const e = benchEntry(S.search); const g = e && e.grades[w.key];
+    return `<div class="grade" role="group" aria-label="How relevant is this paper to your search?"><span class="tiny grade-q" aria-hidden="true">How relevant is it to your search?</span>${GRADES.map(([v, label]) => `<button type="button" data-grade="${v}" data-key="${esc(w.key)}" aria-pressed="${g === v}">${label}</button>`).join('')}</div>`;
+  }
+  function gradeNoteHTML(list) {
+    const e = benchEntry(S.search); const n = e ? list.filter(w => e.grades[w.key] != null).length : 0;
+    return `<div class="panel grade-note" role="status"><p class="small"><strong>Grading: ${n} of ${list.length} done.</strong> These are the top papers from the new ranking, the previous one and the databases’ own order, mixed so the order doesn’t sway you. ${GRADE_HELP}</p>
+      <p class="tiny">Grades stay on this device. See how each ranking does under <a href="#profile">Profile › Graded searches</a>.</p></div>`;
+  }
+  function benchSlim(w) {
+    const o = Object.assign(C.slim(w), { ranks: w.ranks, keywords: w.keywords, pct: w.pct, abstract: String(w.abstract || '').slice(0, 900) });
+    delete o.savedAt; return o;
+  }
+  function persistBench() {
+    if (!store.set('bench', S.bench)) { toast('Storage is full: export your grades, then delete some graded searches'); return false; }
+    return true;
+  }
+  function gradeWork(key, g) {
+    const s = S.search; if (!s || s.kind !== 'search') return;
+    let e = benchEntry(s);
+    if (!e) { e = { id: benchId(s), q: s.q, choices: s.choices || {}, sense: s.sense || null, allFields: !!s.allFields, mode: S.mode, at: new Date().toISOString(), pool: [], grades: {} }; S.bench.push(e); }
+    // Keep the candidates (the current top 60 and every graded paper), so later ranking versions are compared on the same papers.
+    const map = new Map(e.pool.map(w => [w.key, w]));
+    s.ranked.slice(0, 60).concat(gradingList()).forEach(w => { if (!map.has(w.key)) map.set(w.key, benchSlim(w)); });
+    if (e.grades[key] === g) delete e.grades[key]; else e.grades[key] = g;
+    e.pool = [...map.values()]; e.mode = S.mode; e.at = new Date().toISOString();
+    persistBench();
+  }
+  function benchRank(e, how) {
+    const works = e.pool.map(w => { const c = Object.assign({}, w); delete c._prep; C.prepWork(c); return c; });
+    if (how === 'source') return works.sort((a, b) => rrfOf(b) - rrfOf(a)).map(w => w.key);
+    const analysis = C.analyzeQuery(e.q, S.profile, e.choices || {});
+    return C.rankWorks(works, { analysis, profile: S.profile, mode: e.mode || 'all', nowYear: new Date().getFullYear(), scoring: how, sem: null }).map(w => w.key);
+  }
+  function benchResults() {
+    const rows = S.bench.filter(e => Object.keys(e.grades).length).map(e => ({ e, n: Object.keys(e.grades).length,
+      m: { source: C.benchMetrics(benchRank(e, 'source'), e.grades), v1: C.benchMetrics(benchRank(e, 'v1'), e.grades), v2: C.benchMetrics(benchRank(e, 'v2'), e.grades) } }));
+    const mean = k => C.meanMetrics(rows.map(r => r.m[k]));
+    return { rows, mean: rows.length ? { source: mean('source'), v1: mean('v1'), v2: mean('v2') } : null };
+  }
+  const pct = x => `${Math.round(100 * x)}%`;
+  function benchHTML() {
+    const { rows, mean } = benchResults();
+    const intro = `<p class="small">Grade the results of searches you know well, and Paperscope measures which ranking puts the papers you rate highly near the top. Run a search and tap <strong>Grade results</strong>. About 20 searches with 15–30 grades each is enough to compare the rankings. ${GRADE_HELP}</p>`;
+    const tools = `<div class="row"><button type="button" class="btn small" id="bench-export" ${S.bench.length ? '' : 'disabled'}>Export grades</button><label class="btn small" for="bench-import">Import grades</label><input id="bench-import" type="file" accept=".json,application/json" class="sr-only"></div>`;
+    if (!rows.length) return `<section class="panel bench" aria-labelledby="bench-h"><h3 id="bench-h">Graded searches</h3>${intro}<p class="small muted">No graded searches yet.</p>${tools}</section>`;
+    const cell = (m, k) => `${k === 'p5' ? pct(m[k]) : m[k].toFixed(2)}`;
+    const better = (a, b) => (b - a > 0.005 ? ' class="up"' : a - b > 0.005 ? ' class="down"' : '');
+    return `<section class="panel bench" aria-labelledby="bench-h"><h3 id="bench-h">Graded searches</h3>${intro}
+      <p class="small"><strong>Across ${rows.length} search${rows.length === 1 ? '' : 'es'}:</strong> quality of the top 10 (nDCG, 0–1): databases’ order ${mean.source.ndcg10.toFixed(2)}, previous ranking ${mean.v1.ndcg10.toFixed(2)}, new ranking <strong>${mean.v2.ndcg10.toFixed(2)}</strong>. Relevant papers in the top 5: ${pct(mean.source.p5)}, ${pct(mean.v1.p5)}, <strong>${pct(mean.v2.p5)}</strong>.</p>
+      <ul class="bench-list">${rows.map(({ e, n, m }, i) => `<li><p class="bq">${esc(e.q)} <span class="tiny">${n} graded</span></p>
+        <p class="small">Top 10 quality: previous ${cell(m.v1, 'ndcg10')} → new <span${better(m.v1.ndcg10, m.v2.ndcg10)}>${cell(m.v2, 'ndcg10')}</span>. Relevant in top 5: ${cell(m.v1, 'p5')} → <span${better(m.v1.p5, m.v2.p5)}>${cell(m.v2, 'p5')}</span>.</p>
+        <div class="row bench-act"><button type="button" class="btn link" data-bench-open="${i}">Open and grade more</button><button type="button" class="btn link" data-bench-del="${i}" aria-label="Delete grades for ${esc(e.q)}">Delete</button></div></li>`).join('')}</ul>
+      <p class="tiny">nDCG compares each ranking’s top 10 with the best possible order of your grades; ungraded papers count as not relevant. Graded share of each top 10: previous ${pct(mean.v1.judged10)}, new ${pct(mean.v2.judged10)}. Grades are kept on this device.</p>${tools}</section>`;
+  }
+  function renderBench() { const b = $('#bench-box'); if (b) b.innerHTML = benchHTML(); }
+  function exportBench() {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ app: 'Paperscope Lab', kind: 'graded-searches', version: 1, exported: new Date().toISOString(), searches: S.bench }, null, 1)], { type: 'application/json' }));
+    a.download = 'paperscope-graded-searches.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  async function importBench(file) {
+    try {
+      const data = JSON.parse(await file.text()); const list = Array.isArray(data) ? data : data.searches;
+      if (!Array.isArray(list)) throw new Error('not a grades file');
+      let added = 0;
+      list.forEach(x => {
+        if (!x || !x.q || !x.grades || !Array.isArray(x.pool)) return;
+        const id = x.id || benchId(x); const e = S.bench.find(y => y.id === id);
+        if (!e) { S.bench.push(Object.assign({}, x, { id })); added++; return; }
+        const map = new Map(e.pool.map(w => [w.key, w])); x.pool.forEach(w => { if (w && w.key && !map.has(w.key)) map.set(w.key, w); });
+        e.pool = [...map.values()]; Object.assign(e.grades, x.grades); added++;
+      });
+      persistBench(); renderBench(); toast(`Imported grades for ${added} search${added === 1 ? '' : 'es'}`);
+    } catch (err) { toast('That file is not a Paperscope grades file'); }
+  }
+
   function tasteHTML() {
     const t = C.topTaste(S.taste, 10);
     if (!t.liked.length && !t.disliked.length) return '';
@@ -4780,7 +5033,7 @@ body.deck-open { overflow: hidden; }
   S.today = store.get('today', null); renderToday(); if (!location.hash.startsWith('#trail=')) fetchToday(false);
   if (S.settings.pendingKey) checkKey(true);
   if (S.settings.ai) loadAI(true);
-  window.Paperscope = { S, runSearch, version: VERSION }; // for debugging and tests
+  window.Paperscope = { S, runSearch, benchResults, version: VERSION }; // for debugging and tests
 })();
 </script>
 </body>

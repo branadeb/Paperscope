@@ -49,11 +49,21 @@
   const NUMWORDS = { one: '1', two: '2', three: '3', four: '4', five: '5' };
 
   const WORD_RE = /[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu;
+  // Chemical notation: superscript and subscript digits become plain digits, and a charge sign right after a formula
+  // stays on the token, so SCN⁻ is "scn-", Fe²⁺ is "fe2+" and MoS₂ is "mos2" (and they are not stemmed).
+  const SUPSUB = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9', '⁺': '+', '⁻': '-', '₊': '+', '₋': '-' };
+  const chemNorm = s => String(s || '').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹₀-₉⁺⁻₊₋]/g, c => SUPSUB[c]).replace(/([A-Za-z0-9])\u2212/g, '$1-');
+  const TOKEN_RE = /[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*(?:[+-](?=$|[\s,.;:)\]/]))?/gu;
+  const FORMULA_RE = /^(?:[A-Z][a-z]?\d*)+$/;
+  function tokens(text) {
+    return (chemNorm(text).match(TOKEN_RE) || []).map(t => { const c = t.slice(-1); return (c === '+' || c === '-') && !FORMULA_RE.test(t.slice(0, -1)) ? t.slice(0, -1) : t; });
+  }
 
   function normSpace(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
 
   function stem(w) {
     let s = String(w).toLowerCase().replace(/[’']/g, '');
+    if (/[+-]$/.test(s) || (/\d/.test(s) && /[a-z]/.test(s) && s.length <= 10 && !s.includes('-'))) return s; // formulas, ions: as written
     if (s.length > 4 && s.endsWith('ies')) s = s.slice(0, -3) + 'y';
     else if (s.endsWith('sses')) s = s.slice(0, -2);
     else if (s.length > 3 && s.endsWith('s') && !/(ss|us|is|ys)$/.test(s)) s = s.slice(0, -1);
@@ -65,7 +75,7 @@
     return s;
   }
 
-  function words(text) { return String(text || '').match(WORD_RE) || []; }
+  function words(text) { return tokens(text); }
   function stems(text) { return words(text).map(stem); }
   function contentStems(text) { return words(text).filter(w => !STOP.has(w.toLowerCase())).map(stem); }
   // Stems of a phrase with leading/trailing stop words removed (inner ones kept, e.g. "equations of motion").
@@ -149,23 +159,30 @@
     'organic electronics', 'energy storage', 'energy science', 'chemical biology', 'bioinformatics', 'systems biology']
     .map(a => stems(a));
 
-  // Curated near-synonyms and spelling variants (deterministic, small, transparent to the user).
-  const SYNONYMS = [
-    ['migration', 'diffusion', 'transport'], ['mechanism', 'pathway'], ['synthesis', 'fabrication', 'preparation'],
-    ['degradation', 'decomposition'], ['modeling', 'modelling', 'simulation'], ['behavior', 'behaviour'], ['color', 'colour'],
-    ['tumor', 'tumour', 'cancer'], ['metastasis', 'metastatic'], ['heart attack', 'myocardial infarction'],
-    ['elderly', 'older adults'], ['children', 'pediatric', 'paediatric'], ['solar cell', 'photovoltaic'],
-    ['ultrafast', 'femtosecond', 'time-resolved'], ['global warming', 'climate change'],
-    ['covid-19', 'sars-cov-2'], ['nanoconfinement', 'nanoconfined', 'nanochannel'], ['photocatalysis', 'photocatalytic'],
-    ['well-being', 'wellbeing'], ['socioeconomic', 'socio-economic'], ['students', 'learners'], ['teacher', 'educator'],
-    ['conductivity', 'conductance'], ['fiber', 'fibre'], ['center', 'centre'],
-    ['anemia', 'anaemia'], ['estrogen', 'oestrogen'], ['optimization', 'optimisation'], ['ionization', 'ionisation'],
-    ['crystallization', 'crystallisation'], ['polarization', 'polarisation'], ['aluminum', 'aluminium'], ['sulfur', 'sulphur'],
-    ['charge separation', 'charge transfer'], ['excitation energy transfer', 'energy transfer'], ['qubit', 'quantum bit'],
-    ['decoherence', 'dephasing'], ['vibronic coupling', 'electron-vibration coupling'], ['drug delivery', 'drug carrier'],
-    ['wastewater', 'waste water'], ['deep learning', 'neural network'], ['large language model', 'llm'],
-    ['crystal', 'crystalline'], ['catalyst', 'catalysis', 'catalytic'],
-  ].map(g => g.map(t => ({ text: t, stems: stems(t) })));
+  // Curated synonyms, by level: "same" (spelling variants and true equivalents), "related" (close but not the same
+  // thing, e.g. conductivity and conductance), "broader" (only for finding more). Deterministic, small, shown to the user.
+  const SYN_DEF = [
+    ['related', ['migration', 'diffusion', 'transport']], ['related', ['mechanism', 'pathway']], ['related', ['synthesis', 'fabrication', 'preparation']],
+    ['related', ['degradation', 'decomposition']], ['same', ['modeling', 'modelling']], ['related', ['modeling', 'simulation']], ['same', ['behavior', 'behaviour']], ['same', ['color', 'colour']],
+    ['same', ['tumor', 'tumour']], ['related', ['tumor', 'cancer']], ['same', ['metastasis', 'metastatic']], ['same', ['heart attack', 'myocardial infarction']],
+    ['same', ['elderly', 'older adults']], ['same', ['children', 'pediatric', 'paediatric']], ['same', ['solar cell', 'photovoltaic']],
+    ['related', ['ultrafast', 'femtosecond', 'time-resolved']], ['related', ['global warming', 'climate change']],
+    ['same', ['covid-19', 'sars-cov-2']], ['same', ['nanoconfinement', 'nanoconfined']], ['related', ['nanoconfinement', 'nanochannel']], ['same', ['photocatalysis', 'photocatalytic']],
+    ['same', ['well-being', 'wellbeing']], ['same', ['socioeconomic', 'socio-economic']], ['related', ['students', 'learners']], ['related', ['teacher', 'educator']],
+    ['related', ['conductivity', 'conductance']], ['same', ['fiber', 'fibre']], ['same', ['center', 'centre']],
+    ['same', ['anemia', 'anaemia']], ['same', ['estrogen', 'oestrogen']], ['same', ['optimization', 'optimisation']], ['same', ['ionization', 'ionisation']],
+    ['same', ['crystallization', 'crystallisation']], ['same', ['polarization', 'polarisation']], ['same', ['aluminum', 'aluminium']], ['same', ['sulfur', 'sulphur']],
+    ['related', ['charge separation', 'charge transfer']], ['broader', ['excitation energy transfer', 'energy transfer']], ['same', ['qubit', 'quantum bit']],
+    ['related', ['decoherence', 'dephasing']], ['same', ['vibronic coupling', 'electron-vibration coupling']], ['related', ['drug delivery', 'drug carrier']],
+    ['same', ['wastewater', 'waste water']], ['related', ['deep learning', 'neural network']], ['same', ['large language model', 'llm']],
+    ['same', ['crystal', 'crystalline']], ['same', ['catalyst', 'catalysis', 'catalytic']],
+    ['same', ['2dir', '2d ir', '2d-ir', 'two-dimensional infrared']], ['same', ['2des', '2d electronic spectroscopy', 'two-dimensional electronic spectroscopy']],
+    ['same', ['perylene diimide', 'perylene bisimide']], ['same', ['anion-exchange membrane', 'anion exchange membrane']],
+  ];
+  const SYNONYMS = SYN_DEF.map(([tier, g]) => Object.assign(g.map(t => ({ text: t, stems: stems(t) })), { tier }));
+  const TIER_W = { same: 1, related: 0.7, broader: 0.45 };
+  // Exciton migration and exciton diffusion are used interchangeably; ion migration (field-driven) and ion diffusion are not.
+  const SYN_SAME_AFTER = new Map([['migration', ['exciton', 'energy', 'triplet', 'singlet', 'polaron', 'excitation']]]);
   // Some synonym groups only make sense in a physical-science context ("cell migration" is not "cell diffusion").
   const SYN_GUARD = new Map([['migration', ['exciton', 'ion', 'charge', 'energy', 'electron', 'hole', 'proton', 'polaron', 'lithium', 'sodium', 'molecular', 'molecule', 'atom', 'defect', 'vacancy', 'triplet', 'singlet']]]);
 
@@ -437,7 +454,7 @@
   function analyzeQuery(q, profile, choices = {}) {
     const raw = normSpace(q);
     const expert = /["()]|\b(AND|OR|NOT)\b/.test(raw);
-    const toks = raw.match(/[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu) || [];
+    const toks = tokens(raw);
     const content = toks.filter(t => !STOP.has(t.toLowerCase()));
     const glossary = (profile && profile.glossary) || {};
     const pTerms = profileTerms(profile);
@@ -472,7 +489,7 @@
       const lo = lowerToks[i];
       const acr = acronyms.find(a => a.acr === t);
       if (acr) {
-        groups.push({ label: t, alts: [{ text: t, stems: [stem(t)], weight: 1 }, { text: acr.long, stems: phraseStems(acr.long), weight: 1 }] });
+        groups.push({ label: t, alts: [{ text: t, stems: [stem(t)], weight: 1, tier: 'same' }, { text: acr.long, stems: phraseStems(acr.long), weight: 1, tier: 'same' }] });
         pieces.push(`(${t} OR "${acr.long.replace(/"/g, '')}")`);
         i++; continue;
       }
@@ -494,14 +511,18 @@
         const others = matched.g.filter(a => { const k = a.stems.join(' '); if (seenSt.has(k)) return false; seenSt.add(k); return true; });
         const active = others.filter(a => !disabled.has(a.text));
         const surf = toks.slice(i, i + matched.n).join(' ');
-        groups.push({ label: surf, alts: [{ text: surf, stems: stemToks.slice(i, i + matched.n), weight: 1 }, ...active.map(a => ({ text: a.text, stems: a.stems, weight: 0.8 }))] });
-        others.forEach(a => { if (!usedSyn.has(a.text)) { usedSyn.add(a.text); expansions.push({ for: surf, text: a.text, on: !disabled.has(a.text) }); } });
+        const sameAfter = SYN_SAME_AFTER.get(matched.alt.text) || SYN_SAME_AFTER.get(matched.g[0].text);
+        const tier = sameAfter && sameAfter.some(x => stemToks.slice(Math.max(0, i - 2), i).includes(stem(x))) ? 'same' : matched.g.tier;
+        groups.push({ label: surf, alts: [{ text: surf, stems: stemToks.slice(i, i + matched.n), weight: 1, tier: 'same' }, ...active.map(a => ({ text: a.text, stems: a.stems, weight: 0.8, tier }))] });
+        others.forEach(a => { if (!usedSyn.has(a.text)) { usedSyn.add(a.text); expansions.push({ for: surf, text: a.text, on: !disabled.has(a.text), tier }); } });
         const q1 = matched.n > 1 ? `"${surf}"` : surf;
         pieces.push(active.length ? `(${[q1, ...active.map(a => a.stems.length > 1 || /[-\s]/.test(a.text) ? `"${a.text}"` : a.text)].join(' OR ')})` : q1);
         i += matched.n; continue;
       }
-      groups.push({ label: t, alts: [{ text: t, stems: [stemToks[i]], weight: 1 }] });
-      pieces.push(t);
+      // An ion such as SCN⁻ also counts, a little less, when written without its charge.
+      const charged = /[+-]$/.test(t) && t.length > 1;
+      groups.push({ label: t, alts: [{ text: t, stems: [stemToks[i]], weight: 1, tier: 'same' }, ...(charged ? [{ text: t.slice(0, -1), stems: [stem(t.slice(0, -1))], weight: 0.8, tier: 'related' }] : [])] });
+      pieces.push(charged ? t.slice(0, -1) : t);
       i++;
     }
     const keywordQuery = expert ? raw : pieces.join(' ');
@@ -738,6 +759,63 @@
     return { score, hits, relHits };
   }
 
+  // ---- Scoring v2. Each idea in the query is weighted by how rare it is among the fetched papers (an idea that every
+  // candidate mentions tells them apart less), single generic words count half, words of a phrase count more when
+  // they sit together, synonyms count by level, and a paper missing a specific idea loses part of its match score
+  // (less so in "Adjacent & emerging"). Version 1 is kept so the two can be compared on graded searches.
+  const splitSt = arr => arr.flatMap(x => /[+-]$/.test(x) || !x.includes('-') ? [x] : x.split('-').filter(Boolean));
+  function prepV2(w) {
+    const p = prepWork(w);
+    if (!p.tS) { p.tS = splitSt(p.titleSt); p.aS = splitSt(p.absSt); p.kS = splitSt(p.kwSt); p.tSet2 = new Set(p.tS); p.aSet2 = new Set(p.aS); }
+    return p;
+  }
+  function matchTermV2(p, st0) {
+    const st = splitSt(st0); if (!st.length) return null;
+    if (hasPhrase(p.tS, st)) return { s: 1, where: 'title' };
+    if (hasPhrase(p.aS, st)) return { s: 0.7, where: 'abstract' };
+    if (st.length > 1 && nearAll(p.tS, st)) return { s: 0.65, where: 'title' };
+    if (st.length > 1 && nearAll(p.aS, st)) return { s: 0.5, where: 'abstract' };
+    if (hasPhrase(p.kS, st)) return { s: 0.45, where: 'keywords' };
+    if (st.length > 1 && hasAll(p.tSet2, st)) return { s: 0.4, where: 'title' };
+    if (st.length > 1 && hasAll(p.aSet2, st)) return { s: 0.25, where: 'abstract' };
+    return null;
+  }
+  function groupStats(works, analysis) {
+    const groups = (analysis && analysis.groups) || []; const N = works.length;
+    const df = groups.map(() => 0);
+    works.forEach(w => { const p = prepV2(w); groups.forEach((g, i) => { if (g.alts.some(a => a.stems.length && matchTermV2(p, a.stems))) df[i]++; }); });
+    const raw = groups.map((g, i) => {
+      const generic = g.alts[0].stems.length === 1 && (GENERIC_SINGLE.has(String(g.label).toLowerCase()) || String(g.label).length < 3);
+      const idf = N > 4 && df[i] > 0 ? Math.log(1 + N / df[i]) / Math.log(1 + N) : 1;
+      return { w: Math.max(0.25, idf) * (generic ? 0.5 : 1), required: !generic, df: df[i], label: g.label };
+    });
+    const top = Math.max(0.0001, ...raw.map(x => x.w));
+    raw.forEach(x => { x.w /= top; });
+    if (raw.length && !raw.some(x => x.required)) raw.forEach(x => { x.required = true; });
+    return raw;
+  }
+  function scoreQueryV2(w, analysis, gs, mode) {
+    const p = prepV2(w); const hits = []; const missing = [];
+    let sum = 0, tot = 0, reqTot = 0, reqHit = 0;
+    (analysis.groups || []).forEach((g, i) => {
+      const st = gs[i]; let best = null;
+      for (const alt of g.alts) {
+        if (!alt.stems.length) continue;
+        const m = matchTermV2(p, alt.stems); if (!m) continue;
+        const s = m.s * (TIER_W[alt.tier] != null ? TIER_W[alt.tier] : alt.weight);
+        if (!best || s > best.s) best = { s, where: m.where, text: alt.text, original: alt.text === g.label, label: g.label };
+      }
+      tot += st.w; if (st.required) reqTot += st.w;
+      if (best) { sum += st.w * best.s; hits.push(best); if (st.required) reqHit += st.w; } else if (st.required) missing.push(g.label);
+    });
+    const coverage = reqTot ? reqHit / reqTot : 1;
+    let score = (tot ? sum / tot : 0) * (mode === 'adjacent' ? 0.75 + 0.25 * coverage : 0.35 + 0.65 * coverage);
+    const ph = splitSt(analysis.phrase || []);
+    if (ph.length > 1) { if (hasPhrase(p.tS, ph)) score += 0.15; else if (nearAll(p.tS, ph, 3)) score += 0.08; else if (nearAll(p.aS, ph, 4)) score += 0.05; }
+    const relHits = (analysis.related || []).filter(r => matchTermV2(p, r.stems)).map(r => r.text);
+    return { score: Math.min(1, score), hits, relHits, missing, coverage };
+  }
+
   function scoreProfile(w, pTerms) {
     if (!pTerms.length) return { score: 0, hits: [] };
     const p = prepWork(w);
@@ -771,8 +849,10 @@
       for (const [ch, rank] of Object.entries(w.ranks || {})) r += (CHANNEL_WEIGHT[ch] != null ? CHANNEL_WEIGHT[ch] : 0.6) / (K + rank);
       w._rrf = r; if (r > maxRrf) maxRrf = r;
     }
+    const v2 = ctx.scoring !== 'v1';
+    const gs = v2 ? groupStats(works, ctx.analysis) : null;
     for (const w of works) {
-      const q = scoreQuery(w, ctx.analysis);
+      const q = v2 ? scoreQueryV2(w, ctx.analysis, gs, mode) : scoreQuery(w, ctx.analysis);
       const pr = scoreProfile(w, pTerms);
       const rrf = maxRrf ? w._rrf / maxRrf : 0;
       const age = w.year ? Math.max(0, nowYear - w.year) : 10;
@@ -793,7 +873,7 @@
       if (w.retracted) score -= 0.5;
       if (/^(dataset|software|book-review|paratext|erratum|grant|libguides|reference-entry|peer-review|supplementary-materials)$/.test(w.oaType || '')) score -= 0.12;
       if (!ctx.trail && !ctx.author && !q.hits.length && !(w.ranks && (w.ranks.oa_sem !== undefined))) score -= 0.15; // nothing matched and not a meaning-based hit
-      w.rank = { score, qrel, q: q.score, rrf, prof, profRaw: pr.score, impact, recency, qHits: q.hits, relHits: q.relHits, pHits: pr.hits, sem: sem || null };
+      w.rank = { score, qrel, q: q.score, rrf, prof, profRaw: pr.score, impact, recency, qHits: q.hits, relHits: q.relHits, pHits: pr.hits, sem: sem || null, missing: q.missing || [], coverage: q.coverage, scoring: v2 ? 'v2' : 'v1' };
     }
     return works.slice().sort((a, b) => b.rank.score - a.rank.score);
   }
@@ -815,6 +895,7 @@
     if (inAbs.length) reasons.push({ kind: 'query', text: `Abstract mentions ${listify(inAbs)}.` });
     if (inKw.length && !inTitle.length && !inAbs.length) reasons.push({ kind: 'query', text: `Tagged by OpenAlex with ${listify(inKw)}.` });
     if (syn.length) reasons.push({ kind: 'synonym', text: `Uses ${listify(syn.map(h => `“${h.text}”`))} for ${listify([...new Set(syn.map(h => `“${h.label}”`))])}.` });
+    if (qh.length && r.missing && r.missing.length) reasons.push({ kind: 'missing', text: `Does not mention ${listify(r.missing.map(t => `“${t}”`))} in its title or abstract.` });
     if (r.relHits && r.relHits.length) reasons.push({ kind: 'query', text: `Mentions the related term${r.relHits.length > 1 ? 's' : ''} ${listify(r.relHits.map(t => `“${t}”`))}.` });
     else if (w.ranks && w.ranks.oa_rel !== undefined && Object.keys(w.ranks).length === 1) reasons.push({ kind: 'semantic', text: 'Found through a related term you added.' });
     if (ctx && ctx.trail) { /* trail results are explained by their link to the starting paper */ }
@@ -1540,6 +1621,24 @@
       .sort((a, b) => b.score - a.score || String(b.w.created || b.w.date).localeCompare(String(a.w.created || a.w.date)))
       .filter(x => { const k = normTitle(x.w.title); if (seenTitles.has(k)) return false; seenTitles.add(k); return true; });
   }
+  // ---------------------------------------------------------------- benchmark (researcher-graded searches)
+  // Grades: 0 not relevant, 1 slightly, 2 relevant, 3 exactly what was asked. Ungraded papers count as 0 in nDCG
+  // (the ideal ordering uses all grades given), and the share of graded papers in the top k is reported beside it.
+  function ndcgAt(keys, grades, k = 10) {
+    const g = x => (grades[x] != null ? grades[x] : 0);
+    const dcg = keys.slice(0, k).reduce((s, x, i) => s + (Math.pow(2, g(x)) - 1) / Math.log2(i + 2), 0);
+    const ideal = Object.values(grades).sort((a, b) => b - a).slice(0, k).reduce((s, v, i) => s + (Math.pow(2, v) - 1) / Math.log2(i + 2), 0);
+    return ideal ? dcg / ideal : 0;
+  }
+  function precisionAt(keys, grades, k = 5, min = 2) { const top = keys.slice(0, k); return top.length ? top.filter(x => (grades[x] || 0) >= min).length / k : 0; }
+  function judgedAt(keys, grades, k = 10) { const top = keys.slice(0, k); return top.length ? top.filter(x => grades[x] != null).length / top.length : 0; }
+  function benchMetrics(keys, grades) { return { ndcg10: ndcgAt(keys, grades, 10), p5: precisionAt(keys, grades, 5), judged10: judgedAt(keys, grades, 10) }; }
+  function meanMetrics(list) {
+    const n = list.length || 1; const o = { ndcg10: 0, p5: 0, judged10: 0 };
+    list.forEach(m => { o.ndcg10 += m.ndcg10 / n; o.p5 += m.p5 / n; o.judged10 += m.judged10 / n; });
+    return o;
+  }
+
   // Start of the window to check: the last check (at most 7 days back), or 2 days back the first time. UTC dates, as Crossref uses.
   function todaySince(lastRunAt, now = Date.now(), maxDays = 7) {
     const day = 864e5;
@@ -1557,6 +1656,7 @@
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
     questStep, questSuggest, trailCode, parseTrailCode, trailStats,
     PUBLISHERS, todayTerms, todayQuery, todayQueries, todayRelated, rankToday, todaySince,
+    tokens, chemNorm, matchTermV2, groupStats, scoreQueryV2, nearAll, TIER_W, ndcgAt, precisionAt, judgedAt, benchMetrics, meanMetrics,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };
