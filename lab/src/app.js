@@ -642,7 +642,7 @@
     const vis = visibleWorks();
     renderFilterbar(vis);
     const c = ctx(); const hset = C.highlightStems(c);
-    if (inQuest()) { const sg = questSuggestion(); if (sg) { const i = vis.findIndex(w => w.key === sg.key); if (i > 0) vis.unshift(vis.splice(i, 1)[0]); } }
+    if (inQuest()) { const sg = questSuggestion(); [sg.leap, sg.close].forEach(x => { if (!x) return; const i = vis.findIndex(w => w.key === x.key); if (i > 0) vis.unshift(vis.splice(i, 1)[0]); }); }
     const list = vis.slice(0, s.shown);
     c.topScore = vis.reduce((m, w) => Math.max(m, w.rank ? w.rank.score : 0), 0.0001);
     if (!s.ranked.length) {
@@ -1811,16 +1811,18 @@
     window.scrollTo(0, 0);
   }
   function questSuggestion() {
-    const s = S.search; if (!inQuest() || !s.ranked.length) return null;
-    if (!s.suggest || s.suggest.n !== s.ranked.length) s.suggest = Object.assign({ n: s.ranked.length }, C.questSuggest(s.ranked, S.quest.steps, S.quest.goal) || { key: null });
-    return s.suggest.key ? s.suggest : null;
+    const s = S.search; if (!inQuest() || !s.ranked.length) return { close: null, leap: null };
+    if (!s.suggest || s.suggest.n !== s.ranked.length) s.suggest = Object.assign({ n: s.ranked.length }, C.questSuggest(s.ranked, S.quest.steps, S.quest.goal));
+    return s.suggest;
   }
   function questCardHTML(w) {
-    const q = S.quest; const here = q.steps[q.steps.length - 1].year; const sg = questSuggestion();
+    const q = S.quest; const here = q.steps[q.steps.length - 1].year; const both = questSuggestion();
+    const sg = both.close && both.close.key === w.key ? both.close : both.leap && both.leap.key === w.key ? both.leap : null;
     const gap = w.year && here ? (q.goal === 'origin' ? here - w.year : w.year - here) : null;
     const when = gap == null ? '' : gap === 0 ? 'Same year' : gap > 0 ? `${gap} year${gap === 1 ? '' : 's'} ${QUEST[q.goal].dir}` : `${-gap} year${gap === -1 ? '' : 's'} ${q.goal === 'origin' ? 'later' : 'earlier'}`;
-    const isSg = sg && sg.key === w.key;
-    return `<div class="quest-act${isSg ? ' sg' : ''}">${isSg ? `<p class="small sg-why"><strong>Suggested next step.</strong> ${esc(sg.gap ? `${sg.gap} year${sg.gap === 1 ? '' : 's'} ${QUEST[q.goal].dir}` : 'Same year')}${w.cites ? `, cited ${fmt(w.cites)} times` : ''}${sg.shared.length ? `, and shares “${esc(sg.shared.slice(0, 3).join('”, “'))}” with where you started` : ''}.</p>` : ''}
+    const isSg = !!sg;
+    const label = !sg ? '' : sg.kind === 'leap' ? `Big leap ${QUEST[q.goal].far}` : both.leap ? 'Closest match' : 'Suggested next step';
+    return `<div class="quest-act${isSg ? ' sg' + (sg.kind === 'leap' ? ' leap' : '') : ''}">${isSg ? `<p class="small sg-why"><strong>${label}.</strong> ${esc(sg.gap ? `${sg.gap} year${sg.gap === 1 ? '' : 's'} ${QUEST[q.goal].dir}` : 'Same year')}${w.cites ? `, cited ${fmt(w.cites)} times` : ''}${sg.shared.length ? `, and shares “${esc(sg.shared.slice(0, 3).join('”, “'))}” with your trail` : ''}.</p>` : ''}
       <div class="row">${w.openalexId ? `<button type="button" class="btn small ${isSg ? 'primary' : ''}" data-quest-step="${esc(w.key)}">${QUEST[q.goal].step}</button>` : ''}${when ? `<span class="tiny">${esc(when)}</span>` : ''}</div></div>`;
   }
   function pathHTML(steps, goal, { mini = false } = {}) {
@@ -1849,7 +1851,7 @@
         <p class="small qhere">“${esc(here.title.length > 110 ? here.title.slice(0, 108) + '…' : here.title)}”</p>
         ${pathHTML(q.steps, q.goal, { mini: true })}
         <p class="small">${none ? (q.goal === 'origin' ? 'OpenAlex lists no references for this paper, so this is as far back as the data goes.' : 'No papers in OpenAlex cite this one yet, so this is as far as the trail goes.')
-          : q.goal === 'origin' ? 'Below are the papers it cites, most cited first. Pick the one that looks like the root of the idea; older papers take you further back.' : 'Below are papers that cite it, most cited first. Pick one to follow the idea forward.'}</p>
+          : q.goal === 'origin' ? 'Below are the papers it cites. Take a small step to the closest match, a big leap to an older landmark, or pick any paper that looks like the root of the idea.' : 'Below are papers that cite it. Take a small step to the closest match, a big leap to a later landmark, or pick any paper to follow the idea forward.'}</p>
         <div class="row qbtns">${q.steps.length > 1 ? `<button type="button" class="btn small primary" id="quest-finish">${q.goal === 'origin' ? 'This is where it started' : 'This is where it led'}</button>` : ''}
           <button type="button" class="btn small" id="quest-undo">${q.steps.length > 1 ? 'Undo last step' : 'Cancel'}</button>
           ${q.steps.length > 1 ? '<button type="button" class="btn link" id="quest-quit">Leave the quest</button>' : ''}</div>

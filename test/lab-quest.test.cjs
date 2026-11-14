@@ -77,8 +77,9 @@ function route(req) {
   let h = await head();
   check('quest starts at the paper, looking at its references', /Quest: find where this idea started/.test(h) && /Start: 2022/.test(h) && calls.some(c => /cited_by:W771/.test(c)), h.slice(0, 160));
   let cs = await cards();
-  check('suggested next step comes first and explains itself', cs[0].t === 'Exciton diffusion length in organic films' && cs[0].sg && /12 years earlier/.test(cs[0].why) && /exciton/.test(cs[0].why) && /Step back to this/.test(cs[0].btn), JSON.stringify(cs[0]));
-  check('an unrelated paper is not suggested, and each card says how much earlier it is', cs.filter(c => c.sg).length === 1 && cs.some(c => /An unrelated/.test(c.t) && /7 years earlier/.test(c.when)), cs.map(c => c.when).join(' | '));
+  check('closest match comes first and explains itself', cs[0].t === 'Exciton diffusion length in organic films' && cs[0].sg && /^Closest match\. 12 years earlier/.test(cs[0].why) && /exciton/.test(cs[0].why) && /Step back to this/.test(cs[0].btn), JSON.stringify(cs[0]));
+  check('a big leap back to an older landmark is offered too', cs[1].t === 'Charge transport in organic semiconductors' && /^Big leap back\. 17 years earlier/.test(cs[1].why), JSON.stringify(cs[1]));
+  check('an unrelated paper is not suggested, and each card says how much earlier it is', cs.filter(c => c.sg).length === 2 && cs.some(c => /An unrelated/.test(c.t) && !c.sg && /7 years earlier/.test(c.when)), cs.map(c => c.when).join(' | '));
   check('no swiping or other trails in the middle of a quest', !(await page.$('#swipe-open')) && !(await page.$('#results [data-trail]')));
   check('quest header: no WCAG A/AA violations', (await axe()).length === 0, (await axe()).join(' | '));
   await page.screenshot({ path: path.join(OUT, 'lab-quest-step.png') });
@@ -123,7 +124,7 @@ function route(req) {
   h = await head();
   check('“See where it led” follows the citing papers instead', /Quest: see where this idea led/.test(h) && calls.some(c => /cites:W771/.test(c)));
   cs = await cards();
-  check('forward quest suggests a later paper', cs[0].sg && /Step forward to this/.test(cs[0].btn) && /years later/.test(cs[0].why), JSON.stringify(cs[0]));
+  check('forward quest suggests a later paper', cs[0].sg && /Step forward to this/.test(cs[0].btn) && /years? later/.test(cs[0].why), JSON.stringify(cs[0]));
   await page.$eval('#quest-quit', b => b.click()).catch(async () => { await page.$eval('#quest-undo', b => b.click()); });
   await sleep(300);
   check('leaving the quest goes back to the search', await page.evaluate(() => window.Paperscope.S.search.kind === 'search' && !window.Paperscope.S.quest && document.querySelectorAll('#results .paper').length > 0));

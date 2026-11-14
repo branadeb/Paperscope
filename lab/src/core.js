@@ -1381,24 +1381,31 @@
     return { key: w.key, openalexId: w.openalexId || '', title: w.title || '', year: w.year || null, authors: (w.authors || []).slice(0, 3),
       more: (w.authors || []).length > 3, venue: w.venue || '', doi: w.doi || '', cites: w.cites || 0, via: via || 'start' };
   }
-  // The most promising next step: in the right direction in time, close in wording to where the trail began, and well cited.
+  // Two suggestions for the next step: the closest match in wording (a small step), and a big leap to an older
+  // (or, going forward, newer) well-cited paper that still shares a word with the trail.
   function questSuggest(cands, steps, goal) {
-    if (!steps.length) return null;
-    const startWords = new Map();
-    words(steps[0].title).forEach(x => { const lw = x.toLowerCase(); if (!STOP.has(lw) && lw.length > 2) startWords.set(stem(lw), lw); });
+    if (!steps.length) return { close: null, leap: null };
+    const trailWords = new Map();
+    steps.forEach((st, i) => words(st.title).forEach(x => { const lw = x.toLowerCase(); if (!STOP.has(lw) && lw.length > 2 && (i === 0 || i === steps.length - 1)) trailWords.set(stem(lw), lw); }));
     const here = steps[steps.length - 1].year; const seen = new Set(steps.map(x => x.key));
-    let best = null;
+    let close = null, leap = null;
     cands.forEach(w => {
       if (seen.has(w.key) || !w.openalexId || !w.year || !here) return;
       const gap = goal === 'origin' ? here - w.year : w.year - here;
       if (gap < 0) return;
       const ws = new Set(contentStems(w.title));
-      const shared = [...startWords.keys()].filter(k => ws.has(k)).map(k => startWords.get(k));
-      const sim = shared.length / Math.sqrt(Math.max(1, startWords.size) * Math.max(1, ws.size));
-      const score = 0.55 * sim + 0.3 * Math.min(1, Math.log10(1 + (w.cites || 0)) / 4) + 0.15 * Math.min(1, gap / 30);
-      if (!best || score > best.score) best = { key: w.key, score, shared, gap };
+      const shared = [...trailWords.keys()].filter(k => ws.has(k)).map(k => trailWords.get(k));
+      const sim = shared.length / Math.sqrt(Math.max(1, trailWords.size) * Math.max(1, ws.size));
+      const cite = Math.min(1, Math.log10(1 + (w.cites || 0)) / 4);
+      const cScore = 0.55 * sim + 0.3 * cite + 0.15 * Math.min(1, gap / 30);
+      if (shared.length && (!close || cScore > close.score)) close = { key: w.key, score: cScore, shared, gap, kind: 'close' };
+      if (gap >= 8 && shared.length) {
+        const lScore = 0.55 * cite + 0.45 * Math.min(1, gap / 40);
+        if (!leap || lScore > leap.score) leap = { key: w.key, score: lScore, shared, gap, kind: 'leap' };
+      }
     });
-    return best;
+    if (close && leap && close.key === leap.key) leap = null;
+    return { close, leap };
   }
   // Share code: "o:W1.W2.W3" (origin) or "f:…" (forward). Only OpenAlex ids, so a link carries no personal data.
   function trailCode(goal, steps) { return `${goal === 'origin' ? 'o' : 'f'}:${steps.map(x => String(x.openalexId).split('/').pop()).join('.')}`; }

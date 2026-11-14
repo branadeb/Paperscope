@@ -602,3 +602,5 @@ body.deck-open { overflow: hidden; }
 .trail-list li { padding: 10px 0; border-bottom: 1px solid var(--rule); }
 .trail-list p { margin: 0 0 4px; }
 .trail-list .row { gap: 8px; }
+.quest-act.sg.leap { background: color-mix(in srgb, #f0ac4b 12%, var(--surface)); }
+.paper:has(.quest-act.sg.leap) { box-shadow: 0 0 0 2px color-mix(in srgb, #f0ac4b 60%, transparent), var(--shadow, 0 1px 2px rgb(0 0 0 / .06)); }

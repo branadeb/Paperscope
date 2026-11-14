@@ -247,4 +247,4 @@ The checks also cover:
 - Opening a shared link in a fresh browser: same order, not saved to that person's trails, and "follow it further" continues from the last paper.
 - A broken link, reduced motion, and no WCAG 2 A/AA violations in light or dark.
 
-**Not yet judged with real users:** whether the suggested step usually matches what a researcher would pick. It is a simple score: 55% shared title words with the start paper, 30% citations, 15% years travelled.
+**Not yet judged with real users:** whether the suggested step usually matches what a researcher would pick. Each step offers two suggestions. The closest match is scored 55% on title words shared with the trail, 30% on citations and 15% on years travelled. The big leap must be at least 8 years away and share a word with the trail; it is scored 55% on citations and 45% on years travelled. A first live check, starting from Mikhnenko et al. (2015) with only the closest-match score, moved back just one year per step (2010, 2009, 2008) through near-identical titles. That is why the big leap was added (30/30 checks after the change).
