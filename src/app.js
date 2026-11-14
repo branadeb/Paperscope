@@ -128,7 +128,8 @@
     if (r.status === 401 || r.status === 403) return `${src} refused the request (${r.status}). If you added an API key, check it in About › Settings.`;
     if (r.status === 400) return `${src} could not read this query (400). Try simpler wording.`;
     if (r.status === 0 && navigator.onLine === false) return 'You’re offline. Saved papers and your profile still work; searching needs a connection.';
-    if (r.status === 0) return `${src} could not be reached (${r.error}).`;
+    if (r.status === 0) return r.error === 'timed out' ? `${src} took too long to answer.` : `${src} did not answer (its server may be busy, or your connection dropped).`;
+    if (r.status >= 500) return `${src} had a problem on its side (${r.status}).`;
     return `${src} returned an error (${r.status}).`;
   }
 
@@ -326,6 +327,7 @@
   }
 
   function clearSearchUI() {
+    { const lp = $('#late-pill'); if (lp) lp.remove(); }
     if (!nav.popping && nav.view === 'search') saveScroll(); // remember where you were before the page empties
     $('#start').hidden = true;
     $('#hero').classList.add('compact');
@@ -366,7 +368,7 @@
 
   async function fetchBatch(token, opts = {}) {
     const s = S.search; const a = s.analysis;
-    setLoading(s.fetched ? 'Getting more results…' : 'Searching OpenAlex' + (S.settings.crossref ? ', Crossref' : '') + (S.settings.epmc ? ' and Europe PMC' : '') + '…');
+    if (!opts.quiet) setLoading(s.fetched ? 'Getting more results…' : 'Searching OpenAlex' + (S.settings.crossref ? ', Crossref' : '') + (S.settings.epmc ? ' and Europe PMC' : '') + '…');
     const filter = oaFilter();
     const jobs = [];
     if (s.kind === 'trail') {
@@ -400,16 +402,26 @@
     }
 
     if (opts.only) { for (let k = jobs.length - 1; k >= 0; k--) if (!opts.only.includes(jobs[k][0])) jobs.splice(k, 1); }
-    const results = await Promise.all(jobs.map(j => j[2]()));
-    if (token !== searchToken) return;
-    const before = s.pool.size; let incoming = 0;
-    results.forEach((r, i) => {
-      const [ch, label] = jobs[i];
-      if (!r.ok) { s.status[ch] = { ok: false, label, msg: failText(label, r) }; s.exhausted[ch] = true; return; }
+    // Results appear as soon as OpenAlex answers. Crossref and Europe PMC (often slower: Europe PMC took 2–18 s in
+    // November 2026) get a short head start to arrive at the same time; anything later is added when it comes,
+    // without moving the list under your thumb.
+    const ingest = ([job, r]) => {
+      const [ch, label] = job;
+      if (!r.ok) {
+        // Crossref and Europe PMC sometimes fail for a moment (e.g. Europe PMC briefly sent answers browsers must
+        // refuse, 14 Nov 2026). Try once more a few seconds later, quietly, before reporting it.
+        if ((ch === 'crossref' || ch === 'epmc') && r.status !== 400 && !(s.retried || {})[ch]) {
+          s.retried = Object.assign({}, s.retried, { [ch]: true });
+          s.status[ch] = { pending: true, retrying: true, label };
+          setTimeout(() => { if (token === searchToken && S.search === s) { s.exhausted[ch] = false; fetchBatch(token, { only: [ch], quiet: true }); } }, 4000);
+          return 0;
+        }
+        s.status[ch] = { ok: false, label, msg: failText(label, r) }; s.exhausted[ch] = true; return 0;
+      }
       let items = [];
       if (ch.startsWith('oa_')) {
         addCost(r);
-        const per = jobs[i][3];
+        const per = job[3];
         s.pages[ch] = s.pages[ch] || 1;
         const off = (s.pages[ch] - 1) * per;
         const res = r.data.results || [];
@@ -435,9 +447,26 @@
         if (!res.length || !r.data.nextCursorMark || r.data.nextCursorMark === s.pages.epmc) s.exhausted.epmc = true;
         s.pages.epmc = r.data.nextCursorMark;
       }
-      incoming += items.length;
       C.dedupeInto(s.pool, items);
-    });
+      return items.length;
+    };
+    const run = j => j[2]().then(r => [j, r]);
+    const fastJobs = jobs.filter(j => j[0].startsWith('oa_')); const slowJobs = jobs.filter(j => !j[0].startsWith('oa_'));
+    slowJobs.forEach(j => { s.status[j[0]] = Object.assign({}, s.status[j[0]] || {}, { pending: true, ok: undefined, label: j[1] }); });
+    const slowP = slowJobs.map(run);
+    if (!fastJobs.length) { // only slower sources asked for (e.g. "Try again")
+      const res = await Promise.all(slowP); if (token !== searchToken) return;
+      if (!opts.quiet) setLoading(null); res.forEach(x => lateArrive(x, token, !opts.quiet)); return;
+    }
+    const fastRes = await Promise.all(fastJobs.map(run));
+    if (token !== searchToken) return;
+    const before = s.pool.size; let incoming = 0;
+    fastRes.forEach(x => { incoming += ingest(x); });
+    const early = slowP.length ? await Promise.race([Promise.all(slowP), sleep(2500).then(() => null)]) : [];
+    if (token !== searchToken) return;
+    if (early) early.forEach(x => { incoming += ingest(x); });
+    else slowP.forEach(p => p.then(x => lateArrive(x, token)));
+    s.ingest = ingest;
     s.fetched += incoming;
     s.dupes = s.fetched - s.pool.size;
     s.lastAdded = s.pool.size - before;
@@ -447,6 +476,23 @@
     if (s.since && s.followIndex != null && S.follows[s.followIndex]) { S.follows[s.followIndex].lastChecked = todayISO(); S.follows[s.followIndex].lastNew = s.pool.size; persistFollows(); }
     if (S.ai.status === 'ready') embedPool();
     else if (S.settings.ai && S.ai.status === 'off') loadAI(true);
+  }
+
+  // A slower source answered after the list was shown. At the top of the page its papers are folded in; further
+  // down, a button offers to add them, so the list does not move while you read.
+  function lateArrive(x, token, asked) {
+    const s = S.search; if (!s || token !== searchToken || !s.ingest) return;
+    const before = s.pool.size; const n = s.ingest(x);
+    s.fetched += n; s.dupes = s.fetched - s.pool.size;
+    const added = s.pool.size - before;
+    if (added && (window.scrollY > 250 || $('#sheet-root').innerHTML) && !asked) { s.lateAdded = (s.lateAdded || 0) + added; renderInterp(); renderLatePill(); return; }
+    if (added) { rerank(); renderAll(); } else renderInterp();
+  }
+  function renderLatePill() {
+    const s = S.search; let el = $('#late-pill');
+    if (!s || !s.lateAdded) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('button'); el.type = 'button'; el.id = 'late-pill'; el.className = 'late-pill'; document.body.appendChild(el); }
+    el.textContent = `${s.lateAdded} more paper${s.lateAdded === 1 ? '' : 's'} arrived · Add to the list`;
   }
 
   function rerank() {
@@ -581,6 +627,7 @@
     const rows = ['groupby', 'oa_kw', 'oa_sem', 'crossref', 'epmc'].filter(k => st[k]).map(k => {
       const x = st[k];
       if (x.skip) return `<li class="skip">${esc(x.label)}: ${esc(x.msg)}</li>`;
+      if (x.pending) return `<li class="skip">${esc(x.label)}: ${x.retrying ? 'no answer yet, trying again…' : 'still answering…'}</li>`;
       if (!x.ok) return `<li class="fail">${esc(x.label)}: ${esc(x.msg)}</li>`;
       return `<li>${esc(x.label)}: ${fmt(x.n)} fetched${x.total != null ? ` of ${fmt(x.total)} matches` : ''}</li>`;
     });
@@ -588,7 +635,14 @@
     bits.push(`<p class="tiny">${fmt(s.pool.size)} unique papers after merging ${fmt(s.dupes)} duplicates. OpenAlex cost for this search: $${s.cost.toFixed(3)} (session $${S.sessionCost.toFixed(3)}; free allowance $${S.settings.apiKey ? '1.00' : '0.10'} a day${S.settings.apiKey ? ' with your key' : ' without a key'}). ${esc(budgetText(true))}${!S.settings.apiKey ? ' <a href="#key">Get a free key</a> for 10× more.' : ''}${S.ai.status === 'ready' ? ' Re-ranked with the on-device model.' : ''}</p>`);
     const failed = Object.values(st).filter(x => x && x.ok === false);
     const keyLink = !S.settings.apiKey && failed.some(x => /free daily allowance/.test(x.msg)) ? ' <a href="#key">Get a free key now</a>.' : '';
-    const warn = failed.length ? `<div class="panel warn" role="alert"><strong>These results are incomplete.</strong> ${[...new Set(failed.map(x => x.msg))].map(esc).join(' ')}${keyLink}</div>` : '';
+    const failedKeys = Object.keys(st).filter(k => st[k] && st[k].ok === false);
+    // The main source is OpenAlex's keyword search (or the citation lookup on a trail). If it answered, a missing
+    // extra source (Crossref, Europe PMC, meaning-based search, the field check) is a note, not a warning.
+    const mainFailed = failedKeys.some(k => k === 'oa_kw' || k === 'oa_trail' || /free daily allowance/.test(st[k].msg));
+    const retryable = failedKeys.filter(k => k === 'crossref' || k === 'epmc');
+    const warn = !failed.length ? '' : !mainFailed
+      ? `<div class="panel note" role="status">${failedKeys.map(k => esc(st[k].label)).join(' and ')} did not answer this time, so a few papers found only there may be missing. The main search (OpenAlex) worked. ${retryable.map(k => `<button type="button" class="btn small" data-retry="${k}">Try ${esc(st[k].label)} again</button>`).join(' ')}</div>`
+      : `<div class="panel warn" role="alert"><strong>These results are incomplete.</strong> ${[...new Set(failed.map(x => x.msg))].map(esc).join(' ')}${keyLink}</div>`;
     const fi = followIndex(s);
     const since = s.since ? `<div class="panel since"><strong>Papers published since ${esc(s.since)}</strong> for “${esc(s.q)}”. ${s.pool.size ? '' : 'Nothing new yet.'} <span class="tiny">Uses publication dates, so papers indexed late with older dates can be missed.</span></div>` : '';
     const follow = `<div class="row follow-row"><button type="button" class="btn small" id="follow-toggle" aria-pressed="${fi >= 0}">${fi >= 0 ? 'Following this search' : 'Follow this search'}</button><span class="tiny">${fi >= 0 ? 'Check it for new papers from the Saved tab.' : 'Keep it on this device and check later for new papers.'}</span></div>`;
@@ -1603,6 +1657,8 @@
       const order = ['auto', 'light', 'dark']; const next = order[(order.indexOf(currentAppearance()) + 1) % 3];
       applyAppearance(next); toast(`Appearance: ${APPEARANCE_NAMES[next]}`); return;
     }
+    if (d.retry && S.search && S.search.status[d.retry]) { const ch = d.retry; S.search.exhausted[ch] = false; S.search.status[ch] = { pending: true, label: S.search.status[ch].label }; renderInterp(); fetchBatch(searchToken, { only: [ch] }); return; }
+    if (t.id === 'late-pill') { const s = S.search; if (s) { s.lateAdded = 0; rerank(); renderAll(); const r = $('#results'); if (r) r.scrollIntoView({ block: 'start' }); } renderLatePill(); return; }
     if (t.id === 'home-link') { e.preventDefault(); navHome(); return; }
     if (t.id === 'nav-back') { navBack(); return; }
     if (t.id === 'install-btn' || t.id === 'install-btn2') { promptInstall(); return; }

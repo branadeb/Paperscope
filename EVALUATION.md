@@ -371,3 +371,25 @@ The user reported that the app "is not smooth" on his phone and that the back bu
 - The header arrow and the logo work.
 - A link to a section can be undone with back. A reload opens normally.
 - All other suites still pass: Lab 41, 41, 30, 28, 25 and 20 checks; main app 49, 43, 32, 93, 26 and 27.
+
+## Europe PMC "Load failed" (14 November 2026)
+
+The user saw on his phone: "These results are incomplete. Europe PMC could not be reached (Load failed)." ("Load failed" is Safari's wording.)
+
+**Checked live from a browser:**
+- At 15:40 Chicago time, three Europe PMC searches from another site were refused by the browser: "No 'Access-Control-Allow-Origin' header is present on the requested resource".
+- Europe PMC itself was up: a direct visit returned results.
+- A few minutes later, 20 of 20 requests (both `core` and `lite`) succeeded in 0.2–2.1 s.
+- So Europe PMC briefly sent answers without the CORS header browsers need. The app's single retry, 0.9 s later, fell inside that window.
+
+**Changed** (main app and Lab):
+- If Crossref or Europe PMC fails, the app tries once more 4 seconds later, quietly. The sources list says "no answer yet, trying again", and papers that arrive are added without moving the list you are reading.
+- If it still fails, a calm note says which source did not answer, that the main search (OpenAlex) worked, and offers "Try … again".
+- The red "These results are incomplete" warning is kept for when OpenAlex's main keyword search, or a trail's citation lookup, fails, or the daily allowance runs out. Meaning-based search or the field check failing is also only a note.
+- The browser's raw error words ("Load failed", "Failed to fetch") are no longer shown.
+
+**Tested** (`test/sources.test.cjs`, 7/7 in each app):
+- Europe PMC fails, is retried quietly, and its papers are added with no message left.
+- If it keeps failing, the calm note appears with no red warning and no raw error words, and "Try again" works.
+- An OpenAlex failure gives the red warning.
+- All other suites still pass.
