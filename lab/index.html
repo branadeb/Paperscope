@@ -2605,6 +2605,11 @@ fieldset.scoring .radio input { margin-top: 4px; }
     }));
     let list = [...tally.values()];
     if (docs.length > 1) list = list.filter(t => t.df >= 2);
+    else if (docs.length === 1) { // one paper: its title phrases and phrases its abstract repeats (else a few of its longer phrases)
+      const g = docs[0].grams; const key = t => t.stems.join(' ');
+      const strong = list.filter(t => g.get(key(t)).inTitle || g.get(key(t)).n >= 2);
+      list = strong.length >= 4 ? strong : strong.concat(list.filter(t => !strong.includes(t) && t.stems.length > 1).slice(0, 4 - strong.length));
+    }
     list.sort((a, b) => b.w - a.w || b.stems.length - a.stems.length);
     const kept = [];
     for (const t of list) {

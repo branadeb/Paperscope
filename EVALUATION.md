@@ -327,7 +327,7 @@ A review of the search algorithm, which the user shared, pointed out that every 
   - OpenAlex's reranker is measured with one reranked request per graded search, kept and not asked again.
   - The reranker setting adds `rerank=true` to the keyword search.
   - The model choice offers MiniLM and bge-small.
-- `test/lab-orbit.test.cjs`, 25/25:
+- `test/lab-orbit.test.cjs`, 25/25 (and 3 unit checks in `test/lab-core.test.cjs`, 20/20):
   - The orbit phrases appear in Saved.
   - "Find more like my saved papers" makes, for each of 3 starting papers, one meaning-based search with its abstract, one related-works request, one newer-citing request and one references request.
   - Saved papers are left out of the results. The header names what the starting papers have in common, and each paper names its connection.
@@ -335,6 +335,10 @@ A review of the search algorithm, which the user shared, pointed out that every 
   - The lean is at most 0.06, stated, and can be turned off.
   - The AI check sends only the search, titles and abstracts. Its summary names the model and tokens, and ordering by the check puts the top-rated paper first with its reason. The usual order can be restored, and on a graded search the check's order is kept and compared in Graded searches.
   - No WCAG 2 A/AA violations.
+
+**Checked live:** "More like this" on Mikhnenko et al., "Exciton diffusion in organic semiconductors" (W1930734459), made 4 OpenAlex requests in 2 seconds for $0.0013. They returned 50 similar abstracts, 10 related works, 1,029 citing papers (newest 25 fetched) and 281 references (most cited 25), 75 candidates in all.
+- The top 12 were all exciton-diffusion papers in organic semiconductors, from 2006–2024. The first was "Exciton Diffusion Measurements in Poly(3-hexylthiophene)" (2008), found by three routes.
+- The orbit of that one paper first included "basic physics" and "reviewed" from its 90-character abstract. For one paper, only its title phrases and phrases its abstract repeats now count (unit-tested).
 
 **Not yet checked live:**
 - That bge-small-en-v1.5 downloads and runs in the browser. MiniLM has run before in this app.

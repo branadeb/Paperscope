@@ -110,4 +110,25 @@ t('benchmark: nDCG, precision and judged share', () => {
   assert.strictEqual(C.precisionAt(['a', 'c', 'x', 'y', 'b'], g, 5), 0.4);
   assert.strictEqual(C.judgedAt(['a', 'x'], g, 10), 0.5);
 });
+t('orbit: shared phrases across saved papers; for one paper, its title and repeated phrases', () => {
+  const now = Date.now();
+  const a = { title: 'Exciton diffusion in perylene diimide crystals', abstract: 'We measure exciton diffusion in perylene diimide single crystals with transient absorption microscopy.', savedAt: new Date(now).toISOString() };
+  const b = { title: 'Singlet fission and exciton diffusion in perylene diimide films', abstract: 'Transient absorption microscopy reveals exciton diffusion.', savedAt: new Date(now - 400 * 864e5).toISOString() };
+  const both = C.orbitTerms([a, b]).map(t => t.text);
+  assert.deepStrictEqual(both.slice(0, 2).sort(), ['exciton diffusion', 'perylene diimide']); assert(both.includes('transient absorption microscopy'));
+  assert(!both.some(x => / in /.test(x)), 'no phrases across stop words');
+  const one = C.orbitTerms([{ title: 'Exciton diffusion in organic semiconductors', abstract: 'The basic physics is reviewed.' }]).map(t => t.text);
+  assert(one.includes('exciton diffusion') && one.includes('organic semiconductors') && !one.includes('reviewed'), one.join(','));
+});
+t('more like this: papers sharing phrases and found by several routes rank first', () => {
+  const terms = C.orbitTerms([{ title: 'Exciton diffusion in organic semiconductors', abstract: '' }]);
+  const r = C.rankLike([{ key: 'a', title: 'Unrelated polymer rheology', ranks: { like_sem: 1 } }, { key: 'b', title: 'Exciton diffusion lengths in organic semiconductors', ranks: { like_sem: 2, like_rel: 1 } }], { terms });
+  assert.strictEqual(r[0].key, 'b'); assert.deepStrictEqual(r[0].rank.shared.sort(), ['exciton diffusion', 'organic semiconductors']);
+});
+t('AI check: prompt lists papers by number; replies are parsed strictly', () => {
+  const { system, user } = C.buildCheckPrompt('exciton diffusion', [{ title: 'A', abstract: 'x' }, { title: 'B' }]);
+  assert(/grade/.test(system) && /^Search: exciton diffusion/.test(user) && /\[2\] B/.test(user) && /none; judge from the title/.test(user));
+  const m = C.parseCheck('1 | 3 | Direct\n[2] - 0 - unrelated\n9 | 2 | out of range\n1 | 0 | duplicate\nnoise', 2);
+  assert.deepStrictEqual([...m.entries()], [[1, { grade: 3, reason: 'Direct' }], [2, { grade: 0, reason: 'unrelated' }]]);
+});
 console.log(`\n${n}/${n} Lab unit checks passed`);
