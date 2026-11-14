@@ -117,6 +117,17 @@ function route(req) {
   check('a publisher that fails is reported, the rest still shown', /Science: Crossref is limiting requests/.test(t) && (await titles()).includes('Exciton diffusion simulated with Redfield theory'), t.slice(0, 300));
   global.FAIL_SCIENCE = false;
 
+  // ---------- many topics: sent in short groups (Crossref finds nothing for one long query)
+  await page.$eval('.today-set', d => { d.open = true; });
+  await page.$eval('input[name="today-pub"][value="aip"]', i => { i.checked = false; });
+  await page.$eval('#today-topics', e => { e.value = 'exciton diffusion, transient absorption, perylene diimide, organic semiconductor crystals, singlet fission, two-dimensional electronic spectroscopy, charge transfer, ion transport'; });
+  crCalls.length = 0;
+  await page.$eval('#today-save', b => b.click()); await waitToday();
+  const groups = [...new Set(crCalls.map(c => c.q))];
+  check('many topics are sent in short groups, to every publisher, one request at a time', groups.length > 1 && groups.every(q => q.split(' ').length <= 8) && crCalls.length === 4 * groups.length
+    && groups.join(' ').includes('ion transport') && groups.join(' ').includes('exciton diffusion'), JSON.stringify(groups));
+  check('a paper found by two groups is listed once', new Set(await titles()).size === (await titles()).length);
+
   // ---------- with a profile instead of typed topics
   await page.evaluate(() => { const S = window.Paperscope.S; S.settings.todayTopics = ''; S.profile = window.Core.extractProfile('Research interests: singlet fission; organic semiconductors. Methods: transient absorption spectroscopy.'); });
   crCalls.length = 0;

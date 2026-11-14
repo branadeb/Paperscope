@@ -35,4 +35,17 @@ t('taste: stop words and numbers are ignored; words shown as written', () => {
   const top = C.topTaste(C.learnTaste({}, { title: 'Perovskite solar cells' }, 1));
   assert.deepStrictEqual(top.liked.sort(), ['cells', 'perovskite', 'solar']);
 });
+t('papers of the day: topics go to Crossref in short groups, each topic once', () => {
+  const terms = C.todayTerms(null, 'exciton diffusion, transient absorption, perylene diimide, organic semiconductor crystals, singlet fission, two-dimensional electronic spectroscopy, charge transfer, ion transport');
+  const qs = C.todayQueries(terms);
+  assert(qs.length > 1 && qs.every(q => q.split(' ').length <= 8), qs.join(' | '));
+  assert.strictEqual(qs.join(' '), terms.slice(0, 12).map(x => x.text).join(' '));
+  assert.deepStrictEqual(C.todayQueries(C.todayTerms(null, 'exciton diffusion, perylene diimide')), ['exciton diffusion perylene diimide']);
+  assert.deepStrictEqual(C.todayQueries(C.todayTerms(null, 'a very long topic made of many many different words, b2')), ['a very long topic made of many many different words', 'b2']);
+});
+t('papers of the day: corrections and cover pages are not papers', () => {
+  const terms = C.todayTerms(null, 'ion transport');
+  const ws = ['Author Correction: Ion transport in pores', 'Publisher Correction: Ion transport', 'Directional Confinement Governed Ion Transport for Efficient Actuation (Adv. Mater. 63/2026)', 'Ion transport in nanoconfined membranes', 'Ion transport (in 2D) across graphene'].map(title => ({ title, doi: title }));
+  assert.deepStrictEqual(C.rankToday(ws, terms).map(x => x.w.title), ['Ion transport in nanoconfined membranes', 'Ion transport (in 2D) across graphene']);
+});
 console.log(`\n${n}/${n} Lab unit checks passed`);

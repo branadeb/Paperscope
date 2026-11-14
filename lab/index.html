@@ -2287,11 +2287,24 @@ body.deck-open { overflow: hidden; }
     return [...own, ...profileTerms(profile)].filter(t => { const k = t.stems.join(' '); if (seen.has(k)) return false; seen.add(k); return true; });
   }
   function todayQuery(terms, max = 14) { return terms.slice(0, max).map(t => t.text).join(' '); }
-  const NOT_PAPER = /^(correction|corrigendum|erratum|retraction|retracted article|expression of concern|issue information|masthead|(front|back|inside) cover|cover (picture|image|feature|story|art)|table of contents|graphical abstract|editorial board|in this issue|this week in|news in brief|research highlights?)\b/i;
+  // Crossref finds nothing when a query has many words (it then wants most of them in one paper), so the topics are
+  // sent in short groups: at most `maxWords` words per request, at most `max` topics in all.
+  function todayQueries(terms, max = 12, maxWords = 8) {
+    const groups = []; let cur = [], n = 0;
+    for (const t of terms.slice(0, max)) {
+      const w = String(t.text).split(/\s+/).filter(Boolean).length;
+      if (cur.length && n + w > maxWords) { groups.push(cur.join(' ')); cur = []; n = 0; }
+      cur.push(t.text); n += w;
+    }
+    if (cur.length) groups.push(cur.join(' '));
+    return groups;
+  }
+  const NOT_PAPER = /^((author|publisher)(['’]s)? correction|correction|corrigendum|erratum|retraction|retracted article|expression of concern|issue information|masthead|(front|back|inside) cover|cover (picture|image|feature|story|art)|table of contents|graphical abstract|editorial board|in this issue|this week in|news in brief|research highlights?)\b/i;
   // Topics that match many of today's papers (e.g. "charge transfer") count for less than rarer ones, so a paper
   // needs a specific match to make the list. The same title under two DOIs (e.g. Angewandte's two editions) appears once.
   function rankToday(works, terms, minScore = 0.15) {
-    const list = works.filter(w => w.title && !NOT_PAPER.test(w.title));
+    // Wiley lists cover and frontispiece pages as articles, titled "… (Adv. Mater. 46/2026)".
+    const list = works.filter(w => w.title && !NOT_PAPER.test(w.title) && !/\(\s*[A-Z][^()]*\b\d+\/(19|20)\d\d\s*\)\s*$/.test(w.title));
     const N = Math.max(1, list.length);
     const weighted = terms.map(t => {
       const df = list.filter(w => scoreProfile(w, [t]).score > 0).length;
@@ -2319,7 +2332,7 @@ body.deck-open { overflow: hidden; }
     orcidOf, versionKey, versionNo, parseOrcidRecord, normOrcidWork, nameForm, coKey, verifyAuthorWorks, collapseVersions, hIndex,
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
     questStep, questSuggest, trailCode, parseTrailCode, trailStats,
-    PUBLISHERS, todayTerms, todayQuery, rankToday, todaySince,
+    PUBLISHERS, todayTerms, todayQuery, todayQueries, rankToday, todaySince,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };
@@ -2422,7 +2435,7 @@ body.deck-open { overflow: hidden; }
         return { ok: true, status: res.status, data: await res.json() };
       } catch (e) {
         clearTimeout(timer);
-        if (attempt < retries) { await sleep(900); continue; }
+        if (attempt < retries) { await sleep(900 * (attempt + 1)); continue; }
         return { ok: false, status: 0, error: e.name === 'AbortError' ? 'timed out' : (e.message || String(e)) };
       }
     }
@@ -4139,22 +4152,21 @@ body.deck-open { overflow: hidden; }
     if (!force && prev && prev.day === localDay() && prev.sig === todaySig()) { S.today = prev; renderToday(); return; }
     todayBusy = true; renderToday();
     const since = prev && prev.day === localDay() && prev.since ? prev.since : C.todaySince(prev && prev.at);
-    const q = C.todayQuery(terms);
+    const queries = C.todayQueries(terms);
     const pubs = pubsOn(); const pool = new Map(); const counts = {}; const errors = [];
-    // One publisher at a time: Crossref's public service allows only one request at a time per user.
-    for (let i = 0; i < pubs.length; i += 1) {
-      const batch = pubs.slice(i, i + 1);
-      if (i) await sleep(250);
-      todayProgress = `Looking through new papers from ${batch[0].name}…`; renderToday();
-      const res = await Promise.all(batch.map(p => getJSON(`${CR}/works?${new URLSearchParams({ filter: `${p.filter},from-created-date:${since},type:journal-article`, 'query.bibliographic': q, rows: 40,
-        select: 'DOI,title,abstract,type,issued,published,created,container-title,author,is-referenced-by-count,URL,subject' })}`, { timeout: 25000 })));
-      res.forEach((r, k) => {
-        const p = batch[k];
-        if (!r.ok) { errors.push(`${p.name}: ${failText('Crossref', r)}`); return; }
+    // One request at a time: Crossref's public service allows only one at a time per user.
+    let first = true;
+    for (const p of pubs) {
+      todayProgress = `Looking through new papers from ${p.name}…`; renderToday();
+      for (const q of queries) {
+        if (!first) await sleep(300); first = false;
+        const r = await getJSON(`${CR}/works?${new URLSearchParams({ filter: `${p.filter},from-created-date:${since},type:journal-article`, 'query.bibliographic': q, rows: 40,
+          select: 'DOI,title,abstract,type,issued,published,created,container-title,author,is-referenced-by-count,URL,subject' })}`, { timeout: 25000, retries: 2 });
+        if (!r.ok) { errors.push(`${p.name}: ${failText('Crossref', r)}`); break; }
         const items = (r.data.message && r.data.message.items) || [];
-        counts[p.id] = items.length;
+        counts[p.id] = (counts[p.id] || 0) + items.length;
         C.dedupeInto(pool, items.map((it, j) => Object.assign(C.normCrossref(it, j + 1), { pub: p.id, created: it.created && it.created['date-time'] || '' })));
-      });
+      }
     }
     const seen = new Set(prev && prev.day !== localDay() ? (prev.seen || []) : (prev && prev.seenBefore) || []);
     const ranked = C.rankToday([...pool.values()].filter(w => !seen.has(w.doi)), terms);

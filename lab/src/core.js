@@ -1439,11 +1439,24 @@
     return [...own, ...profileTerms(profile)].filter(t => { const k = t.stems.join(' '); if (seen.has(k)) return false; seen.add(k); return true; });
   }
   function todayQuery(terms, max = 14) { return terms.slice(0, max).map(t => t.text).join(' '); }
-  const NOT_PAPER = /^(correction|corrigendum|erratum|retraction|retracted article|expression of concern|issue information|masthead|(front|back|inside) cover|cover (picture|image|feature|story|art)|table of contents|graphical abstract|editorial board|in this issue|this week in|news in brief|research highlights?)\b/i;
+  // Crossref finds nothing when a query has many words (it then wants most of them in one paper), so the topics are
+  // sent in short groups: at most `maxWords` words per request, at most `max` topics in all.
+  function todayQueries(terms, max = 12, maxWords = 8) {
+    const groups = []; let cur = [], n = 0;
+    for (const t of terms.slice(0, max)) {
+      const w = String(t.text).split(/\s+/).filter(Boolean).length;
+      if (cur.length && n + w > maxWords) { groups.push(cur.join(' ')); cur = []; n = 0; }
+      cur.push(t.text); n += w;
+    }
+    if (cur.length) groups.push(cur.join(' '));
+    return groups;
+  }
+  const NOT_PAPER = /^((author|publisher)(['’]s)? correction|correction|corrigendum|erratum|retraction|retracted article|expression of concern|issue information|masthead|(front|back|inside) cover|cover (picture|image|feature|story|art)|table of contents|graphical abstract|editorial board|in this issue|this week in|news in brief|research highlights?)\b/i;
   // Topics that match many of today's papers (e.g. "charge transfer") count for less than rarer ones, so a paper
   // needs a specific match to make the list. The same title under two DOIs (e.g. Angewandte's two editions) appears once.
   function rankToday(works, terms, minScore = 0.15) {
-    const list = works.filter(w => w.title && !NOT_PAPER.test(w.title));
+    // Wiley lists cover and frontispiece pages as articles, titled "… (Adv. Mater. 46/2026)".
+    const list = works.filter(w => w.title && !NOT_PAPER.test(w.title) && !/\(\s*[A-Z][^()]*\b\d+\/(19|20)\d\d\s*\)\s*$/.test(w.title));
     const N = Math.max(1, list.length);
     const weighted = terms.map(t => {
       const df = list.filter(w => scoreProfile(w, [t]).score > 0).length;
@@ -1471,7 +1484,7 @@
     orcidOf, versionKey, versionNo, parseOrcidRecord, normOrcidWork, nameForm, coKey, verifyAuthorWorks, collapseVersions, hIndex,
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
     questStep, questSuggest, trailCode, parseTrailCode, trailStats,
-    PUBLISHERS, todayTerms, todayQuery, rankToday, todaySince,
+    PUBLISHERS, todayTerms, todayQuery, todayQueries, rankToday, todaySince,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };

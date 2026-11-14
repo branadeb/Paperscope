@@ -255,12 +255,17 @@ The checks also cover:
 - Crossref member ids: 316 ACS, 311 Wiley, 297 Springer Nature, 221 AAAS, 292 RSC, 317 AIP Publishing, 16 APS, 78 Elsevier; Nature Portfolio journals use DOI prefix 10.1038.
 - A request filtered by publisher and `from-created-date` (two days back) with topic words returned papers registered that day or the day before (Nano Letters, J. Phys. Chem. C, Small, ACS Nano and others), and ACS records included abstracts.
 - Crossref journal names can contain HTML entities ("Environmental Science &amp; Technology"). Both apps now clean them.
+- One query made of all eight topics (exciton diffusion, transient absorption, perylene diimide, organic semiconductor crystals, singlet fission, two-dimensional electronic spectroscopy, charge transfer, ion transport; 20 words) returned 0 results for Nature and Science, even though Nature Portfolio had 987 new articles in those two days. Short queries did return results (e.g. 12 for "charge transfer"). Long queries seem to require most of their words in one paper. The topics now go in groups of at most 8 words. Live, with the same topics: 3 requests per publisher, 12 in all, 11 seconds, no errors; 253 new papers considered (ACS 97, Wiley 100, Nature 62, Science 4) and 28 shown. The top paper was a singlet-fission paper in J. Phys. Chem. C; the best Nature match was a Nature Communications paper on Li⁺ transport.
+- Parallel requests failed ("Failed to fetch"), because Crossref's public service allows one request at a time. Requests now go one after another, retried twice.
+- Wiley lists cover and frontispiece pages as articles (titles ending "(Adv. Mater. 63/2026)"), and Springer Nature has "Author Correction" entries. Both are now left out.
+- Topics that many papers share ("charge transfer") now count for less than rare ones. A paper has to score at least 0.15 to be listed, and the same title under two DOIs appears once.
 
-**Tested** (`test/lab-today.test.cjs`, 24/24, Crossref mocked):
+**Tested** (`test/lab-today.test.cjs`, 26/26, Crossref mocked; plus 3 unit checks in `test/lab-core.test.cjs`):
 - Setup asks for topics; the default publishers are the four requested.
-- One request per publisher, journal articles only, from the last check, with your topics as the query.
+- Requests per publisher (one per group of topics), journal articles only, from the last check.
 - Matching papers come best first; corrections and unrelated papers are left out. Each paper names the topics it mentions, and says when there is no abstract.
 - Same-day reopening uses the saved list, and *Check again* searches again. The next day it searches from the last check and does not repeat papers.
 - Saving works, and swiping works with saved papers skipped. Adding AIP searches AIP too; a failing publisher is reported while the rest still show.
+- Many topics are sent in short groups to every publisher, and a paper found by two groups is listed once. Corrections and cover pages are left out.
 - Profile terms are used when no topics are typed, and the Lab note can be dismissed.
 - No WCAG 2 A/AA violations in light or dark. All other suites still pass.

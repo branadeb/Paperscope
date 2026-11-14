@@ -1,6 +1,6 @@
 // Paperscope Lab service worker (separate from the main app's, which lives one folder up): keeps the app itself (one page, its icons and manifest) on the device so it opens offline.
 // It never stores searches or anything sent to OpenAlex, Crossref, Europe PMC, ORCID or AI services: requests to other sites pass straight through.
-const VERSION = '1306634496';
+const VERSION = 'f6ba88a94b';
 const CACHE = `pslab-${VERSION}`; // not "paperscope-": the main app clears caches with that prefix
 const SHELL = ['./', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'];
 

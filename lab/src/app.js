@@ -93,7 +93,7 @@
         return { ok: true, status: res.status, data: await res.json() };
       } catch (e) {
         clearTimeout(timer);
-        if (attempt < retries) { await sleep(900); continue; }
+        if (attempt < retries) { await sleep(900 * (attempt + 1)); continue; }
         return { ok: false, status: 0, error: e.name === 'AbortError' ? 'timed out' : (e.message || String(e)) };
       }
     }
@@ -1810,22 +1810,21 @@
     if (!force && prev && prev.day === localDay() && prev.sig === todaySig()) { S.today = prev; renderToday(); return; }
     todayBusy = true; renderToday();
     const since = prev && prev.day === localDay() && prev.since ? prev.since : C.todaySince(prev && prev.at);
-    const q = C.todayQuery(terms);
+    const queries = C.todayQueries(terms);
     const pubs = pubsOn(); const pool = new Map(); const counts = {}; const errors = [];
-    // One publisher at a time: Crossref's public service allows only one request at a time per user.
-    for (let i = 0; i < pubs.length; i += 1) {
-      const batch = pubs.slice(i, i + 1);
-      if (i) await sleep(250);
-      todayProgress = `Looking through new papers from ${batch[0].name}…`; renderToday();
-      const res = await Promise.all(batch.map(p => getJSON(`${CR}/works?${new URLSearchParams({ filter: `${p.filter},from-created-date:${since},type:journal-article`, 'query.bibliographic': q, rows: 40,
-        select: 'DOI,title,abstract,type,issued,published,created,container-title,author,is-referenced-by-count,URL,subject' })}`, { timeout: 25000 })));
-      res.forEach((r, k) => {
-        const p = batch[k];
-        if (!r.ok) { errors.push(`${p.name}: ${failText('Crossref', r)}`); return; }
+    // One request at a time: Crossref's public service allows only one at a time per user.
+    let first = true;
+    for (const p of pubs) {
+      todayProgress = `Looking through new papers from ${p.name}…`; renderToday();
+      for (const q of queries) {
+        if (!first) await sleep(300); first = false;
+        const r = await getJSON(`${CR}/works?${new URLSearchParams({ filter: `${p.filter},from-created-date:${since},type:journal-article`, 'query.bibliographic': q, rows: 40,
+          select: 'DOI,title,abstract,type,issued,published,created,container-title,author,is-referenced-by-count,URL,subject' })}`, { timeout: 25000, retries: 2 });
+        if (!r.ok) { errors.push(`${p.name}: ${failText('Crossref', r)}`); break; }
         const items = (r.data.message && r.data.message.items) || [];
-        counts[p.id] = items.length;
+        counts[p.id] = (counts[p.id] || 0) + items.length;
         C.dedupeInto(pool, items.map((it, j) => Object.assign(C.normCrossref(it, j + 1), { pub: p.id, created: it.created && it.created['date-time'] || '' })));
-      });
+      }
     }
     const seen = new Set(prev && prev.day !== localDay() ? (prev.seen || []) : (prev && prev.seenBefore) || []);
     const ranked = C.rankToday([...pool.values()].filter(w => !seen.has(w.doi)), terms);
