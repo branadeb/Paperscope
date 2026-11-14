@@ -150,13 +150,14 @@
   const VIEWS = ['search', 'profile', 'saved', 'about'];
   function route() {
     const v = (location.hash || '#search').slice(1);
-    const view = VIEWS.includes(v) ? v : 'search';
+    const view = v === 'install' ? 'about' : VIEWS.includes(v) ? v : 'search'; // #install: a link to share for installing the app
     VIEWS.forEach(x => { $('#view-' + x).hidden = x !== view; });
     document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.view === view ? 'page' : 'false'));
     if (view === 'saved') { renderSaved(); renderFollows(); }
     if (view === 'search') renderFollows();
     if (view === 'profile') { renderProfileEditor(); renderAI(); }
     if (view === 'about') renderAbout();
+    if (v === 'install') { renderInstall(); const h = $('#install-h'); if (h) setTimeout(() => h.scrollIntoView({ block: 'start' }), 0); return; }
     window.scrollTo(0, 0);
   }
 
@@ -366,7 +367,7 @@
   function renderPathway() {
     document.querySelectorAll('.pathways [data-pathway]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.pathway === S.pathway)));
     $('#hero').dataset.searchBy = S.pathway;
-    $('#q').placeholder = S.pathway === 'author' ? 'Author name or ORCID iD' : 'Topic, question or DOI';
+    $('#q').placeholder = S.pathway === 'author' ? 'Name or ORCID iD' : 'Topic, question or DOI';
     $('#hero-lede').textContent = S.pathway === 'author' ? 'Look up a researcher by name or ORCID iD and see all their work, grouped by field.' : 'Search open scholarly databases and see, for each paper, why it may matter to you.';
     const lab = document.querySelector('label[for="q"]'); if (lab) lab.textContent = S.pathway === 'author' ? 'Author name or ORCID iD' : 'Search terms, research question or DOI';
   }
@@ -486,21 +487,24 @@
     const { themes, hasProfile: hp } = s.themes;
     const top = themes.filter(t => t.id !== 'none').slice(0, 12);
     if (top.length < 2) { $('#map-holder').innerHTML = ''; return; }
-    const W = 470, H = 330, cx = W / 2, cy = H / 2, R1 = 74, R2 = 132, SQ = 0.82;
+    // Phones get a tighter layout with numbered bubbles (the list below is the key); wider screens also get text labels.
+    const narrow = ($('#map-holder').clientWidth || window.innerWidth) < 520;
+    const W = narrow ? 360 : 470, H = narrow ? 290 : 330, cx = W / 2, cy = H / 2, R1 = narrow ? 64 : 74, R2 = narrow ? 120 : 132, SQ = 0.82;
+    const num = new Map(top.map((t, i) => [t.id, i + 1]));
     let inner = top.filter(t => t.close), outer = top.filter(t => !t.close);
     if (inner.length > 6) { outer = inner.slice(6).concat(outer); inner = inner.slice(0, 6); } // keep the inner ring legible
     const maxC = Math.max(...top.map(t => t.count));
     const place = (arr, R, offset) => arr.map((t, i) => {
       const ang = offset + (2 * Math.PI * i) / Math.max(arr.length, 1);
       const rr = arr.length === 1 && R === R1 ? R * 0.75 : R;
-      return { t, ang, x: cx + rr * Math.cos(ang), y: cy + rr * Math.sin(ang) * SQ, r: 7 + 14 * Math.sqrt(t.count / maxC) };
+      return { t, ang, x: cx + rr * Math.cos(ang), y: cy + rr * Math.sin(ang) * SQ, r: (narrow ? 10 : 8) + (narrow ? 11 : 13) * Math.sqrt(t.count / maxC) };
     });
     const nodes = [...place(inner, R1, -Math.PI / 2 + 0.3), ...place(outer, R2, -Math.PI / 2 + 0.05)];
     const sel = S.filters.theme;
     const dimFor = t => (hp && S.mode === 'close' && !t.close) || (hp && S.mode === 'adjacent' && t.close);
     const short = t => (t.name.length > 20 ? t.name.slice(0, 19).replace(/\s+\S*$/, '') + '…' : t.name);
     // Label the larger themes only; place each label on the outward side of its bubble.
-    const labelled = new Set(nodes.slice().sort((a, b) => b.t.count - a.t.count).slice(0, 8).map(n => n.t.id));
+    const labelled = new Set(narrow ? [] : nodes.slice().sort((a, b) => b.t.count - a.t.count).slice(0, 8).map(n => n.t.id));
     const label = n => {
       const c = Math.cos(n.ang), sn = Math.sin(n.ang);
       const lx = n.x + c * (n.r + 5), ly = n.y + sn * (n.r + 5) * SQ + 4;
@@ -508,7 +512,7 @@
       const dy = Math.abs(c) < 0.35 ? (sn < 0 ? -4 : 8) : 0;
       return `<text x="${lx.toFixed(1)}" y="${(ly + dy).toFixed(1)}" style="text-anchor:${anchor}">${esc(short(n.t))}</text>`;
     };
-    const svg = `<svg class="map-svg" viewBox="0 0 ${W} ${H}" role="group" aria-label="Map of research themes in these results: ${inner.length} ${hp ? 'close to your profile' : 'at the core of your search'}, ${outer.length} ${hp ? 'adjacent' : 'further out'}. The same themes are listed below.">
+    const svg = `<svg class="map-svg${narrow ? ' narrow' : ''}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Map of research themes in these results: ${inner.length} ${hp ? 'close to your profile' : 'at the core of your search'}, ${outer.length} ${hp ? 'adjacent' : 'further out'}. The same themes are listed below.">
       <g class="sky" aria-hidden="true">${stars(W, H)}</g>
       <ellipse class="ring" cx="${cx}" cy="${cy}" rx="${R1}" ry="${R1 * SQ}"/><ellipse class="ring" cx="${cx}" cy="${cy}" rx="${R2}" ry="${R2 * SQ}"/>
       <circle class="hub" cx="${cx}" cy="${cy}" r="18"/><text class="hub-label" x="${cx}" y="${cy + 3.5}">${hp ? 'you' : 'query'}</text>
@@ -518,16 +522,16 @@
           <title>${esc(n.t.name)} (${n.t.count} papers${n.t.emerging ? ', many recent' : ''})</title>
           ${n.t.emerging ? `<circle class="emerge" cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${(n.r + 4).toFixed(1)}"/>` : ''}
           <circle class="b" cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${n.r.toFixed(1)}"/>
-          ${n.r >= 12 ? `<text class="n" x="${n.x.toFixed(1)}" y="${(n.y + 3.5).toFixed(1)}">${n.t.count}</text>` : ''}
+          <text class="n" x="${n.x.toFixed(1)}" y="${(n.y + (narrow ? 4.5 : 3.5)).toFixed(1)}" aria-hidden="true">${num.get(n.t.id)}</text>
           ${labelled.has(n.t.id) ? label(n) : ''}
         </g>`;
       }).join('')}
     </svg>`;
     const legend = `<div class="legend"><span><i style="background:var(--close)"></i>${hp ? 'Close to your profile' : 'Most of the top results'}</span><span><i style="background:var(--adj)"></i>${hp ? 'Adjacent to your profile' : 'Further from the top results'}</span><span><i class="e"></i>Emerging: many papers from the last 3 years</span></div>`;
-    const list = `<ul class="theme-list">${top.map(t => `<li><button type="button" data-theme="${esc(t.id)}" aria-pressed="${sel === t.id}"><span class="dot ${t.close ? 'close' : 'adj'}"></span><span class="tl"><span>${esc(t.name)}</span><span class="meta">${t.count} paper${t.count === 1 ? '' : 's'}${t.field ? `, ${esc(t.field)}` : ''}${t.emerging ? ', emerging' : ''}</span></span></button></li>`).join('')}</ul>`;
+    const list = `<ul class="theme-list">${top.map(t => `<li><button type="button" data-theme="${esc(t.id)}" aria-pressed="${sel === t.id}"><span class="dot ${t.close ? 'close' : 'adj'}" aria-hidden="true">${num.get(t.id)}</span><span class="tl"><span>${esc(t.name)}</span><span class="meta">${t.count} paper${t.count === 1 ? '' : 's'}${t.field ? `, ${esc(t.field)}` : ''}${t.emerging ? ', emerging' : ''}</span></span></button></li>`).join('')}</ul>`;
     const wasOpen = $('#map-holder details') ? $('#map-holder details').open : true;
     $('#map-holder').innerHTML = `<details class="map" ${wasOpen ? 'open' : ''}><summary>Theme map</summary>
-      <p class="small muted">Themes are the OpenAlex topics of the papers found. ${hp ? 'Inner ring: themes that overlap your profile. Outer ring: adjacent themes.' : 'Inner ring: themes holding most of the top results.'} Bigger bubbles hold more papers. Tap a theme to see only its papers.</p>
+      <p class="small muted">Themes are the OpenAlex topics of the papers found. ${hp ? 'Inner ring: themes that overlap your profile. Outer ring: adjacent themes.' : 'Inner ring: themes holding most of the top results.'} Bigger bubbles hold more papers; numbers match the list below. Tap a theme to see only its papers.</p>
       ${svg}${legend}${list}</details>`;
   }
 
@@ -717,7 +721,7 @@
       <ul class="saved-list">${list.map(w => `<li><div class="badges"><span class="badge ${esc(w.typeInfo.conf)}">${esc(w.typeInfo.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}</div>
         <h3><a href="${esc(primaryLink(w))}" target="_blank" rel="noopener">${esc(w.title)}</a></h3>
         <p class="byline">${esc(w.authors.slice(0, 3).join(', '))}${w.authors.length > 3 ? ' et al.' : ''}${w.venue ? `. <span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
-        <div class="actions"><button class="save" aria-pressed="true" data-unsave="${esc(w.key)}">Remove</button>${safeUrl(w.oaUrl) && w.isOA ? `<a href="${esc(w.oaUrl)}" target="_blank" rel="noopener">Free full text</a>` : ''}</div></li>`).join('')}</ul>
+        <div class="actions"><button type="button" class="btn small quiet" data-unsave="${esc(w.key)}">Remove</button>${safeUrl(w.oaUrl) && w.isOA ? `<a href="${esc(w.oaUrl)}" target="_blank" rel="noopener">Free full text</a>` : ''}</div></li>`).join('')}</ul>
       <p style="margin-top:16px"><button class="btn small" id="clear-saved">Remove all saved papers</button></p>`;
   }
   function exportText(kind) {
@@ -905,7 +909,7 @@
     }
     const cands = (orcid ? [r.data] : (r.data.results || [])).map(C.normAuthor).filter(Boolean);
     S.search.candidates = cands;
-    if (!cands.length) { $('#clarify').innerHTML = `<div class="panel">No authors named “${esc(raw)}” in OpenAlex. Check the spelling, try initials (e.g. “P. Blom”), or search by topic instead.</div>`; return; }
+    if (!cands.length) { $('#clarify').innerHTML = `<div class="panel">No authors named “${esc(raw)}” in OpenAlex. Check the spelling or try initials (e.g. “P. Blom”).<div class="row" style="margin-top:8px"><button type="button" class="btn small" data-topic-search="${esc(raw)}">Search topics for “${esc(raw.length > 40 ? raw.slice(0, 38) + '…' : raw)}”</button></div></div>`; return; }
     if (cands.length === 1) { openAuthor(cands); return; }
     renderAuthorPicker(cands);
   }
@@ -1479,6 +1483,7 @@
       S.pathway = d.pathway; store.set('pathway', S.pathway); renderPathway(); $('#q').focus(); return;
     }
     if (d.authorExample) { S.pathway = 'author'; store.set('pathway', 'author'); renderPathway(); runAuthorSearch(d.authorExample); return; }
+    if (d.topicSearch) { S.pathway = 'topic'; store.set('pathway', 'topic'); renderPathway(); runSearch(d.topicSearch); return; }
     if (t.id === 'author-open') {
       const picked = [...document.querySelectorAll('input[name="acand"]:checked')].map(i => S.search.candidates[Number(i.value)]).filter(Boolean);
       if (!picked.length) { toast('Tick at least one profile'); return; }

@@ -8,14 +8,16 @@ The whole app is one file, `index.html` (about 290 KB, including its typeface). 
 
 ## Install it as an app
 
-Paperscope is a progressive web app: install it from the browser and it gets its own icon and window, opens offline, and updates itself.
+Paperscope is free and anyone can install it: no store, no account, no download size to speak of. Share this link, which opens the install steps: **https://branadeb.github.io/Paperscope/#install**
+
+It is a progressive web app: install it from the browser and it gets its own icon and window, opens offline, and updates itself.
 
 - **iPhone or iPad:** open the site, tap Share, then **Add to Home Screen**. (The Home Screen app keeps its own storage, separate from Safari.)
 - **Android:** in Chrome, tap **Install** on the start screen, or ⋮ › **Install app**.
 - **Mac:** Safari › File › **Add to Dock**; or the install icon in Chrome's or Edge's address bar.
 - **Windows, ChromeOS, Linux:** the install icon in Chrome's or Edge's address bar.
 
-App-store versions would need developer accounts (Google Play $25 once, Apple $99 a year; check the Microsoft Store's current terms). Google Play and the Microsoft Store accept a packaged web app (PWABuilder or Bubblewrap); Apple generally rejects apps that only wrap a website (guideline 4.2), so an iOS store version would need native features first.
+App-store versions are not needed and are not planned. For reference, they would need developer accounts (Google Play $25 once, Apple $99 a year; check the Microsoft Store's current terms). Google Play and the Microsoft Store accept a packaged web app (PWABuilder or Bubblewrap); Apple generally rejects apps that only wrap a website (guideline 4.2), so an iOS store version would need native features first.
 
 ## Running it
 

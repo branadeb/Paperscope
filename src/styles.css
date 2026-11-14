@@ -172,7 +172,9 @@ details.map .muted { color: var(--star-2); }
 .map-svg .node.sel circle.b { stroke: #fff; stroke-width: 3; }
 .map-svg .node circle.emerge { fill: none; stroke: #fff; stroke-width: 1.1; stroke-dasharray: 3 2.5; opacity: .85; }
 .map-svg .node text { font: 11px var(--sans); fill: var(--star); text-anchor: middle; paint-order: stroke; stroke: var(--night); stroke-width: 3px; stroke-linejoin: round; }
-.map-svg .node text.n { fill: #0c1430; stroke: none; font-weight: 700; font-size: 10px; }
+.map-svg .node text.n { fill: #0c1430; stroke: none; font-weight: 700; font-size: 10px; pointer-events: none; }
+.map-svg.narrow .node text.n { font-size: 13px; }
+.map-svg.narrow .hub-label { font-size: 12px; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .82rem; color: var(--star-2); margin: 6px 0; justify-content: center; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 .legend .e { background: none; border: 1.2px dashed var(--star); }
@@ -180,7 +182,8 @@ details.map .muted { color: var(--star-2); }
 .theme-list button { appearance: none; width: 100%; text-align: left; border: 0; background: none; padding: 8px; border-radius: 10px; cursor: pointer; display: flex; gap: 10px; align-items: baseline; font-size: .92rem; line-height: 1.35; color: var(--star); }
 .theme-list button:hover, .theme-list button[aria-pressed="true"] { background: rgb(255 255 255 / .07); }
 .theme-list .tl { display: grid; }
-.theme-list .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; transform: translateY(-1px); }
+.theme-list button { align-items: center; }
+.theme-list .dot { width: 22px; height: 22px; border-radius: 50%; flex: none; display: inline-grid; place-items: center; color: #0c1430; font: 700 .72rem/1 var(--sans); font-variant-numeric: tabular-nums; }
 .theme-list .dot.close { background: var(--glow-close); box-shadow: 0 0 6px var(--glow-close); }
 .theme-list .dot.adj { background: var(--glow-adj); box-shadow: 0 0 6px var(--glow-adj); }
 .theme-list .meta { color: var(--star-2); font-size: .8rem; font-variant-numeric: tabular-nums; }
@@ -406,3 +409,31 @@ p.vpanel { margin-bottom: 10px; }
 .install-hint img { border-radius: 10px; flex: none; }
 .install-hint > span:not(.row) { flex: 1 1 180px; font-size: .92rem; }
 .install-hint .row { gap: 6px; margin-left: auto; }
+
+/* ---------- phone polish */
+/* iOS zooms the page when a field under 16px is focused; keep every field at 16px on touch screens */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { font-size: 16px !important; }
+  .actions .btn.link, .actions > a, .trail .btn.link { padding-top: 7px; padding-bottom: 7px; }
+}
+/* saved papers read like result titles, with a quiet Remove */
+.saved-list h3 a { color: var(--ink); text-decoration: none; }
+.saved-list h3 a:hover { text-decoration: underline; text-decoration-thickness: 1px; }
+.btn.quiet { color: var(--ink-2); }
+/* ORCID iDs never break across lines */
+.vpanel a[href*="orcid.org"], .author-head a[href*="orcid.org"] { white-space: nowrap; }
+/* two- and three-column tables become stacked cards on narrow screens */
+@media (max-width: 560px) {
+  .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td { display: block; width: auto; }
+  .table-wrap thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .table-wrap tr { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+  .table-wrap td { border: 0; padding: 1px 0; }
+  .table-wrap td:first-child { font-weight: 600; color: var(--ink); }
+  .table-wrap td + td:not([class]) { color: var(--ink-2); }
+}
+@media (max-width: 380px) {
+  .hero-rings { right: -110px; opacity: .6; }
+  .searchbar .btn.primary { padding: 0 14px; }
+  .searchbar input { padding-left: 13px; padding-right: 10px; }
+}
+#install-h { scroll-margin-top: 70px; }

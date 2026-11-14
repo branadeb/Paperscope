@@ -97,7 +97,7 @@
     <p class="lede">Upload a CV or paste a research statement. Paperscope reads it in this browser and lists your interests, methods and areas. Nothing from it is uploaded.</p>
     <h3>Import from ORCID</h3>
     <p class="small muted">Builds your profile from your publications in OpenAlex. Your ORCID iD is sent to OpenAlex; your publications are public there already.</p>
-    <form id="orcid-form" class="add-term"><label for="orcid" class="sr-only">ORCID iD</label><input id="orcid" autocomplete="off" placeholder="ORCID iD, e.g. 0000-0002-1825-0097"><button class="btn small primary" type="submit">Import</button></form>
+    <form id="orcid-form" class="add-term"><label for="orcid" class="sr-only">ORCID iD</label><input id="orcid" autocomplete="off" inputmode="text" placeholder="0000-0002-1825-0097"><button class="btn small primary" type="submit">Import</button></form>
     <p id="orcid-status" class="small muted" role="status"></p>
     <h3>Or use a CV or research statement</h3>
     <div class="drop" id="drop">
@@ -148,7 +148,7 @@
     <h3>Cost and limits</h3>
     <p class="small">OpenAlex now meters its free API. Without a key you get about $0.10 of free use a day (roughly 30 searches here); with a free key, $1 a day (roughly 300). Paperscope shows what each search used. When the allowance runs out, OpenAlex refuses requests until midnight UTC; it does not bill you unless you have bought prepaid credit on openalex.org. Crossref and Europe PMC are free and need no key, but may slow down busy users.</p>
 
-    <h3>Install as an app</h3>
+    <h3 id="install-h">Install as an app</h3>
     <div id="install-panel"></div>
 
     <h3>Settings</h3>

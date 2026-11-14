@@ -173,3 +173,19 @@ Paperscope is now a progressive web app: a manifest, icons (192 and 512 px, a ma
 - The other suites (43, 32 and 93 checks) still pass with the service worker active.
 
 **Not tested on real devices** in this session: installation on an actual iPhone, Android phone or Mac. The behaviour above follows each platform's documented install flow.
+
+## Phone layout review (14 November 2026)
+
+Every screen was screenshotted at 320×640, 375×812 and 430×932 in light and dark mode, 44 shots per size, with `test/mobile-shots.cjs`. No screen scrolls sideways at any size and no page errors occurred. Fixes made after the review:
+
+- Text fields are 16 px on touch screens, so iPhone Safari no longer zooms in when a field is tapped (the sort menu, the term and ORCID fields and the comparison box were smaller).
+- The theme map uses a tighter layout on phones, with numbered bubbles that match a numbered list; the text labels became unreadable when scaled down.
+- The About tables stack into readable cards on narrow screens.
+- Saved papers look like results, with a quiet Remove button.
+- ORCID iDs no longer break across lines, and shorter placeholders fit small screens.
+- Link-style actions have taller tap targets.
+- The smallest phones get a narrower Search button and less hero decoration behind the headline.
+- An author search with no match offers to search topics instead.
+- A shareable link, `#install`, opens the install steps.
+
+All suites pass after the changes: 43, 32, 93 and 27 browser checks and 49 unit tests.

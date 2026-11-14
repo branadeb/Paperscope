@@ -106,6 +106,11 @@ const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebK
   await ios.reload({ waitUntil: 'load' });
   check('“Not now” is remembered', (await ios.$eval('#install-hint', h => h.innerHTML.trim())) === '');
 
+  await ios.goto(URL0 + '?nosw#install', { waitUntil: 'load' });
+  await new Promise(r => setTimeout(r, 300));
+  const inst2 = await ios.evaluate(() => ({ about: !document.querySelector('#view-about').hidden, top: Math.round(document.querySelector('#install-h').getBoundingClientRect().top) }));
+  check('the #install link opens the install instructions', inst2.about && inst2.top >= 0 && inst2.top < 200, JSON.stringify(inst2));
+
   // ---------- running as an installed app
   const app = await ctx2.newPage();
   await app.evaluateOnNewDocument(() => { Object.defineProperty(navigator, 'standalone', { get: () => true }); });
