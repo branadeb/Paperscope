@@ -318,3 +318,25 @@ A review of the search algorithm, which the user shared, pointed out that every 
 - Semantic Scholar is called only when turned on and receives only DOIs. Its suggestions older than the window are dropped, and recent ones show as *Nearby* with the reason.
 - The privacy table lists Semantic Scholar.
 - No WCAG 2 A/AA violations. The earlier checks (caching, no repeats, failing publisher, profile terms) still pass.
+
+## Lab: models, orbit and AI check (14 November 2026)
+
+**Tested with mocked services:**
+- `test/lab-bench.test.cjs`, 28/28:
+  - The on-device model can be measured on graded searches. The test uses a stand-in model, because the real one cannot be downloaded in the test sandbox.
+  - OpenAlex's reranker is measured with one reranked request per graded search, kept and not asked again.
+  - The reranker setting adds `rerank=true` to the keyword search.
+  - The model choice offers MiniLM and bge-small.
+- `test/lab-orbit.test.cjs`, 25/25:
+  - The orbit phrases appear in Saved.
+  - "Find more like my saved papers" makes, for each of 3 starting papers, one meaning-based search with its abstract, one related-works request, one newer-citing request and one references request.
+  - Saved papers are left out of the results. The header names what the starting papers have in common, and each paper names its connection.
+  - Keep going is enabled only after saving, and round 2 starts from 4 papers with no repeats. Back and More like this on a single paper work.
+  - The lean is at most 0.06, stated, and can be turned off.
+  - The AI check sends only the search, titles and abstracts. Its summary names the model and tokens, and ordering by the check puts the top-rated paper first with its reason. The usual order can be restored, and on a graded search the check's order is kept and compared in Graded searches.
+  - No WCAG 2 A/AA violations.
+
+**Not yet checked live:**
+- That bge-small-en-v1.5 downloads and runs in the browser. MiniLM has run before in this app.
+- How the AI check grades real searches, which needs the user's key.
+- Whether the orbit and the models improve rankings. That needs the user's grades.

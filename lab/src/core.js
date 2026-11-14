@@ -886,6 +886,9 @@
       const how = { cites: 'Cites the paper you started from.', refs: 'Cited by the paper you started from.', related: 'OpenAlex lists it as related to the paper you started from.' }[ctx.trail.kind];
       if (how) reasons.push({ kind: 'trail', text: how });
     }
+    if (r.likeWhy) r.likeWhy.forEach(x => reasons.push({ kind: 'trail', text: x }));
+    if (r.shared && r.shared.length) reasons.push({ kind: 'profile', text: `Shares ${listify(r.shared.map(t => `“${t}”`))} with the papers you started from.` });
+    if (r.ai) reasons.unshift({ kind: r.ai.grade >= 2 ? 'profile' : 'adjacent', text: `AI check: ${['not relevant', 'only touches the topic', 'relevant', 'directly addresses the search'][r.ai.grade]}${r.ai.reason ? ` (${r.ai.reason.replace(/\.$/, '')})` : ''}.` });
     const qh = ctx && ctx.trail ? [] : (r.qHits || []);
     const inTitle = qh.filter(h => h.where === 'title').map(h => h.text);
     const inAbs = qh.filter(h => h.where === 'abstract').map(h => h.text);
@@ -1687,6 +1690,76 @@
     return picked;
   }
 
+  // ---------------------------------------------------------------- orbit: what your saved papers have in common
+  // The phrases (1–3 words) that recur across saved papers' titles and abstracts, or, for one paper, that recur in it.
+  // Recent saves count more (half weight after 90 days); title phrases and longer phrases count more.
+  function orbitTerms(works, { now = Date.now(), max = 20 } = {}) {
+    const docs = (works || []).filter(w => w && w.title).map(w => {
+      const fade = w.savedAt ? Math.pow(0.5, Math.max(0, now - Date.parse(w.savedAt)) / (90 * 864e5)) : 1;
+      const grams = new Map();
+      const addGrams = (ws, inTitle) => {
+        for (let n = 1; n <= 3; n++) for (let i = 0; i + n <= ws.length; i++) {
+          const g = ws.slice(i, i + n); const lo = g.map(x => x.toLowerCase());
+          if (lo.some(x => STOP.has(x) || /^\d+$/.test(x) || x.length < 2)) continue;
+          if (n === 1 && (lo[0].length < 6 || GENERIC_SINGLE.has(lo[0]))) continue;
+          if (n > 1 && lo.every(x => GENERIC_SINGLE.has(x) || STOP.has(x))) continue;
+          const st = g.map(stem); const key = st.join(' ');
+          const e = grams.get(key) || { text: lo.join(' '), stems: st, inTitle: false, n: 0 }; e.inTitle = e.inTitle || inTitle; e.n++; grams.set(key, e);
+        }
+      };
+      addGrams(words(w.title), true);
+      splitSentences(w.abstract || '').slice(0, 12).forEach(x => addGrams(words(x), false));
+      return { fade, grams };
+    });
+    const tally = new Map();
+    docs.forEach(d => d.grams.forEach((g, k) => {
+      const t = tally.get(k) || { text: g.text, stems: g.stems, df: 0, w: 0 };
+      t.df++; t.w += d.fade * (g.inTitle ? 1.5 : 1) * (g.stems.length > 1 ? 1.25 : 1) * Math.min(3, g.n); tally.set(k, t);
+    }));
+    let list = [...tally.values()];
+    if (docs.length > 1) list = list.filter(t => t.df >= 2);
+    list.sort((a, b) => b.w - a.w || b.stems.length - a.stems.length);
+    const kept = [];
+    for (const t of list) {
+      if (kept.some(k => k.stems.length > t.stems.length && hasPhrase(k.stems, t.stems) && k.df >= t.df)) continue;
+      kept.push(t); if (kept.length >= max) break;
+    }
+    const top = kept[0] ? kept[0].w : 1;
+    return kept.map(t => ({ text: t.text, stems: t.stems, kind: 'orbit', weight: 0.5 + 0.7 * t.w / top, df: t.df }));
+  }
+  // "More like these": papers found from the seed papers (similar abstracts, citation links, OpenAlex's related works),
+  // ranked by the phrases they share with the seeds, how strongly the sources found them and, if the on-device model
+  // is on, how close their meaning is to the seeds.
+  const LIKE_W = { like_sem: 1, like_rel: 0.8, like_cite: 0.7, like_ref: 0.7 };
+  function rankLike(works, { terms = [], sem = null, nowYear = new Date().getFullYear() } = {}) {
+    const rr = w => Object.entries(w.ranks || {}).reduce((a, [ch, r]) => a + (LIKE_W[ch] || 0.6) / (20 + r), 0);
+    const maxR = Math.max(1e-9, ...works.map(rr));
+    works.forEach(w => {
+      const pr = scoreProfile(w, terms); const rrf = rr(w) / maxR;
+      const sm = sem && sem.get(w.key); const sq = sm ? Math.max(0, Math.min(1, (sm.q - 0.2) / 0.5)) : null;
+      const age = w.year ? Math.max(0, nowYear - w.year) : 10; const recency = Math.max(0, Math.min(1, 1 - (age - 2) / 13));
+      const impact = w.pct != null ? w.pct : Math.min(1, Math.log1p(w.cites || 0) / Math.log1p(1000));
+      const score = sq == null ? 0.55 * pr.score + 0.37 * rrf + 0.05 * impact + 0.03 * recency : 0.4 * pr.score + 0.3 * rrf + 0.22 * sq + 0.05 * impact + 0.03 * recency;
+      w.rank = { score, qrel: score, q: pr.score, rrf, prof: 0, profRaw: 0, impact, recency, qHits: [], relHits: [], pHits: [], sem: sm || null, missing: [], scoring: 'like', shared: pr.hits.slice(0, 3).map(h => h.text) };
+    });
+    return works.slice().sort((a, b) => b.rank.score - a.rank.score);
+  }
+  // The AI check (optional, your own key): the model grades each of the top papers 0–3 with a short reason.
+  function buildCheckPrompt(q, papers) {
+    const system = 'You judge whether research papers address a literature search. Use only the title and abstract given. For each numbered paper give a grade: 3 = directly addresses the search (same system, mechanism or question), 2 = relevant, 1 = only touches the topic, 0 = not relevant. A paper that mentions the words but studies something else is 0 or 1. Reply with exactly one line per paper, in the form: number | grade | reason of at most 12 words. No other text.';
+    const user = `Search: ${q}\n\n` + papers.map((w, i) => `[${i + 1}] ${w.title}${w.year ? ` (${w.year})` : ''}\nAbstract: ${w.abstract ? String(w.abstract).slice(0, 700) : '(none; judge from the title)'}`).join('\n\n');
+    return { system, user };
+  }
+  function parseCheck(text, n) {
+    const out = new Map();
+    String(text || '').split(/\r?\n/).forEach(line => {
+      const m = line.match(/^\s*\[?(\d{1,3})\]?\s*[|:.)-]\s*([0-3])\s*(?:[|:–—-]\s*(.*))?$/);
+      if (!m) return; const i = Number(m[1]); if (i < 1 || i > n || out.has(i)) return;
+      out.set(i, { grade: Number(m[2]), reason: normSpace(m[3] || '').replace(/^["“]|["”]$/g, '').slice(0, 140) });
+    });
+    return out;
+  }
+
   // ---------------------------------------------------------------- benchmark (researcher-graded searches)
   // Grades: 0 not relevant, 1 slightly, 2 relevant, 3 exactly what was asked. Ungraded papers count as 0 in nDCG
   // (the ideal ordering uses all grades given), and the share of graded papers in the top k is reported beside it.
@@ -1722,6 +1795,7 @@
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
     questStep, questSuggest, trailCode, parseTrailCode, trailStats,
     PUBLISHERS, todayTerms, todayQuery, todayQueries, todayRelated, rankToday, todaySince,
+    orbitTerms, rankLike, buildCheckPrompt, parseCheck,
     rankTodayV2, TODAY_LABELS, METHOD_RE, pubOfDoi, todayWindow, crossrefRecent, normS2,
     tokens, chemNorm, matchTermV2, groupStats, scoreQueryV2, nearAll, TIER_W, ndcgAt, precisionAt, judgedAt, benchMetrics, meanMetrics,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,

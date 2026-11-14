@@ -656,3 +656,6 @@ fieldset.scoring .radio input { margin-top: 4px; }
 .tlabel.method { color: var(--ink-2); }
 .tlabel.adjacent { color: var(--adj); border-color: color-mix(in srgb, var(--adj) 45%, var(--rule)); }
 .today-list .via { margin-left: auto; color: var(--ink-3); }
+
+/* orbit (Lab) */
+.orbit .row { margin: 8px 0; }

@@ -676,6 +676,9 @@ fieldset.scoring .radio input { margin-top: 4px; }
 .tlabel.method { color: var(--ink-2); }
 .tlabel.adjacent { color: var(--adj); border-color: color-mix(in srgb, var(--adj) 45%, var(--rule)); }
 .today-list .via { margin-left: auto; color: var(--ink-3); }
+
+/* orbit (Lab) */
+.orbit .row { margin: 8px 0; }
 </style>
 </head>
 <body>
@@ -809,10 +812,11 @@ fieldset.scoring .radio input { margin-top: 4px; }
         <tr><td>Your “papers of the day” topics and chosen publishers (Lab)</td><td>Crossref and OpenAlex, once a day when you open the app, to find new papers.</td></tr>
         <tr><td>The DOIs of your 10 most recently saved papers, only if you turn on “papers like my saved ones” (Lab)</td><td>Semantic Scholar, once a day, to suggest similar new papers.</td></tr>
         <tr><td>The ORCID iD of an author you open (to check their papers)</td><td>ORCID, to read that person’s public record; Crossref, to find papers tagged with the iD; OpenAlex, to fetch the papers it lists.</td></tr>
-        <tr><td>For “Write a short answer” (off unless you set it up): your search and the titles and abstracts of the top papers</td><td>The AI provider you choose, with your own key, billed to you. Never your CV or profile.</td></tr>
+        <tr><td>For “Write a short answer” or “Check the top 30 with AI” (off unless you set it up): your search and the titles and abstracts of the top papers</td><td>The AI provider you choose, with your own key, billed to you. Never your CV or profile.</td></tr>
         <tr><td>Followed searches</td><td>Nowhere. Kept in this browser; checking one runs a normal search.</td></tr>
         <tr><td>Titles you paste into “Compare with Google Scholar”</td><td>Nowhere, unless you tap “Check OpenAlex”; then the missing titles go to OpenAlex.</td></tr>
         <tr><td>Saved papers</td><td>Nowhere. Kept in this browser.</td></tr>
+        <tr><td>“More like this” (Lab): the title and abstract of the starting paper, and its OpenAlex id</td><td>OpenAlex, to find similar papers and citation links.</td></tr>
       </tbody>
     </table></div>
     <p class="small muted">Code libraries are downloaded only when needed: pdf.js or mammoth.js from jsDelivr when you open a PDF or Word file, and the optional relevance model from jsDelivr and Hugging Face. These downloads do not include your data. Each service sees your IP address, as with any website.</p>
@@ -1769,6 +1773,9 @@ fieldset.scoring .radio input { margin-top: 4px; }
       const how = { cites: 'Cites the paper you started from.', refs: 'Cited by the paper you started from.', related: 'OpenAlex lists it as related to the paper you started from.' }[ctx.trail.kind];
       if (how) reasons.push({ kind: 'trail', text: how });
     }
+    if (r.likeWhy) r.likeWhy.forEach(x => reasons.push({ kind: 'trail', text: x }));
+    if (r.shared && r.shared.length) reasons.push({ kind: 'profile', text: `Shares ${listify(r.shared.map(t => `“${t}”`))} with the papers you started from.` });
+    if (r.ai) reasons.unshift({ kind: r.ai.grade >= 2 ? 'profile' : 'adjacent', text: `AI check: ${['not relevant', 'only touches the topic', 'relevant', 'directly addresses the search'][r.ai.grade]}${r.ai.reason ? ` (${r.ai.reason.replace(/\.$/, '')})` : ''}.` });
     const qh = ctx && ctx.trail ? [] : (r.qHits || []);
     const inTitle = qh.filter(h => h.where === 'title').map(h => h.text);
     const inAbs = qh.filter(h => h.where === 'abstract').map(h => h.text);
@@ -2570,6 +2577,76 @@ fieldset.scoring .radio input { margin-top: 4px; }
     return picked;
   }
 
+  // ---------------------------------------------------------------- orbit: what your saved papers have in common
+  // The phrases (1–3 words) that recur across saved papers' titles and abstracts, or, for one paper, that recur in it.
+  // Recent saves count more (half weight after 90 days); title phrases and longer phrases count more.
+  function orbitTerms(works, { now = Date.now(), max = 20 } = {}) {
+    const docs = (works || []).filter(w => w && w.title).map(w => {
+      const fade = w.savedAt ? Math.pow(0.5, Math.max(0, now - Date.parse(w.savedAt)) / (90 * 864e5)) : 1;
+      const grams = new Map();
+      const addGrams = (ws, inTitle) => {
+        for (let n = 1; n <= 3; n++) for (let i = 0; i + n <= ws.length; i++) {
+          const g = ws.slice(i, i + n); const lo = g.map(x => x.toLowerCase());
+          if (lo.some(x => STOP.has(x) || /^\d+$/.test(x) || x.length < 2)) continue;
+          if (n === 1 && (lo[0].length < 6 || GENERIC_SINGLE.has(lo[0]))) continue;
+          if (n > 1 && lo.every(x => GENERIC_SINGLE.has(x) || STOP.has(x))) continue;
+          const st = g.map(stem); const key = st.join(' ');
+          const e = grams.get(key) || { text: lo.join(' '), stems: st, inTitle: false, n: 0 }; e.inTitle = e.inTitle || inTitle; e.n++; grams.set(key, e);
+        }
+      };
+      addGrams(words(w.title), true);
+      splitSentences(w.abstract || '').slice(0, 12).forEach(x => addGrams(words(x), false));
+      return { fade, grams };
+    });
+    const tally = new Map();
+    docs.forEach(d => d.grams.forEach((g, k) => {
+      const t = tally.get(k) || { text: g.text, stems: g.stems, df: 0, w: 0 };
+      t.df++; t.w += d.fade * (g.inTitle ? 1.5 : 1) * (g.stems.length > 1 ? 1.25 : 1) * Math.min(3, g.n); tally.set(k, t);
+    }));
+    let list = [...tally.values()];
+    if (docs.length > 1) list = list.filter(t => t.df >= 2);
+    list.sort((a, b) => b.w - a.w || b.stems.length - a.stems.length);
+    const kept = [];
+    for (const t of list) {
+      if (kept.some(k => k.stems.length > t.stems.length && hasPhrase(k.stems, t.stems) && k.df >= t.df)) continue;
+      kept.push(t); if (kept.length >= max) break;
+    }
+    const top = kept[0] ? kept[0].w : 1;
+    return kept.map(t => ({ text: t.text, stems: t.stems, kind: 'orbit', weight: 0.5 + 0.7 * t.w / top, df: t.df }));
+  }
+  // "More like these": papers found from the seed papers (similar abstracts, citation links, OpenAlex's related works),
+  // ranked by the phrases they share with the seeds, how strongly the sources found them and, if the on-device model
+  // is on, how close their meaning is to the seeds.
+  const LIKE_W = { like_sem: 1, like_rel: 0.8, like_cite: 0.7, like_ref: 0.7 };
+  function rankLike(works, { terms = [], sem = null, nowYear = new Date().getFullYear() } = {}) {
+    const rr = w => Object.entries(w.ranks || {}).reduce((a, [ch, r]) => a + (LIKE_W[ch] || 0.6) / (20 + r), 0);
+    const maxR = Math.max(1e-9, ...works.map(rr));
+    works.forEach(w => {
+      const pr = scoreProfile(w, terms); const rrf = rr(w) / maxR;
+      const sm = sem && sem.get(w.key); const sq = sm ? Math.max(0, Math.min(1, (sm.q - 0.2) / 0.5)) : null;
+      const age = w.year ? Math.max(0, nowYear - w.year) : 10; const recency = Math.max(0, Math.min(1, 1 - (age - 2) / 13));
+      const impact = w.pct != null ? w.pct : Math.min(1, Math.log1p(w.cites || 0) / Math.log1p(1000));
+      const score = sq == null ? 0.55 * pr.score + 0.37 * rrf + 0.05 * impact + 0.03 * recency : 0.4 * pr.score + 0.3 * rrf + 0.22 * sq + 0.05 * impact + 0.03 * recency;
+      w.rank = { score, qrel: score, q: pr.score, rrf, prof: 0, profRaw: 0, impact, recency, qHits: [], relHits: [], pHits: [], sem: sm || null, missing: [], scoring: 'like', shared: pr.hits.slice(0, 3).map(h => h.text) };
+    });
+    return works.slice().sort((a, b) => b.rank.score - a.rank.score);
+  }
+  // The AI check (optional, your own key): the model grades each of the top papers 0–3 with a short reason.
+  function buildCheckPrompt(q, papers) {
+    const system = 'You judge whether research papers address a literature search. Use only the title and abstract given. For each numbered paper give a grade: 3 = directly addresses the search (same system, mechanism or question), 2 = relevant, 1 = only touches the topic, 0 = not relevant. A paper that mentions the words but studies something else is 0 or 1. Reply with exactly one line per paper, in the form: number | grade | reason of at most 12 words. No other text.';
+    const user = `Search: ${q}\n\n` + papers.map((w, i) => `[${i + 1}] ${w.title}${w.year ? ` (${w.year})` : ''}\nAbstract: ${w.abstract ? String(w.abstract).slice(0, 700) : '(none; judge from the title)'}`).join('\n\n');
+    return { system, user };
+  }
+  function parseCheck(text, n) {
+    const out = new Map();
+    String(text || '').split(/\r?\n/).forEach(line => {
+      const m = line.match(/^\s*\[?(\d{1,3})\]?\s*[|:.)-]\s*([0-3])\s*(?:[|:–—-]\s*(.*))?$/);
+      if (!m) return; const i = Number(m[1]); if (i < 1 || i > n || out.has(i)) return;
+      out.set(i, { grade: Number(m[2]), reason: normSpace(m[3] || '').replace(/^["“]|["”]$/g, '').slice(0, 140) });
+    });
+    return out;
+  }
+
   // ---------------------------------------------------------------- benchmark (researcher-graded searches)
   // Grades: 0 not relevant, 1 slightly, 2 relevant, 3 exactly what was asked. Ungraded papers count as 0 in nDCG
   // (the ideal ordering uses all grades given), and the share of graded papers in the top k is reported beside it.
@@ -2605,6 +2682,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
     questStep, questSuggest, trailCode, parseTrailCode, trailStats,
     PUBLISHERS, todayTerms, todayQuery, todayQueries, todayRelated, rankToday, todaySince,
+    orbitTerms, rankLike, buildCheckPrompt, parseCheck,
     rankTodayV2, TODAY_LABELS, METHOD_RE, pubOfDoi, todayWindow, crossrefRecent, normS2,
     tokens, chemNorm, matchTermV2, groupStats, scoreQueryV2, nearAll, TIER_W, ndcgAt, precisionAt, judgedAt, benchMetrics, meanMetrics,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
@@ -2808,7 +2886,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
   let searchToken = 0;
   function ctx() {
     const s = S.search;
-    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile(), scoring: S.settings.scoring === 'v1' ? 'v1' : 'v2', trail: s.kind === 'trail' ? s.trail : null, author: s.kind === 'author' || s.kind === 'doi' ? (s.author || true) : null };
+    return { analysis: s.analysis, profile: S.profile, mode: S.mode, nowYear: new Date().getFullYear(), sem: S.ai.status === 'ready' ? s.sem : null, hasProfile: hasProfile(), scoring: S.settings.scoring === 'v1' ? 'v1' : 'v2', trail: s.kind === 'trail' ? s.trail : null, like: s.kind === 'like', author: s.kind === 'author' || s.kind === 'doi' ? (s.author || true) : null };
   }
   function hasProfile() { return !!(S.profile && ((S.profile.interests || []).length + (S.profile.methods || []).length + (S.profile.areas || []).length)); }
 
@@ -2974,7 +3052,21 @@ fieldset.scoring .radio input { margin-top: 4px; }
 
   function rerank() {
     const s = S.search; if (!s || !s.pool) return;
+    if (s.kind === 'like') {
+      s.ranked = C.rankLike([...s.pool.values()], { terms: s.orbit, sem: S.ai.status === 'ready' ? s.sem : null });
+      s.ranked.forEach(w => { const why = s.likeFrom.get(w.key); if (why) w.rank.likeWhy = [...why].slice(0, 2); });
+      s.themes = C.computeThemes(s.ranked, ctx()); return;
+    }
     s.ranked = C.rankWorks([...s.pool.values()], ctx());
+    if (s.kind === 'search' && S.saved.size >= 3 && S.settings.orbitLean !== false) {
+      const ot = orbitNow();
+      s.ranked.forEach(w => { if (S.saved.has(w.key)) return; const pr = C.scoreProfile(w, ot); const b = Math.min(0.06, 0.12 * pr.score); if (b > 0.005) { w.rank.orbit = { b, hits: pr.hits.slice(0, 2).map(h => h.text) }; w.rank.score += b; } });
+      s.ranked.sort((a, b) => b.rank.score - a.rank.score);
+    }
+    if (s.aiCheck) {
+      s.ranked.forEach(w => { const g = s.aiCheck.grades.get(w.key); if (g) w.rank.ai = g; });
+      if (s.aiCheck.order) { const idx = new Map(s.ranked.map((w, i) => [w.key, i])); s.ranked.sort((a, b) => { const ga = a.rank.ai ? a.rank.ai.grade : -1, gb = b.rank.ai ? b.rank.ai.grade : -1; return (gb >= 0 && ga >= 0 ? gb - ga : 0) || (ga < 0) - (gb < 0) || idx.get(a.key) - idx.get(b.key); }); }
+    }
     if (Object.keys(S.taste).length && s.kind !== 'author') {
       s.ranked.forEach(w => { const b = C.tasteBonus(w, S.taste); w.rank.taste = b; w.rank.score += b; });
       s.ranked.sort((a, b) => b.rank.score - a.rank.score);
@@ -3075,6 +3167,67 @@ fieldset.scoring .radio input { margin-top: 4px; }
       ${['cites', 'refs', 'related'].filter(k => k !== t.kind).map(k => `<button type="button" class="btn small" data-trail-switch="${k}">${{ cites: 'Citing papers', refs: 'References', related: 'Similar papers' }[k]}</button>`).join('')}</div></div>`;
   }
 
+  // ---------------------------------------------------------------- orbit: more like your saved papers
+  // Starting from one or more papers, find papers with similar abstracts (OpenAlex meaning-based search on the
+  // paper's own title and abstract), OpenAlex's related works, newer papers citing them and their references.
+  // Ranked by the phrases they share with the starting papers. Saving some and tapping "Keep going" adds them as
+  // starting papers for another round, which shows only papers not shown before.
+  let orbitCache = null;
+  function orbitNow() {
+    const sig = `${S.saved.size}|${[...S.saved.values()].map(w => w.savedAt || '').sort().pop() || ''}`;
+    if (!orbitCache || orbitCache.sig !== sig) orbitCache = { sig, terms: C.orbitTerms([...S.saved.values()]) };
+    return orbitCache.terms;
+  }
+  const short = (t, n = 60) => (t.length > n ? t.slice(0, n - 2) + '…' : t);
+  async function runLike(seeds, { round = 1, shownBefore = [] } = {}) {
+    seeds = seeds.filter(w => w && w.title).slice(0, 8); if (!seeds.length) return;
+    const token = ++searchToken;
+    const prev = S.search && (S.search.kind === 'search' || S.search.kind === 'author') ? S.search : (S.prevSearch || null);
+    const orbit = C.orbitTerms(seeds);
+    const analysis = C.analyzeQuery(orbit.slice(0, 3).map(t => t.text).join(' ') || seeds[0].title, S.profile, {});
+    S.search = { kind: 'like', q: seeds.length === 1 ? `Papers like “${short(seeds[0].title)}”` : `Papers like ${seeds.length} saved papers`, seeds, orbit, round, likeShown: new Set(shownBefore), likeFrom: new Map(),
+      analysis, choices: {}, sense: null, pool: new Map(), ranked: [], themes: null, status: {}, pages: {}, exhausted: { oa_kw: true, oa_sem: true, crossref: true, epmc: true, oa_trail: true },
+      shown: PAGE, cost: 0, sem: new Map(), dupes: 0, fetched: 0, compare: null, answer: null, startedAt: new Date().toISOString() };
+    S.prevSearch = prev; S.filters.theme = null; S.ui.grading = false;
+    clearSearchUI(); $('#q').value = ''; if (location.hash !== '#search') location.hash = '#search'; window.scrollTo(0, 0);
+    const s = S.search; const skip = new Set([...seeds.map(w => w.key), ...S.saved.keys(), ...shownBefore]);
+    const add = (results, ch, seed, why) => {
+      const ws = (results || []).map((r, i) => C.normOpenAlex(r, ch, i + 1)).filter(w => { const k = C.workKey(w); return !skip.has(k) && w.title; });
+      ws.forEach(w => { const k = C.workKey(w); if (!s.likeFrom.has(k)) s.likeFrom.set(k, new Set()); s.likeFrom.get(k).add(`${why} “${short(seed.title, 70)}”.`); });
+      C.dedupeInto(s.pool, ws);
+    };
+    let n = 0;
+    for (const seed of seeds.slice(0, 5)) {
+      n++; setLoading(`Looking for papers like ${seeds.length > 1 ? `your saved paper ${n} of ${Math.min(5, seeds.length)}` : 'this one'}…`);
+      const text = `${seed.title}. ${seed.abstract || ''}`.slice(0, 1800);
+      const jobs = [['like_sem', 'Similar abstract to', () => getJSON(oaURL({ 'search.semantic': text, per_page: 25, select: OA_SELECT }))]];
+      const id = seed.openalexId && shortId(seed.openalexId);
+      if (id) jobs.push(['like_rel', 'OpenAlex lists it as related to', () => getJSON(oaURL({ filter: `related_to:${id}`, per_page: 25, select: OA_SELECT }))],
+        ['like_cite', 'Cites', () => getJSON(oaURL({ filter: `cites:${id}`, per_page: 25, sort: 'publication_date:desc', select: OA_SELECT }))],
+        ['like_ref', 'Cited by', () => getJSON(oaURL({ filter: `cited_by:${id}`, per_page: 25, sort: 'cited_by_count:desc', select: OA_SELECT }))]);
+      for (const [ch, why, job] of jobs) {
+        const r = await job(); if (token !== searchToken) return;
+        if (r.ok) { addCost(r); add(r.data.results, ch, seed, why); s.status[ch] = { ok: true }; } else s.status[ch] = { ok: false, msg: failText('OpenAlex', r) };
+      }
+      if (n < Math.min(5, seeds.length)) await sleep(1100); // meaning-based search allows one request a second
+    }
+    setLoading(null); s.fetched = s.pool.size;
+    rerank(); renderAll();
+    if (S.ai.status === 'ready') embedPool();
+  }
+  function renderLikeHeader() {
+    const s = S.search; const failed = Object.values(s.status).filter(x => x && x.ok === false);
+    const savedHere = [...S.saved.values()].filter(w => s.pool.has(w.key) && (w.savedAt || '') >= s.startedAt);
+    $('#interp').innerHTML = `${failed.length && !s.pool.size ? `<div class="panel warn" role="alert"><strong>Could not search.</strong> ${esc(failed[0].msg)}</div>` : ''}
+      <div class="panel trail-head"><p class="small muted" style="margin:0">More like ${s.seeds.length === 1 ? 'this paper' : 'these papers'}${s.round > 1 ? `, round ${s.round}` : ''}</p>
+      <h3 style="margin:.2em 0 .4em">${esc(s.q)}</h3>
+      ${s.orbit.length ? `<p class="small" style="margin:0 0 4px">What they have in common: ${esc(s.orbit.slice(0, 8).map(t => t.text).join(', '))}.</p>` : ''}
+      <p class="tiny" style="margin:0">Found from similar abstracts, OpenAlex’s related works, newer papers citing them and their references; ranked by the phrases they share with ${s.seeds.length === 1 ? 'it' : 'them'}${S.ai.status === 'ready' ? ' and by meaning (on-device model)' : ''}. Papers you have saved${s.round > 1 ? ' or seen in earlier rounds' : ''} are left out. OpenAlex cost: $${s.cost.toFixed(4)}.</p>
+      <div class="row" style="margin-top:8px">${S.prevSearch ? `<button type="button" class="btn small" id="trail-back">Back to “${esc(short(S.prevSearch.q, 40))}”</button>` : ''}
+      <button type="button" class="btn small primary" id="like-more" ${savedHere.length ? '' : 'disabled'}>Keep going${savedHere.length ? ` with the ${savedHere.length} you saved here` : ''}</button></div>
+      ${savedHere.length ? '' : '<p class="tiny" style="margin:6px 0 0">Save the papers that fit, then tap Keep going to search again from them as well.</p>'}</div>`;
+  }
+
   function renderRelated() {
     const s = S.search; const a = s.analysis;
     if (s.kind !== 'search' || !s.ranked.length) return '';
@@ -3090,6 +3243,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
   function renderInterp() {
     const s = S.search;
     if (s.kind === 'trail') { renderTrailHeader(); return; }
+    if (s.kind === 'like') { renderLikeHeader(); return; }
     if (s.kind === 'doi') {
       const st = s.status.doi || {};
       $('#interp').innerHTML = `<div class="panel ${st.ok === false ? 'warn' : ''}"><strong>${st.ok === false ? 'No paper found for this DOI.' : 'Paper found from its DOI.'}</strong> <code>${esc(s.q)}</code>
@@ -3233,7 +3387,8 @@ fieldset.scoring .radio input { margin-top: 4px; }
     const pdf = safeUrl(w.pdf);
     const open = S.ui.openDetails.has(w.key);
     const reasons = ex.reasons.map(r => `<li class="${esc(r.kind)}">${esc(r.text)}</li>`).join('')
-      + (w.rank.taste > 0.025 ? '<li class="profile">Like papers you kept while swiping.</li>' : '');
+      + (w.rank.taste > 0.025 ? '<li class="profile">Like papers you kept while swiping.</li>' : '')
+      + (w.rank.orbit ? `<li class="profile">Close to papers you saved: ${esc(w.rank.orbit.hits.join(', '))}.</li>` : '');
     const ev = ex.evidence ? `<blockquote>“${highlight(ex.evidence.text, hset)}${ex.evidence.truncated ? '…' : ''}”<cite>From the abstract (${esc(ex.evidence.from)})</cite></blockquote>` : '';
     const sem = w.rank.sem ? `; model similarity to query ${w.rank.sem.q.toFixed(2)}${w.rank.sem.p != null ? `, to profile ${w.rank.sem.p.toFixed(2)}` : ''}` : '';
     return `<li class="paper ${closeCls}" data-key="${esc(w.key)}">
@@ -3249,7 +3404,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
         ${pdf && pdf !== free ? `<a href="${esc(pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}
         <button type="button" class="btn link" data-details="${esc(w.key)}" aria-expanded="${open}">Details</button>
       </div>
-      ${inQuest() ? questCardHTML(w) : w.openalexId ? `<div class="trail"><span class="tiny">Explore:</span>${w.cites ? `<button type="button" class="btn link" data-trail="cites" data-key="${esc(w.key)}">Cited by ${fmt(w.cites)}</button>` : ''}<button type="button" class="btn link" data-trail="refs" data-key="${esc(w.key)}">References</button><button type="button" class="btn link" data-trail="related" data-key="${esc(w.key)}">Similar</button><button type="button" class="btn link quest-go" data-quest-start="origin" data-key="${esc(w.key)}">Trace its origin</button></div>` : ''}
+      ${inQuest() ? questCardHTML(w) : w.openalexId ? `<div class="trail"><span class="tiny">Explore:</span>${w.cites ? `<button type="button" class="btn link" data-trail="cites" data-key="${esc(w.key)}">Cited by ${fmt(w.cites)}</button>` : ''}<button type="button" class="btn link" data-trail="refs" data-key="${esc(w.key)}">References</button><button type="button" class="btn link" data-trail="related" data-key="${esc(w.key)}">Similar</button><button type="button" class="btn link quest-go" data-quest-start="origin" data-key="${esc(w.key)}">Trace its origin</button><button type="button" class="btn link" data-like="${esc(w.key)}">More like this</button></div>` : ''}
       <div class="details" ${open ? '' : 'hidden'}><dl>
         <dt>Type</dt><dd>${esc(ti.label)}: ${esc(ti.why)}</dd>
         ${w.topic ? `<dt>Topic</dt><dd>${esc(w.topic.name)} (${esc(w.topic.field || '')})</dd>` : ''}
@@ -3367,19 +3522,25 @@ fieldset.scoring .radio input { margin-top: 4px; }
     }
     persistSaved(); updateSavedCount();
     document.querySelectorAll(`[data-save="${CSS.escape(key)}"]`).forEach(b => { const on = S.saved.has(key); b.setAttribute('aria-pressed', on); b.textContent = on ? 'Saved' : 'Save'; });
+    if (S.search && S.search.kind === 'like') renderLikeHeader();
   }
   function updateSavedCount() { $('#saved-count').textContent = S.saved.size ? `(${S.saved.size})` : ''; }
   function renderSaved() {
     const list = [...S.saved.values()].sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
     if (!list.length) { $('#saved-body').innerHTML = `${skyHTML()}${trailsHTML()}<p class="muted">Papers you save appear here. They are kept in this browser, not in an account.</p>${laterHTML()}`; return; }
-    $('#saved-body').innerHTML = `${skyHTML()}${trailsHTML()}<h3 class="list-h">List</h3><div class="row" style="margin-bottom:10px">
+    const ot = orbitNow();
+    $('#saved-body').innerHTML = `${skyHTML()}${trailsHTML()}<section class="panel orbit" aria-labelledby="orbit-h"><h3 id="orbit-h">Your orbit</h3>
+        ${ot.length ? `<p class="small">What your saved papers have in common: ${esc(ot.slice(0, 10).map(t => t.text).join(', '))}.</p>` : `<p class="small">${list.length < 2 ? 'Save a few more papers and Paperscope will show what they have in common.' : 'Your saved papers share no phrases yet.'}</p>`}
+        <div class="row"><button type="button" class="btn small primary" id="like-saved">Find more like my saved papers</button></div>
+        <label class="switch small"><input type="checkbox" id="orbit-lean" ${S.settings.orbitLean !== false ? 'checked' : ''}><span>Lean searches a little towards these phrases<br><span class="tiny">Adds at most 0.06 to a paper’s score (from 3 saved papers on), and says so on the paper. Recent saves count more.</span></span></label></section>
+      <h3 class="list-h">List</h3><div class="row" style="margin-bottom:10px">
         <button class="btn small" data-export="bib">Copy BibTeX</button><button class="btn small" data-export="ris">Copy RIS</button>
         <button class="btn small" data-download="bib">Download .bib</button><button class="btn small" data-download="ris">Download .ris</button><button class="btn small" data-download="csv">Download .csv</button>
       </div>
       <ul class="saved-list">${list.map(w => `<li><div class="badges"><span class="badge ${esc(w.typeInfo.conf)}">${esc(w.typeInfo.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}</div>
         <h3><a href="${esc(primaryLink(w))}" target="_blank" rel="noopener">${esc(w.title)}</a></h3>
         <p class="byline">${esc(w.authors.slice(0, 3).join(', '))}${w.authors.length > 3 ? ' et al.' : ''}${w.venue ? `. <span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
-        <div class="actions"><button type="button" class="btn small quiet" data-unsave="${esc(w.key)}">Remove</button>${safeUrl(w.oaUrl) && w.isOA ? `<a href="${esc(w.oaUrl)}" target="_blank" rel="noopener">Free full text</a>` : ''}</div></li>`).join('')}</ul>
+        <div class="actions"><button type="button" class="btn small quiet" data-unsave="${esc(w.key)}">Remove</button><button type="button" class="btn link" data-like-saved="${esc(w.key)}">More like this</button>${safeUrl(w.oaUrl) && w.isOA ? `<a href="${esc(w.oaUrl)}" target="_blank" rel="noopener">Free full text</a>` : ''}</div></li>`).join('')}</ul>
       <p style="margin-top:16px"><button class="btn small" id="clear-saved">Remove all saved papers</button></p>${laterHTML()}`;
   }
   function exportText(kind) {
@@ -3913,10 +4074,14 @@ fieldset.scoring .radio input { margin-top: 4px; }
     const s = S.search; const el = $('#answer-holder');
     if (!s || !s.ranked.length || s.kind !== 'search') { el.innerHTML = ''; return; }
     const a = s.answer;
+    const ck = s.aiCheck;
+    const checkLine = ck ? (ck.loading ? `<p class="small" role="status"><span class="spinner" aria-hidden="true"></span> AI is checking the top ${ck.n} papers…</p>`
+      : ck.error ? `<p class="small warn-text" role="alert">AI check failed: ${esc(ck.error)}</p>`
+      : `<p class="small">AI checked the top ${ck.n} papers (${esc(ck.model)}${ck.usage ? `, ${esc(ck.usage)} tokens, billed to your account` : ''}): ${ck.counts[3]} directly address your search, ${ck.counts[2]} relevant, ${ck.counts[1] + ck.counts[0]} only touch it or not.${ck.missing ? ` ${ck.missing} got no grade.` : ''} <button type="button" class="btn link" id="ai-order">${ck.order ? 'Show the usual order' : 'Order by the AI check'}</button></p>`) : '';
     if (!a) {
       const n = answerPapers().length;
-      el.innerHTML = `<div class="panel answer"><div class="row"><button type="button" class="btn" id="answer-run" ${llmReady() && n >= 2 ? '' : 'disabled'}>Write a short answer from the top papers</button></div>
-        <p class="tiny" style="margin:6px 0 0">${llmReady() ? `Sends your search and the abstracts of the top ${n} papers to ${S.settings.llmProvider === 'anthropic' ? 'Anthropic' : esc(S.settings.llmBase)}, billed to your account. Your CV and profile are not sent.` : 'Optional. Uses an AI model with your own key; set it up in <a href="#about">About › Settings</a>. Off by default.'}</p></div>`;
+      el.innerHTML = `<div class="panel answer"><div class="row"><button type="button" class="btn" id="answer-run" ${llmReady() && n >= 2 ? '' : 'disabled'}>Write a short answer from the top papers</button><button type="button" class="btn" id="ai-check" ${llmReady() && !(ck && ck.loading) ? '' : 'disabled'}>Check the top 30 with AI</button></div>${checkLine}
+        <p class="tiny" style="margin:6px 0 0">${llmReady() ? `Sends your search and the titles and abstracts of the top papers to ${S.settings.llmProvider === 'anthropic' ? 'Anthropic' : esc(S.settings.llmBase)}, billed to your account. The check asks the model whether each paper studies what you searched for, not just whether it uses the words. Your CV and profile are not sent.` : 'Optional. Uses an AI model with your own key; set it up in <a href="#about">About › Settings</a>. Off by default.'}</p></div>`;
       return;
     }
     if (a.loading) { el.innerHTML = `<div class="panel answer loading"><span class="spinner" aria-hidden="true"></span> Writing an answer from ${a.papers.length} abstracts…</div>`; return; }
@@ -3935,14 +4100,14 @@ fieldset.scoring .radio input { margin-top: 4px; }
       <ol class="ans-src">${a.papers.map((w, i) => `<li id="ans-src-${i + 1}"><a href="${esc(primaryLink(w))}" target="_blank" rel="noopener">${esc(w.title)}</a> <span class="tiny">(${w.year || 'n.d.'}${chk.cited.includes(i + 1) ? '' : ', not cited'})</span></li>`).join('')}</ol>
       <p class="tiny">Model: ${esc(a.model)}. ${a.usage ? `Tokens: ${esc(a.usage)}, billed to your account.` : ''} <button type="button" class="btn link" id="answer-clear">Hide</button></p></div>`;
   }
-  async function callLLM(system, user) {
+  async function callLLM(system, user, maxTokens = 700) {
     const st = S.settings;
     const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 60000);
     try {
       if (st.llmProvider === 'anthropic') {
         const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ctl.signal,
           headers: { 'content-type': 'application/json', 'x-api-key': st.llmKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-          body: JSON.stringify({ model: st.llmModel || 'claude-haiku-5-5', max_tokens: 700, system, messages: [{ role: 'user', content: user }] }) });
+          body: JSON.stringify({ model: st.llmModel || 'claude-haiku-5-5', max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }) });
         const data = await res.json().catch(() => null);
         if (!res.ok) throw new Error((data && data.error && data.error.message) || `The provider returned HTTP ${res.status}.`);
         return { text: (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'), usage: data.usage ? `${data.usage.input_tokens} in, ${data.usage.output_tokens} out` : '' };
@@ -3952,7 +4117,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
       if (st.llmKey) headers.authorization = `Bearer ${st.llmKey}`;
       const send = async lenKey => {
         const body = { model: st.llmModel, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] };
-        body[lenKey] = 700;
+        body[lenKey] = maxTokens;
         const res = await fetch(`${base}/chat/completions`, { method: 'POST', signal: ctl.signal, headers, body: JSON.stringify(body) });
         const data = await res.json().catch(() => null);
         return { res, data };
@@ -3985,6 +4150,36 @@ fieldset.scoring .radio input { margin-top: 4px; }
       s.answer = { papers, error: e.message || String(e) };
     }
     renderAnswer();
+  }
+
+  // The AI check: the model grades the top 30 papers 0–3 with a reason; you can order the list by its grades. On a
+  // graded search, its order is kept so Graded searches can show how it compares with your own grades.
+  async function runAICheck() {
+    const s = S.search; if (!s || !llmReady()) return;
+    const papers = visibleWorks().slice(0, 30); if (!papers.length) return;
+    const token = searchToken;
+    s.aiCheck = { loading: true, n: papers.length }; renderAnswer();
+    const { system, user } = C.buildCheckPrompt(s.q, papers);
+    try {
+      const out = await callLLM(system, user, 1500);
+      if (token !== searchToken) return;
+      const parsed = C.parseCheck(out.text, papers.length);
+      if (!parsed.size) throw new Error('The model’s reply could not be read as grades.');
+      const grades = new Map(); const counts = [0, 0, 0, 0];
+      parsed.forEach((g, i) => { grades.set(papers[i - 1].key, g); counts[g.grade]++; });
+      s.aiCheck = { n: papers.length, grades, counts, missing: papers.length - parsed.size, model: S.settings.llmModel || 'claude-haiku-5-5', usage: out.usage, order: true };
+      const e = benchEntry(s);
+      if (e) {
+        const graded = papers.filter(w => grades.has(w.key)).sort((a, b) => grades.get(b.key).grade - grades.get(a.key).grade);
+        e.ai = { at: new Date().toISOString(), model: s.aiCheck.model, order: [...graded.map(w => w.key), ...s.ranked.map(w => w.key).filter(k => !grades.has(k))] };
+        const map = new Map(e.pool.map(w => [w.key, w])); papers.forEach(w => { if (!map.has(w.key)) map.set(w.key, benchSlim(w)); }); e.pool = [...map.values()];
+        persistBench();
+      }
+    } catch (err) {
+      if (token !== searchToken) return;
+      s.aiCheck = { n: papers.length, error: err.message || String(err) };
+    }
+    rerank(); renderAll();
   }
 
   // ---------------------------------------------------------------- followed searches
@@ -4159,6 +4354,17 @@ fieldset.scoring .radio input { margin-top: 4px; }
       return;
     }
     if (t.id === 'bench-export') { exportBench(); return; }
+    if (d.like) { const w = S.search && S.search.pool.get(d.like); if (w) runLike([w]); return; }
+    if (d.likeSaved) { const w = S.saved.get(d.likeSaved); if (w) runLike([w]); return; }
+    if (t.id === 'like-saved') { const list = [...S.saved.values()].sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || ''))); if (!list.length) { toast('Save some papers first'); return; } runLike(list.slice(0, 8)); return; }
+    if (t.id === 'like-more') {
+      const s = S.search; if (!s || s.kind !== 'like') return;
+      const fresh = [...S.saved.values()].filter(w => s.pool.has(w.key) && (w.savedAt || '') >= s.startedAt);
+      const seeds = [...fresh, ...s.seeds].slice(0, 8);
+      runLike(seeds, { round: s.round + 1, shownBefore: [...s.likeShown, ...s.ranked.slice(0, s.shown).map(w => w.key)] }); return;
+    }
+    if (t.id === 'ai-check') { runAICheck(); return; }
+    if (t.id === 'ai-order') { const s = S.search; if (s && s.aiCheck) { s.aiCheck.order = !s.aiCheck.order; rerank(); renderAll(); } return; }
     if (t.id === 'bench-model') { t.disabled = true; benchMeasureModel().finally(() => { t.disabled = false; }); return; }
     if (t.id === 'bench-rerank') { t.disabled = true; benchMeasureRerank().finally(() => { t.disabled = false; }); return; }
     if (d.benchOpen !== undefined) { const e = benchResults().rows[Number(d.benchOpen)].e; location.hash = '#search'; S.ui.grading = true; S.mode = e.mode || S.mode; renderModes(); runSearch(e.q, { choices: e.choices, sense: e.sense, allFields: e.allFields }); return; }
@@ -4345,6 +4551,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
     if (t.id === 'set-semantic') { S.settings.semantic = t.checked; saveSettings(); }
     if (t.id === 'bench-import' && t.files[0]) { importBench(t.files[0]); t.value = ''; }
     if (t.id === 'set-rerank') { S.settings.oaRerank = t.checked; saveSettings(); }
+    if (t.id === 'orbit-lean') { S.settings.orbitLean = t.checked; saveSettings(); }
     if (t.name === 'ai-model') {
       S.settings.aiModel = t.value === 'bge' ? 'bge' : 'minilm'; saveSettings();
       const was = S.ai.status === 'ready';
@@ -5045,10 +5252,11 @@ fieldset.scoring .radio input { margin-top: 4px; }
       const m = { source: C.benchMetrics(benchRank(e, 'source'), e.grades), v1: C.benchMetrics(benchRank(e, 'v1'), e.grades), v2: C.benchMetrics(benchRank(e, 'v2'), e.grades) };
       const sem = benchExtra.model.get(e.id); if (sem) m.model = C.benchMetrics(benchRank(e, 'v2', { sem }), e.grades);
       if (e.rr && e.rr.order) { m.rrAlone = C.benchMetrics(e.rr.order, e.grades); m.rr = C.benchMetrics(benchRank(e, 'v2', { rr: e.rr.order }), e.grades); }
+      if (e.ai && e.ai.order) m.ai = C.benchMetrics(e.ai.order, e.grades);
       return { e, n: Object.keys(e.grades).length, m };
     });
     const mean = k => { const l = rows.filter(r => r.m[k]).map(r => r.m[k]); return l.length ? Object.assign(C.meanMetrics(l), { n: l.length }) : null; };
-    return { rows, mean: rows.length ? { source: mean('source'), v1: mean('v1'), v2: mean('v2'), model: mean('model'), rr: mean('rr'), rrAlone: mean('rrAlone') } : null };
+    return { rows, mean: rows.length ? { source: mean('source'), v1: mean('v1'), v2: mean('v2'), model: mean('model'), rr: mean('rr'), rrAlone: mean('rrAlone'), ai: mean('ai') } : null };
   }
   async function benchMeasureModel() {
     if (S.ai.status !== 'ready') { toast('Turn on the on-device model first (below)'); return; }
@@ -5098,6 +5306,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
       <h4>Models</h4>
       ${mean.model ? `<p class="small">New ranking with the on-device model (${esc(benchExtra.modelName)}): top 10 <strong>${mean.model.ndcg10.toFixed(2)}</strong> (without it ${mean.v2.ndcg10.toFixed(2)}), relevant in top 5 ${pct(mean.model.p5)}. Graded share of its top 10: ${pct(mean.model.judged10)}.</p>` : ''}
       ${mean.rr ? `<p class="small">OpenAlex’s reranker on its own: top 10 ${mean.rrAlone.ndcg10.toFixed(2)}; new ranking using the reranked order: <strong>${mean.rr.ndcg10.toFixed(2)}</strong> (without it ${mean.v2.ndcg10.toFixed(2)}), over ${mean.rr.n} search${mean.rr.n === 1 ? '' : 'es'}. Graded share of the reranker’s top 10: ${pct(mean.rrAlone.judged10)}; papers it ranks that you have not graded count as not relevant, so grade more of them before trusting this.</p>` : ''}
+      ${mean.ai ? `<p class="small">AI check (your own key), over ${mean.ai.n} search${mean.ai.n === 1 ? '' : 'es'} where you ran it: top 10 <strong>${mean.ai.ndcg10.toFixed(2)}</strong> (new ranking on the same searches: ${C.meanMetrics(rows.filter(r => r.m.ai).map(r => r.m.v2)).ndcg10.toFixed(2)}), relevant in top 5 ${pct(mean.ai.p5)}. Run “Check the top 30 with AI” on a graded search to add it.</p>` : ''}
       <div class="row"><button type="button" class="btn small" id="bench-model">${mean.model ? 'Measure the on-device model again' : 'Measure the on-device model'}</button><button type="button" class="btn small" id="bench-rerank">${mean.rr ? 'Ask the reranker for new searches' : 'Measure OpenAlex’s reranker'}</button></div>
       <p class="tiny" id="bench-progress" role="status">${S.ai.status === 'ready' ? 'The model runs on this device; nothing is sent.' : 'The on-device model must be turned on first (below).'} The reranker costs about $0.002 of your OpenAlex allowance per graded search, once.</p>
       <p class="tiny">nDCG compares each ranking’s top 10 with the best possible order of your grades; ungraded papers count as not relevant. Graded share of each top 10: previous ${pct(mean.v1.judged10)}, new ${pct(mean.v2.judged10)}. Grades are kept on this device.</p>${tools}</section>`;
