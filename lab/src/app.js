@@ -1848,6 +1848,12 @@
     const pubs = pubsOn(); const pool = new Map(); const counts = { crossref: 0, openalex: 0, s2: 0, old: 0 }; const errors = []; let cost = 0;
     const bySrc = { crossref: new Set(), openalex: new Set(), s2: new Set() }; const oldDois = new Set();
     const add = (works, src) => { const ok = works.filter(w => w.pub); ok.forEach(w => bySrc[src].add(w.doi || w.title)); counts[src] = bySrc[src].size; C.dedupeInto(pool, ok); };
+    // OpenAlex and Semantic Scholar run alongside Crossref (each service has its own limits).
+    const phrases = [...new Set([...terms.filter(t => t.kind !== 'related'), ...terms.filter(t => t.kind === 'related')].map(t => t.text.replace(/"/g, '')))].slice(0, 24);
+    const oaJob = getJSON(oaURL({ search: phrases.map(x => /\s|-/.test(x) ? `"${x}"` : x).join(' OR '), filter: `primary_location.source.host_organization_lineage:${pubs.map(p => p.oa).join('|')},from_publication_date:${since},type:article`, per_page: 100, select: OA_SELECT }));
+    const seeds = S.settings.todayS2 ? [...S.saved.values()].filter(w => w.doi).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || ''))).slice(0, 10) : [];
+    const s2Job = seeds.length ? fetch(`${S2}/recommendations/v1/papers?fields=title,externalIds,publicationDate,year,venue,journal,abstract,authors,citationCount,url&limit=100`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ positivePaperIds: seeds.map(w => `DOI:${w.doi}`) }) })
+      .then(async res => ({ res, data: await res.json().catch(() => null) })).catch(() => null) : null;
     // Crossref: one request at a time (its public service allows only one at a time per user).
     let first = true;
     for (const p of pubs) {
@@ -1862,22 +1868,15 @@
         add(fresh.map((it, j) => Object.assign(C.normCrossref(it, j + 1), { pub: p.id, created: it.created && it.created['date-time'] || '' })), 'crossref');
       }
     }
-    // OpenAlex: one keyword search over titles and abstracts for all chosen publishers, published in the window.
-    todayProgress = 'Searching abstracts of new papers (OpenAlex)…'; renderToday();
-    const phrases = [...new Set([...terms.filter(t => t.kind !== 'related'), ...terms.filter(t => t.kind === 'related')].map(t => t.text.replace(/"/g, '')))].slice(0, 24);
-    const oa = await getJSON(oaURL({ search: phrases.map(x => /\s|-/.test(x) ? `"${x}"` : x).join(' OR '), filter: `primary_location.source.host_organization_lineage:${pubs.map(p => p.oa).join('|')},from_publication_date:${since},type:article`, per_page: 100, select: OA_SELECT }));
+    todayProgress = 'Adding papers found through their abstracts (OpenAlex)…'; renderToday();
+    const oa = await oaJob;
     if (oa.ok) { cost += (oa.data.meta && oa.data.meta.cost_usd) || 0; add((oa.data.results || []).map((r, i) => { const w = C.normOpenAlex(r, 'oa_kw', i + 1); w.pub = C.pubOfDoi(w.doi, pubs); w.created = w.date || ''; return w; }), 'openalex'); }
     else errors.push(`OpenAlex: ${failText('OpenAlex', oa)}`);
-    // Semantic Scholar (optional): papers like your saved ones, from its pool of recent papers.
-    const seeds = S.settings.todayS2 ? [...S.saved.values()].filter(w => w.doi).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || ''))).slice(0, 10) : [];
-    if (seeds.length) {
-      todayProgress = 'Asking Semantic Scholar for papers like your saved ones…'; renderToday();
-      try {
-        const res = await fetch(`${S2}/recommendations/v1/papers?fields=title,externalIds,publicationDate,year,venue,journal,abstract,authors,citationCount,url&limit=100`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ positivePaperIds: seeds.map(w => `DOI:${w.doi}`) }) });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) errors.push(`Semantic Scholar: ${res.status === 429 ? 'busy right now (its free service is shared); try again later.' : (data && data.error) || `HTTP ${res.status}`}`);
-        else add((data.recommendedPapers || []).filter(x => x.publicationDate && x.publicationDate >= since).map((x, i) => { const w = C.normS2(x, i + 1); w.pub = C.pubOfDoi(w.doi, pubs); w.created = w.date; return w; }), 's2');
-      } catch (e) { errors.push('Semantic Scholar: could not be reached.'); }
+    if (s2Job) {
+      const out = await s2Job;
+      if (!out) errors.push('Semantic Scholar: could not be reached.');
+      else if (!out.res.ok) errors.push(`Semantic Scholar: ${out.res.status === 429 ? 'busy right now (its free service is shared); try again later.' : (out.data && out.data.error) || `HTTP ${out.res.status}`}`);
+      else add(((out.data && out.data.recommendedPapers) || []).filter(x => x.publicationDate && x.publicationDate >= since).map((x, i) => { const w = C.normS2(x, i + 1); w.pub = C.pubOfDoi(w.doi, pubs); w.created = w.date; return w; }), 's2');
     }
     const seen = new Set(prev && prev.day !== localDay() ? (prev.seen || []) : (prev && prev.seenBefore) || []);
     const picked = C.rankTodayV2([...pool.values()].filter(w => !seen.has(w.doi)), terms);

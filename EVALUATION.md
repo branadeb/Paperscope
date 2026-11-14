@@ -296,3 +296,25 @@ A review of the search algorithm, which the user shared, pointed out that every 
 - No WCAG 2 A/AA violations.
 
 **On saved live data** for "exciton migration in molecular crystals" (36 papers), v2 kept "Exciton Migration in Molecular Crystals" first. It moved down papers that lack an idea, such as "Exciton migration dynamics in a dendritic molecular aggregate" (no crystals). It also moved down "Excitonic processes in molecular crystalline materials", from 9th to 12th, because the light stemmer does not equate "excitonic" with "exciton". The main app's unit test that expects every paper found by both OpenAlex searches in the top 12 fails for v2 on that one paper; that test applies to the main app, which still uses v1.
+
+## Lab: papers of the day, version 3 (14 November 2026)
+
+**Checked live from a browser:**
+- OpenAlex publisher ids: ACS P4310320006, Wiley P4310320595, Nature Portfolio P4310319908, AAAS P4310315823, RSC P4310320556, AIP P4310320061, APS P4310320261, Elsevier P4310320990, Springer Nature P4310319965.
+- `primary_location.source.host_organization_lineage` with `from_publication_date` works for keyword search. One OR query over the topic phrases for the four default publishers cost $0.001 and matched 169 articles from the last 5 days.
+- OpenAlex meaning-based search rejects publisher and date filters; it supports publication year and type only. With `publication_year:2026`, only 2 of its top 50 were from the last 5 days, so it is not used for papers of the day.
+- Semantic Scholar's recommendations API answers requests from web pages (CORS). Its pool of recent papers spanned about two months; 4 of 100 suggestions were from the last 5 days.
+- The topic "ultrafast spectroscopy" alone gave 392 candidates in 13 requests and 14 seconds. 12 papers were shown, including transient-absorption papers in J. Phys. Chem. C, Nano Letters and J. Phys. Chem. A, and a coherent-oscillation paper in ChemPhysChem.
+- The user's eight topics gave 499 candidates in 17 requests and 23 seconds: 435 from Crossref, 100 from OpenAlex, 64 of which only OpenAlex found. 15 were shown, all labelled *Your topic*, from ACS 11, Nature 2, Science 1 and Wiley 1.
+  - The top papers were multiexciton dynamics in porphyrin nanorings (JPCL), excited-state charge transfer in a perylene derivative (JPCC), and intermolecular singlet fission in a peropyrene (JPCC).
+  - A weak pick remained: a graphene anode paper matched through "ion diffusion", a related synonym of "ion transport".
+- A first version labelled papers matched only through related wording as *Nearby*. For an umbrella topic that was wrong: a transient-absorption paper is on topic for "ultrafast spectroscopy". *Nearby* is now reserved for suggestions that share no topic word.
+
+**Tested** (`test/lab-today.test.cjs`, 41/41, all sources mocked):
+- The OpenAlex request uses the chosen publishers' ids, the 5-day window and the quoted topic phrases.
+- Papers found through abstracts are listed.
+- Papers from other publishers, and old papers with new DOI records, are left out, and the count says so.
+- Near-identical titles appear once, and the labels and sources are shown.
+- Semantic Scholar is called only when turned on and receives only DOIs. Its suggestions older than the window are dropped, and recent ones show as *Nearby* with the reason.
+- The privacy table lists Semantic Scholar.
+- No WCAG 2 A/AA violations. The earlier checks (caching, no repeats, failing publisher, profile terms) still pass.

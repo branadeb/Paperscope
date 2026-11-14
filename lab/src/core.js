@@ -1651,7 +1651,7 @@
   }
   // Papers of the day, step 4: combine the topic score with the sources' own ranks (rank fusion), label each paper,
   // and pick a varied list: no more than a few papers on the same topic in a row, no near-duplicate titles, at most
-  // 5 that only share your methods and 3 that are only nearby.
+  // 5 that only share your methods and 3 that are only nearby (suggested from your saved papers without sharing a topic).
   const METHOD_RE = /(spectroscop|microscop|scattering|diffraction|tomograph|imaging|simulation|molecular dynamics|density functional|\bdft\b|calculation|computation|\bnmr\b|\bepr\b|transient absorption|pump-probe|\b2d ?-?ir\b|\b2des\b|two-dimensional (electronic|infrared)|femtosecond|time-resolved|ultrafast|mass spectrometry|chromatograph|voltammetry|impedance|machine learning|crystallograph|interferometr|photoemission|calorimetr)/i;
   const TODAY_LABELS = { direct: 'Your topic', method: 'Your method', adjacent: 'Nearby' };
   function rankTodayV2(works, terms, { max = 15, minScore = 0.15 } = {}) {
@@ -1665,7 +1665,6 @@
       let label = 'direct';
       if (!x.hits.length) label = 'adjacent';
       else if (anySubject && x.hits.every(h => isMethod.get(h.g))) label = 'method';
-      else if (x.hits.every(h => h.related) && x.score < 0.3) label = 'adjacent';
       const pass = x.score >= minScore || (!x.hits.length && x.w.ranks && x.w.ranks.s2 != null);
       return Object.assign({}, x, { rrf: r, label, final: x.score + 0.15 * r + (x.hits.length ? 0 : 0.1), pass });
     }).filter(x => x.pass);
