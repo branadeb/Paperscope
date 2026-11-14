@@ -1375,6 +1375,42 @@
     return out;
   }
 
+  // ---------------------------------------------------------------- Lab: trail quests
+  // A quest follows references back in time ("where did this start?") or citing papers forward ("where did it lead?").
+  function questStep(w, via) {
+    return { key: w.key, openalexId: w.openalexId || '', title: w.title || '', year: w.year || null, authors: (w.authors || []).slice(0, 3),
+      more: (w.authors || []).length > 3, venue: w.venue || '', doi: w.doi || '', cites: w.cites || 0, via: via || 'start' };
+  }
+  // The most promising next step: in the right direction in time, close in wording to where the trail began, and well cited.
+  function questSuggest(cands, steps, goal) {
+    if (!steps.length) return null;
+    const startWords = new Map();
+    words(steps[0].title).forEach(x => { const lw = x.toLowerCase(); if (!STOP.has(lw) && lw.length > 2) startWords.set(stem(lw), lw); });
+    const here = steps[steps.length - 1].year; const seen = new Set(steps.map(x => x.key));
+    let best = null;
+    cands.forEach(w => {
+      if (seen.has(w.key) || !w.openalexId || !w.year || !here) return;
+      const gap = goal === 'origin' ? here - w.year : w.year - here;
+      if (gap < 0) return;
+      const ws = new Set(contentStems(w.title));
+      const shared = [...startWords.keys()].filter(k => ws.has(k)).map(k => startWords.get(k));
+      const sim = shared.length / Math.sqrt(Math.max(1, startWords.size) * Math.max(1, ws.size));
+      const score = 0.55 * sim + 0.3 * Math.min(1, Math.log10(1 + (w.cites || 0)) / 4) + 0.15 * Math.min(1, gap / 30);
+      if (!best || score > best.score) best = { key: w.key, score, shared, gap };
+    });
+    return best;
+  }
+  // Share code: "o:W1.W2.W3" (origin) or "f:…" (forward). Only OpenAlex ids, so a link carries no personal data.
+  function trailCode(goal, steps) { return `${goal === 'origin' ? 'o' : 'f'}:${steps.map(x => String(x.openalexId).split('/').pop()).join('.')}`; }
+  function parseTrailCode(code) {
+    const m = String(code || '').match(/^([of]):(W\d+(?:\.W\d+){0,39})$/);
+    return m ? { goal: m[1] === 'o' ? 'origin' : 'forward', ids: m[2].split('.') } : null;
+  }
+  function trailStats(steps) {
+    const ys = steps.map(x => x.year).filter(Boolean);
+    return { hops: Math.max(0, steps.length - 1), from: steps[0] && steps[0].year, to: steps.length ? steps[steps.length - 1].year : null, span: ys.length ? Math.max(...ys) - Math.min(...ys) : 0 };
+  }
+
   const Core = {
     stem, stems, words, contentStems, phraseStems, hasPhrase, splitSentences, cleanDoi, normTitle, stripTags, reconstructAbstract,
     extractGlossary, extractProfile, profileTerms, profileText, analyzeQuery, assessFieldAmbiguity,
@@ -1383,6 +1419,7 @@
     normAuthor, groupByField, isDOI, initials,
     orcidOf, versionKey, versionNo, parseOrcidRecord, normOrcidWork, nameForm, coKey, verifyAuthorWorks, collapseVersions, hIndex,
     tasteTerms, learnTaste, tasteBonus, topTaste, skyLayout, skyBackground, hash32,
+    questStep, questSuggest, trailCode, parseTrailCode, trailStats,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };

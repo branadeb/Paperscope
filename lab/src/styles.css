@@ -557,3 +557,48 @@ body.deck-open { overflow: hidden; }
   .dbtn svg { padding: 13px; }
   .deck-hint { font-size: .78rem; }
 }
+
+/* ---------- Lab: trail quests */
+.quest-go { color: var(--focus); font-weight: 600; }
+.quest-head { border: 1px solid color-mix(in srgb, #b48cff 45%, var(--rule)); background: linear-gradient(160deg, color-mix(in srgb, #b48cff 9%, var(--surface)), var(--surface) 70%); }
+.quest-head h3 { margin: 2px 0 4px; }
+.qkicker { margin: 0; color: var(--ink-2); }
+.qhere { margin: 0 0 8px; font-family: var(--display); font-style: italic; color: var(--ink-2); }
+.qcrumbs { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0; margin: 4px 0 8px; font-variant-numeric: tabular-nums; }
+.qcrumbs li { font-size: .82rem; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+.qcrumbs li + li::before { content: ""; display: inline-block; width: 10px; height: 1px; background: var(--ink-3); margin: 0 8px 0 -4px; vertical-align: middle; }
+.qcrumbs li[aria-current="step"] { background: #b48cff; color: #1d1233; font-weight: 700; }
+.qbtns { gap: 8px; margin-top: 4px; }
+.quest-act { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--rule); }
+.quest-act .row { gap: 10px; align-items: center; }
+.quest-act.sg { border-top: 0; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, #b48cff 10%, var(--surface)); }
+.sg-why { margin: 0 0 8px; }
+.paper:has(.quest-act.sg) { box-shadow: 0 0 0 2px color-mix(in srgb, #b48cff 55%, transparent), var(--shadow, 0 1px 2px rgb(0 0 0 / .06)); }
+.trail-summary h3 { margin: 2px 0 4px; font-size: 1.5rem; }
+.replay-year { position: sticky; top: 8px; z-index: 2; margin: 6px 0; text-align: center; font: 600 2.4rem/1 var(--display); font-variant-numeric: tabular-nums; color: #b48cff; }
+.tpath { list-style: none; padding: 0; margin: 14px 0 12px; }
+.tstep { position: relative; display: grid; grid-template-columns: 3.4em 18px 1fr; gap: 0 10px; padding-bottom: var(--gap, 30px); }
+.tstep.last { padding-bottom: 0; }
+.tstep .ty { font: 600 1.05rem/1.4 var(--display); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink); }
+.tstep .tnode { position: relative; }
+.tstep .tnode::before { content: ""; position: absolute; left: 3px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: #b48cff; box-shadow: 0 0 0 4px color-mix(in srgb, #b48cff 22%, transparent); }
+.tstep.first .tnode::before { background: #4fc8d2; box-shadow: 0 0 0 4px color-mix(in srgb, #4fc8d2 25%, transparent); }
+.tstep.last .tnode::before { background: #f0ac4b; box-shadow: 0 0 0 5px color-mix(in srgb, #f0ac4b 28%, transparent); }
+.tstep:not(.last) .tnode::after { content: ""; position: absolute; left: 8px; top: 22px; bottom: calc(-1 * var(--gap, 30px) + 2px); width: 2px; background: linear-gradient(#b48cff, color-mix(in srgb, #b48cff 35%, transparent)); border-radius: 1px; }
+.tbody h4 { margin: 0 0 2px; font: 600 1.02rem/1.3 var(--display); }
+.tbody h4 a { color: var(--ink); text-decoration: none; }
+.tbody h4 a:hover { text-decoration: underline; }
+.tbody .byline { margin: 0; font-size: .84rem; }
+.tlabel { margin: 0; color: var(--ink-3); }
+.tvia { margin: 6px 0 0; color: #7a5bc7; font-style: italic; }
+:root[data-appearance="dark"] .tvia { color: #c9b3ff; }
+@media (prefers-color-scheme: dark) { :root:not([data-appearance="light"]) .tvia { color: #c9b3ff; } }
+.tpath .pending { opacity: 0; transform: translateY(8px); }
+.tpath .arrive { opacity: 1; transform: none; transition: opacity .45s ease, transform .45s ease; }
+@media (prefers-reduced-motion: reduce) { .tpath .pending { opacity: 1; transform: none; } .tpath .arrive { transition: none; } }
+.tbtns { gap: 8px; }
+.share-link input { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+.trail-list { list-style: none; padding: 0; margin: 0 0 8px; }
+.trail-list li { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.trail-list p { margin: 0 0 4px; }
+.trail-list .row { gap: 8px; }

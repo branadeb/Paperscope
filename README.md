@@ -26,9 +26,10 @@ App-store versions are not needed and are not planned. For reference, they would
 Experiments in the Lab now:
 
 - **Swipe to sort.** From any results list, sort papers one card at a time. Swipe right (or →) to keep, left (←) to skip, up (↑) for a read-later list; buttons do the same, and Undo takes back the last choice. Papers you keep or put aside nudge later searches a little (at most ±0.08 on the ranking score) towards papers with the same words. Profile shows the words it learned, and they can be forgotten in one tap. Respects reduced-motion settings.
+- **Trail quests.** "Trace its origin" on any result starts a quest: Paperscope shows the papers it cites (most cited first) and suggests a next step. The suggestion is older, well cited, and shares words with where you started, with the reason shown. Each card says how many years earlier it is. Step back, undo, or stop when you think you have found the root; if OpenAlex lists no references, it says the data ends there. The finished trail is a timeline that replays step by step. It can be shared as a link that carries only OpenAlex ids (`#trail=o:W….W…`, opened with one $0.0001 lookup) and is kept under Saved › Your trails. From a trail you can also see where the first paper led, following citing papers forward. Each step costs about $0.0001.
 - **Your sky.** The Saved view draws saved papers as stars, with fields as constellations. Brighter stars are more cited, read-later papers are faint, and new ones pulse. Tap a star for its paper. The sky can be saved as a PNG.
 
-Build it with `node tools/build.mjs lab/src dist/lab`; the source is in `lab/src`. Tests: `test/lab.test.cjs` and `test/lab-core.test.cjs`.
+Build it with `node tools/build.mjs lab/src dist/lab`; the source is in `lab/src`. Tests: `test/lab.test.cjs`, `test/lab-quest.test.cjs` and `test/lab-core.test.cjs`.
 
 ## Running it
 

@@ -234,3 +234,17 @@ The Lab at `/lab/` is a copy of the main app with its own storage, cache and ser
 - *Taste:* Profile lists the learned words, and they can be forgotten.
 - axe-core found no WCAG 2 A/AA violations on the deck or the sky, in light or dark.
 - All main-app suites still pass: 43, 32, 93, 26 and 27 browser checks, and 49 unit tests.
+
+## Lab: trail quests (14 November 2026)
+
+**Tested** with a small mocked citation graph (`test/lab-quest.test.cjs`, 29/29, phone viewport). The quest starts from a result card and requests that paper's references. The suggestion goes to the older, well-cited paper with shared words, never to the unrelated one, and gives its reason; each card shows how many years earlier it is.
+
+The checks also cover:
+- Stepping back, undo, and the message when OpenAlex has no references.
+- The finished trail: totals, how each step connects, and the replay one step at a time.
+- Saving the trail on the device, and the share link, which carries OpenAlex ids only and no personal data.
+- The forward quest from the first paper, leaving the quest back to the search, and replaying saved trails.
+- Opening a shared link in a fresh browser: same order, not saved to that person's trails, and "follow it further" continues from the last paper.
+- A broken link, reduced motion, and no WCAG 2 A/AA violations in light or dark.
+
+**Not yet judged with real users:** whether the suggested step usually matches what a researcher would pick. It is a simple score: 55% shared title words with the start paper, 30% citations, 15% years travelled.

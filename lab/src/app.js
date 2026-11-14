@@ -66,6 +66,7 @@
   (store.get('saved', []) || []).forEach(w => { if (w && w.key) { C.prepWork(w); S.saved.set(w.key, w); } });
   S.later = new Map(); (store.get('later', []) || []).forEach(w => { if (w && w.key) { C.prepWork(w); S.later.set(w.key, w); } });
   S.taste = store.get('taste', {}) || {};
+  S.quest = null; S.trails = store.get('trails', []) || [];
   const persistLater = () => store.set('later', [...S.later.values()].map(w => Object.assign(C.slim(w), { savedAt: w.savedAt || new Date().toISOString() })));
   S.mode = store.get('mode', 'all');
   S.sort = store.get('sort', 'best');
@@ -157,7 +158,7 @@
   }
   function goHome() {
     searchToken++;
-    S.search = null; S.prevSearch = null; S.filters.theme = null;
+    S.search = null; S.prevSearch = null; S.filters.theme = null; S.quest = null;
     ['#clarify', '#interp', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
     setLoading(null);
     $('#start').hidden = false; $('#hero').classList.remove('compact'); $('#q').value = '';
@@ -175,6 +176,7 @@
     if (view === 'search') renderFollows();
     if (view === 'profile') { renderProfileEditor(); renderAI(); const tb = $('#taste-box'); if (tb) tb.innerHTML = tasteHTML(); }
     if (view === 'about') renderAbout();
+    if (v.startsWith('trail=')) { const code = v.slice(6); history.replaceState(null, '', '#search'); openSharedTrail(code); return; }
     if (v === 'install' || v === 'key') { renderInstall(); const h = $(v === 'key' ? '#key-box' : '#install-h'); if (h) setTimeout(() => h.scrollIntoView({ block: 'start' }), 0); return; }
     window.scrollTo(0, 0);
   }
@@ -438,6 +440,7 @@
 
   function renderTrailHeader() {
     const s = S.search; const t = s.trail;
+    if (inQuest()) { renderQuestHead(); return; }
     const what = { cites: 'Papers that cite', refs: 'Papers cited by', related: 'Papers related to' }[t.kind];
     const st = s.status.oa_trail;
     const failed = st && st.ok === false;
@@ -566,7 +569,7 @@
     if (f.yearFrom || f.yearTo) chips.push(`<li class="chip">${esc(f.yearFrom || '…')}–${esc(f.yearTo || '…')} <button data-clear="years" aria-label="Clear year filter">×</button></li>`);
     if (f.oaOnly) chips.push(`<li class="chip">Open access <button data-clear="oaOnly" aria-label="Clear">×</button></li>`);
     if (f.theme && s.themes) { const t = s.themes.themes.find(x => x.id === f.theme); if (t) chips.push(`<li class="chip">Theme: ${esc(t.name)} <button data-clear="theme" aria-label="Clear theme">×</button></li>`); }
-    const canSwipe = s.kind !== 'author' && vis.some(w => !S.saved.has(w.key) && !S.later.has(w.key));
+    const canSwipe = s.kind !== 'author' && !inQuest() && vis.some(w => !S.saved.has(w.key) && !S.later.has(w.key));
     $('#filterbar').innerHTML = `<div class="filterbar">${canSwipe ? '<button type="button" class="btn small swipe-btn" id="swipe-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="3"/><path d="M2.5 9.5 1 12l1.5 2.5M21.5 9.5 23 12l-1.5 2.5"/></svg>Swipe to sort</button>' : ''}<button type="button" class="btn small" id="open-filters">Filters${filtersActive() ? ' (on)' : ''}</button>
       <label class="sortsel"><span class="sr-only">Sort results</span><select id="sort">${sortOptions(s)}</select></label>
       <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${s.kind === 'author' ? `${fmt(vis.length)} works` : `${Math.min(s.shown, vis.length)} of ${vis.length} shown`}</span></div>`;
@@ -622,7 +625,7 @@
         ${pdf && pdf !== free ? `<a href="${esc(pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}
         <button type="button" class="btn link" data-details="${esc(w.key)}" aria-expanded="${open}">Details</button>
       </div>
-      ${w.openalexId ? `<div class="trail"><span class="tiny">Explore:</span>${w.cites ? `<button type="button" class="btn link" data-trail="cites" data-key="${esc(w.key)}">Cited by ${fmt(w.cites)}</button>` : ''}<button type="button" class="btn link" data-trail="refs" data-key="${esc(w.key)}">References</button><button type="button" class="btn link" data-trail="related" data-key="${esc(w.key)}">Similar</button></div>` : ''}
+      ${inQuest() ? questCardHTML(w) : w.openalexId ? `<div class="trail"><span class="tiny">Explore:</span>${w.cites ? `<button type="button" class="btn link" data-trail="cites" data-key="${esc(w.key)}">Cited by ${fmt(w.cites)}</button>` : ''}<button type="button" class="btn link" data-trail="refs" data-key="${esc(w.key)}">References</button><button type="button" class="btn link" data-trail="related" data-key="${esc(w.key)}">Similar</button><button type="button" class="btn link quest-go" data-quest-start="origin" data-key="${esc(w.key)}">Trace its origin</button></div>` : ''}
       <div class="details" ${open ? '' : 'hidden'}><dl>
         <dt>Type</dt><dd>${esc(ti.label)}: ${esc(ti.why)}</dd>
         ${w.topic ? `<dt>Topic</dt><dd>${esc(w.topic.name)} (${esc(w.topic.field || '')})</dd>` : ''}
@@ -639,6 +642,7 @@
     const vis = visibleWorks();
     renderFilterbar(vis);
     const c = ctx(); const hset = C.highlightStems(c);
+    if (inQuest()) { const sg = questSuggestion(); if (sg) { const i = vis.findIndex(w => w.key === sg.key); if (i > 0) vis.unshift(vis.splice(i, 1)[0]); } }
     const list = vis.slice(0, s.shown);
     c.topScore = vis.reduce((m, w) => Math.max(m, w.rank ? w.rank.score : 0), 0.0001);
     if (!s.ranked.length) {
@@ -688,6 +692,7 @@
 
   function renderAll() {
     if (!S.search || S.search.kind === 'authorpick') return;
+    if (S.search.kind === 'quest') { renderQuestSummary(); return; }
     if (S.search.kind === 'author') { renderModes(); renderAuthorView(); return; }
     renderModes(); renderInterp(); renderMap(); renderAnswer(); renderResults(); renderCompare();
   }
@@ -740,8 +745,8 @@
   function updateSavedCount() { $('#saved-count').textContent = S.saved.size ? `(${S.saved.size})` : ''; }
   function renderSaved() {
     const list = [...S.saved.values()].sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
-    if (!list.length) { $('#saved-body').innerHTML = `${skyHTML()}<p class="muted">Papers you save appear here. They are kept in this browser, not in an account.</p>${laterHTML()}`; return; }
-    $('#saved-body').innerHTML = `${skyHTML()}<h3 class="list-h">List</h3><div class="row" style="margin-bottom:10px">
+    if (!list.length) { $('#saved-body').innerHTML = `${skyHTML()}${trailsHTML()}<p class="muted">Papers you save appear here. They are kept in this browser, not in an account.</p>${laterHTML()}`; return; }
+    $('#saved-body').innerHTML = `${skyHTML()}${trailsHTML()}<h3 class="list-h">List</h3><div class="row" style="margin-bottom:10px">
         <button class="btn small" data-export="bib">Copy BibTeX</button><button class="btn small" data-export="ris">Copy RIS</button>
         <button class="btn small" data-download="bib">Download .bib</button><button class="btn small" data-download="ris">Download .ris</button><button class="btn small" data-download="csv">Download .csv</button>
       </div>
@@ -1507,6 +1512,18 @@
     if (t.id === 'home-link') { goHome(); return; }
     if (t.id === 'lab-import') { labImport(); return; }
     if (t.id === 'swipe-open') { openDeck(); return; }
+    if (d.questStart) { const w = S.search && S.search.pool.get(d.key); if (w) startQuest(w, d.questStart); return; }
+    if (d.questStep) { questStepTo(d.questStep); return; }
+    if (t.id === 'quest-finish') { finishQuest(); return; }
+    if (t.id === 'quest-undo') { questUndo(); return; }
+    if (t.id === 'quest-quit') { leaveQuest(); return; }
+    if (t.id === 'trail-replay') { replayTrail(); return; }
+    if (t.id === 'trail-share') { shareTrail(S.search.trail); return; }
+    if (t.id === 'trail-continue') { const tr = S.search.trail; S.quest = { goal: tr.goal, steps: tr.steps.slice(), startedFrom: S.prevSearch }; runTrail(tr.steps[tr.steps.length - 1], QUEST[tr.goal].kind); return; }
+    if (t.id === 'trail-forward') { const tr = S.search.trail; S.quest = { goal: 'forward', steps: [Object.assign({}, tr.steps[0], { via: 'start' })], startedFrom: S.prevSearch }; runTrail(tr.steps[0], 'cites'); return; }
+    if (d.trailOpen) { const tr = S.trails.find(x => x.id === d.trailOpen); if (tr) { location.hash = '#search'; showTrail(tr, { replay: true }); } return; }
+    if (d.trailShare) { const tr = S.trails.find(x => x.id === d.trailShare); if (tr) shareTrail(tr); return; }
+    if (d.trailRm) { S.trails = S.trails.filter(x => x.id !== d.trailRm); store.set('trails', S.trails); renderSaved(); return; }
     if (d.deck) { if (d.deck === 'undo') undoDeck(); else fly(d.deck); return; }
     if (t.id === 'deck-close' || t.id === 'deck-close2') { closeDeck(); return; }
     if (t.id === 'deck-undo') { undoDeck(); return; }
@@ -1762,6 +1779,176 @@
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && S.settings.pendingKey) checkKey(false); });
   window.addEventListener('focus', () => { if (S.settings.pendingKey) checkKey(false); });
+
+  // ---------------------------------------------------------------- Lab: trail quests
+  // Follow references back to where an idea started (or citing papers forward to where it led), then replay or share the path.
+  const QUEST = {
+    origin: { kind: 'refs', title: 'Find where this idea started', step: 'Step back to this', dir: 'earlier', via: 'cites', far: 'back' },
+    forward: { kind: 'cites', title: 'See where this idea led', step: 'Step forward to this', dir: 'later', via: 'is cited by', far: 'forward' },
+  };
+  const inQuest = () => !!(S.quest && S.search && S.search.kind === 'trail' && S.quest.steps.length && S.search.trail.seed.key === S.quest.steps[S.quest.steps.length - 1].key);
+  function startQuest(w, goal) {
+    if (!w || !w.openalexId) return;
+    S.quest = { goal, steps: [C.questStep(w, 'start')], startedFrom: S.search && S.search.kind === 'search' ? S.search : (S.prevSearch || null) };
+    if (location.hash !== '#search') history.replaceState(null, '', '#search');
+    runTrail(w, QUEST[goal].kind);
+  }
+  function questStepTo(key) {
+    const w = S.search.pool.get(key); if (!w || !S.quest) return;
+    S.quest.steps.push(C.questStep(w, QUEST[S.quest.goal].via));
+    runTrail(w, QUEST[S.quest.goal].kind);
+  }
+  function questUndo() {
+    const q = S.quest; if (!q) return;
+    if (q.steps.length <= 1) { leaveQuest(); return; }
+    q.steps.pop(); runTrail(q.steps[q.steps.length - 1], QUEST[q.goal].kind);
+  }
+  function leaveQuest() {
+    const back = S.quest && S.quest.startedFrom; S.quest = null;
+    searchToken++;
+    if (back) { S.search = back; S.prevSearch = null; $('#q').value = back.q; clearSearchUI(); rerank(); renderAll(); }
+    else goHome();
+    window.scrollTo(0, 0);
+  }
+  function questSuggestion() {
+    const s = S.search; if (!inQuest() || !s.ranked.length) return null;
+    if (!s.suggest || s.suggest.n !== s.ranked.length) s.suggest = Object.assign({ n: s.ranked.length }, C.questSuggest(s.ranked, S.quest.steps, S.quest.goal) || { key: null });
+    return s.suggest.key ? s.suggest : null;
+  }
+  function questCardHTML(w) {
+    const q = S.quest; const here = q.steps[q.steps.length - 1].year; const sg = questSuggestion();
+    const gap = w.year && here ? (q.goal === 'origin' ? here - w.year : w.year - here) : null;
+    const when = gap == null ? '' : gap === 0 ? 'Same year' : gap > 0 ? `${gap} year${gap === 1 ? '' : 's'} ${QUEST[q.goal].dir}` : `${-gap} year${gap === -1 ? '' : 's'} ${q.goal === 'origin' ? 'later' : 'earlier'}`;
+    const isSg = sg && sg.key === w.key;
+    return `<div class="quest-act${isSg ? ' sg' : ''}">${isSg ? `<p class="small sg-why"><strong>Suggested next step.</strong> ${esc(sg.gap ? `${sg.gap} year${sg.gap === 1 ? '' : 's'} ${QUEST[q.goal].dir}` : 'Same year')}${w.cites ? `, cited ${fmt(w.cites)} times` : ''}${sg.shared.length ? `, and shares “${esc(sg.shared.slice(0, 3).join('”, “'))}” with where you started` : ''}.</p>` : ''}
+      <div class="row">${w.openalexId ? `<button type="button" class="btn small ${isSg ? 'primary' : ''}" data-quest-step="${esc(w.key)}">${QUEST[q.goal].step}</button>` : ''}${when ? `<span class="tiny">${esc(when)}</span>` : ''}</div></div>`;
+  }
+  function pathHTML(steps, goal, { mini = false } = {}) {
+    if (mini) return `<ol class="qcrumbs" aria-label="Your trail so far">${steps.map((x, i) => `<li${i === steps.length - 1 ? ' aria-current="step"' : ''}>${x.year || '?'}</li>`).join('')}</ol>`;
+    return `<ol class="tpath">${steps.map((x, i) => {
+      const next = steps[i + 1];
+      const gap = next && x.year && next.year ? Math.abs(x.year - next.year) : 0;
+      const link = safeUrl(x.doi ? `https://doi.org/${x.doi}` : x.openalexId);
+      return `<li class="tstep${i === 0 ? ' first' : ''}${i === steps.length - 1 ? ' last' : ''}" style="--gap:${Math.min(140, 26 + gap * 4)}px">
+        <span class="ty">${x.year || '?'}</span><span class="tnode" aria-hidden="true"></span>
+        <div class="tbody"><p class="tlabel tiny">${i === 0 ? 'Start' : i === steps.length - 1 ? (goal === 'origin' ? 'Where it started' : 'Where it led') : `Step ${i}`}</p>
+          <h4>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}</h4>
+          <p class="byline">${esc(x.authors.join(', '))}${x.more ? ' et al.' : ''}${x.venue ? `. <span class="venue">${esc(x.venue)}</span>` : ''}${x.cites ? `. Cited ${fmt(x.cites)} times` : ''}</p>
+          ${next ? `<p class="tvia tiny">${goal === 'origin' ? 'cites' : 'is cited by'}${gap ? `, ${gap} year${gap === 1 ? '' : 's'} ${goal === 'origin' ? 'earlier' : 'later'}` : ''}</p>` : ''}</div></li>`;
+    }).join('')}</ol>`;
+  }
+  function renderQuestHead() {
+    const s = S.search; const q = S.quest; const Q = QUEST[q.goal];
+    const here = q.steps[q.steps.length - 1]; const st = s.status.oa_trail;
+    const none = st && st.ok && !s.ranked.length;
+    const start = q.steps[0];
+    const span = start.year && here.year ? Math.abs(start.year - here.year) : 0;
+    $('#interp').innerHTML = `${st && st.ok === false ? `<div class="panel warn" role="alert"><strong>Could not follow this trail.</strong> ${esc(st.msg)}</div>` : ''}
+      <div class="panel quest-head"><p class="small qkicker">Quest: ${esc(Q.title.toLowerCase())}</p>
+        <h3>${q.steps.length === 1 ? `Start: ${here.year || 'year unknown'}` : `Step ${q.steps.length - 1}: you’re in ${here.year || 'an unknown year'}`}${span ? `, ${span} year${span === 1 ? '' : 's'} ${Q.far}` : ''}</h3>
+        <p class="small qhere">“${esc(here.title.length > 110 ? here.title.slice(0, 108) + '…' : here.title)}”</p>
+        ${pathHTML(q.steps, q.goal, { mini: true })}
+        <p class="small">${none ? (q.goal === 'origin' ? 'OpenAlex lists no references for this paper, so this is as far back as the data goes.' : 'No papers in OpenAlex cite this one yet, so this is as far as the trail goes.')
+          : q.goal === 'origin' ? 'Below are the papers it cites, most cited first. Pick the one that looks like the root of the idea; older papers take you further back.' : 'Below are papers that cite it, most cited first. Pick one to follow the idea forward.'}</p>
+        <div class="row qbtns">${q.steps.length > 1 ? `<button type="button" class="btn small primary" id="quest-finish">${q.goal === 'origin' ? 'This is where it started' : 'This is where it led'}</button>` : ''}
+          <button type="button" class="btn small" id="quest-undo">${q.steps.length > 1 ? 'Undo last step' : 'Cancel'}</button>
+          ${q.steps.length > 1 ? '<button type="button" class="btn link" id="quest-quit">Leave the quest</button>' : ''}</div>
+        <p class="tiny" style="margin:6px 0 0">Each step uses about $0.0001 of the OpenAlex allowance.</p></div>`;
+  }
+  function finishQuest() {
+    const q = S.quest; if (!q) return;
+    const trail = { id: Date.now().toString(36), goal: q.goal, steps: q.steps, at: new Date().toISOString() };
+    if (q.steps.length > 1) {
+      const code = C.trailCode(trail.goal, trail.steps);
+      S.trails = [trail, ...S.trails.filter(t => C.trailCode(t.goal, t.steps) !== code)].slice(0, 20); store.set('trails', S.trails);
+    }
+    showTrail(trail, { from: q.startedFrom, replay: q.steps.length > 1 });
+  }
+  function showTrail(trail, { from = null, replay = false, shared = false } = {}) {
+    searchToken++;
+    S.quest = null;
+    S.search = { kind: 'quest', trail, shared, q: trail.steps[0].title, pool: new Map(), ranked: [], status: {}, analysis: C.analyzeQuery('', S.profile, {}) };
+    S.prevSearch = from;
+    if (location.hash !== '#search') history.replaceState(null, '', '#search');
+    route(); clearSearchUI(); renderQuestSummary(); window.scrollTo(0, 0);
+    if (replay) replayTrail();
+  }
+  function renderQuestSummary() {
+    const s = S.search; const t = s.trail; const st = C.trailStats(t.steps);
+    const first = t.steps[0], last = t.steps[t.steps.length - 1];
+    const head = st.hops === 0 ? 'A trail of one paper'
+      : `${st.span ? `${st.span} year${st.span === 1 ? '' : 's'} ${t.goal === 'origin' ? 'back' : 'forward'}` : 'Same year'} in ${st.hops} step${st.hops === 1 ? '' : 's'}`;
+    $('#interp').innerHTML = `<section class="panel trail-summary" aria-labelledby="ts-h">
+        <p class="small qkicker">${s.shared ? 'A trail someone shared with you' : t.goal === 'origin' ? 'Where this idea started' : 'Where this idea led'}</p>
+        <h3 id="ts-h">${esc(head)}</h3>
+        ${st.hops ? `<p class="small">From “${esc(first.title.length > 70 ? first.title.slice(0, 68) + '…' : first.title)}” (${first.year || '?'}) to “${esc(last.title.length > 70 ? last.title.slice(0, 68) + '…' : last.title)}” (${last.year || '?'}).</p>` : ''}
+        <p class="replay-year" aria-hidden="true" hidden></p>
+        ${pathHTML(t.steps, t.goal)}
+        <div class="row tbtns">${st.hops ? '<button type="button" class="btn small" id="trail-replay">Replay</button><button type="button" class="btn small primary" id="trail-share">Share this trail</button>' : ''}
+          <button type="button" class="btn small" id="trail-continue">${s.shared ? 'Follow it further yourself' : 'Keep going from the last paper'}</button>
+          ${t.goal === 'origin' ? '<button type="button" class="btn small" id="trail-forward">See where the first paper led</button>' : ''}
+          ${S.prevSearch ? `<button type="button" class="btn link" id="trail-back">Back to “${esc(S.prevSearch.q.length > 30 ? S.prevSearch.q.slice(0, 28) + '…' : S.prevSearch.q)}”</button>` : ''}</div>
+        ${s.shared ? '' : '<p class="tiny">Saved under Saved › Your trails, on this device.</p>'}</section>`;
+    ['#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder', '#clarify'].forEach(sel => { const el = $(sel); if (el) el.innerHTML = ''; });
+  }
+  let replayTimer = null;
+  function replayTrail() {
+    const ol = $('.trail-summary .tpath'); if (!ol) return;
+    const items = [...ol.children]; const yearEl = $('.trail-summary .replay-year');
+    clearTimeout(replayTimer);
+    if (reduceMotion()) { items.forEach(li => li.classList.remove('pending')); yearEl.hidden = true; return; }
+    items.forEach(li => li.classList.add('pending'));
+    yearEl.hidden = false;
+    let i = 0;
+    const steps = S.search.trail.steps;
+    const next = () => {
+      if (!document.contains(ol)) return;
+      if (i >= items.length) { yearEl.hidden = true; return; }
+      items[i].classList.remove('pending'); items[i].classList.add('arrive');
+      yearEl.textContent = steps[i].year || '';
+      i++; replayTimer = setTimeout(next, 750);
+    };
+    next();
+  }
+  async function shareTrail(trail) {
+    const code = C.trailCode(trail.goal, trail.steps);
+    const url = `${location.origin}${location.pathname}#trail=${code}`;
+    const st = C.trailStats(trail.steps); const first = trail.steps[0], last = trail.steps[trail.steps.length - 1];
+    const text = trail.goal === 'origin'
+      ? `I traced “${first.title}” (${first.year || '?'}) back ${st.span} years to “${last.title}” (${last.year || '?'}) in ${st.hops} steps.`
+      : `I followed “${first.title}” (${first.year || '?'}) forward ${st.span} years to “${last.title}” (${last.year || '?'}) in ${st.hops} steps.`;
+    if (navigator.share) { try { await navigator.share({ title: 'A Paperscope trail', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Trail link copied'); }
+    catch (e) {
+      const row = $('.trail-summary .tbtns') || $('.trail-list'); if (!row) return;
+      let box = $('.share-link'); if (!box) { row.insertAdjacentHTML('afterend', '<p class="share-link small"><label>Copy this link to share the trail <input readonly></label></p>'); box = $('.share-link'); }
+      const inp = box.querySelector('input'); inp.value = url; inp.focus(); inp.select();
+    }
+  }
+  async function openSharedTrail(code) {
+    const p = C.parseTrailCode(decodeURIComponent(code));
+    if (!p) { toast('That trail link is not complete'); return; }
+    const token = ++searchToken; clearSearchUI(); setLoading('Opening the shared trail…');
+    const r = await getJSON(oaURL({ filter: `openalex:${p.ids.join('|')}`, per_page: Math.min(50, p.ids.length), select: OA_SELECT }));
+    if (token !== searchToken) return;
+    setLoading(null);
+    if (!r.ok) { $('#interp').innerHTML = `<div class="panel warn" role="alert">Could not open the shared trail. ${esc(failText('OpenAlex', r))}</div>`; return; }
+    addCost(r);
+    const pool = new Map(); C.dedupeInto(pool, (r.data.results || []).map((w, k) => C.normOpenAlex(w, 'oa_trail', k + 1)));
+    const byId = new Map([...pool.values()].map(w => [shortId(w.openalexId), w]));
+    const steps = p.ids.map((id, i) => byId.get(id) ? C.questStep(byId.get(id), i ? (p.goal === 'origin' ? 'cites' : 'is cited by') : 'start') : null).filter(Boolean);
+    if (!steps.length) { $('#interp').innerHTML = '<div class="panel warn" role="alert">None of the papers in this trail were found in OpenAlex.</div>'; return; }
+    showTrail({ id: 'shared', goal: p.goal, steps, at: '' }, { shared: true, replay: steps.length > 1 });
+  }
+  function trailsHTML() {
+    if (!S.trails.length) return '';
+    return `<h3 class="list-h">Your trails</h3><ul class="trail-list">${S.trails.map(t => {
+      const st = C.trailStats(t.steps); const first = t.steps[0], last = t.steps[t.steps.length - 1];
+      return `<li><p class="small"><strong>${st.span} year${st.span === 1 ? '' : 's'} ${t.goal === 'origin' ? 'back' : 'forward'} in ${st.hops} step${st.hops === 1 ? '' : 's'}</strong></p>
+        <p class="byline">${esc(first.title.length > 60 ? first.title.slice(0, 58) + '…' : first.title)} (${first.year || '?'}) to ${esc(last.title.length > 60 ? last.title.slice(0, 58) + '…' : last.title)} (${last.year || '?'})</p>
+        <div class="row"><button type="button" class="btn small" data-trail-open="${esc(t.id)}">Replay</button><button type="button" class="btn small" data-trail-share="${esc(t.id)}">Share</button><button type="button" class="btn small quiet" data-trail-rm="${esc(t.id)}">Remove</button></div></li>`;
+    }).join('')}</ul>`;
+  }
 
   // ---------------------------------------------------------------- Lab: swipe to sort
   // Right keeps (saves) a paper, left skips it, up puts it on a read-later list. Every choice nudges future ranking a little.
