@@ -189,6 +189,7 @@
       <label class="radio"><input type="radio" name="scoring" value="v1"><span><strong>Previous</strong>: every idea in your search counts the same.</span></label>
       <p class="tiny">Compare them on your own graded searches under Profile › Graded searches.</p></fieldset>
     <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
+    <label class="switch"><input type="checkbox" id="set-rerank"><span>OpenAlex reranker (Lab)<br><span class="tiny">OpenAlex reorders its top 100 keyword results with a model that judges how well each answers your search, from the title, journal, year and type (not the abstract). Doubles the cost of the keyword search. Measure it on your graded searches first.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
     <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>
 

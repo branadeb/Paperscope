@@ -16,7 +16,12 @@
     mammoth: 'https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js',
     tjs: 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/dist/transformers.min.js',
   };
-  const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
+  // On-device models to choose from. bge-small asks for an instruction before short search queries.
+  const MODELS = {
+    minilm: { id: 'Xenova/all-MiniLM-L6-v2', name: 'all-MiniLM-L6-v2', size: 'about 20 MB', license: 'Apache 2.0', qPrefix: '' },
+    bge: { id: 'Xenova/bge-small-en-v1.5', name: 'bge-small-en-v1.5', size: 'about 35 MB', license: 'MIT', qPrefix: 'Represent this sentence for searching relevant passages: ' },
+  };
+  const model = () => MODELS[S.settings.aiModel] || MODELS.minilm;
   const CHANNEL_NAMES = { oa_kw: 'OpenAlex keyword', oa_sem: 'OpenAlex meaning-based', oa_rel: 'OpenAlex related terms', oa_recent: 'OpenAlex recent', oa_trail: 'OpenAlex citation trail', crossref: 'Crossref', epmc: 'Europe PMC' };
   const CATS = [
     ['research', 'Original articles', 'Labelled "article" by the source and not flagged as a review or commentary'],
@@ -275,7 +280,7 @@
       const label = { cites: 'Papers citing it', refs: 'Its references', related: 'Related papers' }[s.trail.kind];
       if (!s.exhausted.oa_trail) jobs.push(['oa_trail', `OpenAlex: ${label.toLowerCase()}`, () => getJSON(oaURL({ filter, per_page: 50, page: s.pages.oa_trail, select: OA_SELECT, sort: s.trail.kind === 'related' ? '' : 'cited_by_count:desc' })), 50]);
     } else {
-    if (!s.exhausted.oa_kw) jobs.push(['oa_kw', 'OpenAlex keyword search', () => getJSON(oaURL({ search: a.keywordQuery, filter, per_page: 40, page: s.pages.oa_kw, select: OA_SELECT })), 40]);
+    if (!s.exhausted.oa_kw) jobs.push(['oa_kw', 'OpenAlex keyword search', () => getJSON(oaURL({ search: a.keywordQuery, filter, per_page: 40, page: s.pages.oa_kw, select: OA_SELECT, rerank: S.settings.oaRerank ? 'true' : '' })), 40]);
     if (S.settings.semantic && !s.exhausted.oa_sem) jobs.push(['oa_sem', 'OpenAlex meaning-based search', () => getJSON(oaURL({ 'search.semantic': a.semanticQuery, filter, per_page: 25, page: s.pages.oa_sem, select: OA_SELECT })), 25]);
     else if (!S.settings.semantic) s.status.oa_sem = { skip: true, label: 'OpenAlex meaning-based search', msg: 'off in Settings' };
     if (a.related.length && !s.exhausted.oa_rel) jobs.push(['oa_rel', 'OpenAlex related terms', () => getJSON(oaURL({ search: a.relatedQuery, filter, per_page: 25, page: 1, select: OA_SELECT })), 25]);
@@ -854,8 +859,13 @@
   function renderAI() {
     const d = deviceInfo();
     const a = S.ai;
-    let body = `<p class="small">A small open-weight language model (all-MiniLM-L6-v2, Apache 2.0) can run in this browser to judge meaning, not just shared words: it re-ranks results and compares them with your profile. It does not write text, so it cannot invent findings.</p>
-      <ul class="small"><li>Download: about 20 MB once (model 23 MB and runtime 14 MB before compression), from Hugging Face and jsDelivr. Stored in the browser cache; clear it by clearing this site’s data.</li>
+    const m = model();
+    let body = `<p class="small">A small open-weight language model (${esc(m.name)}, ${esc(m.license)}) can run in this browser to judge meaning, not just shared words: it re-ranks results and compares them with your profile. It does not write text, so it cannot invent findings.</p>
+      <fieldset class="scoring"><legend>Model</legend>
+        <label class="radio"><input type="radio" name="ai-model" value="minilm" ${S.settings.aiModel !== 'bge' ? 'checked' : ''}><span><strong>all-MiniLM-L6-v2</strong>: smaller and faster, general purpose (about 20 MB).</span></label>
+        <label class="radio"><input type="radio" name="ai-model" value="bge" ${S.settings.aiModel === 'bge' ? 'checked' : ''}><span><strong>bge-small-en-v1.5</strong>: scores better on retrieval benchmarks (about 35 MB).</span></label>
+        <p class="tiny">Measure either on your own graded searches (Graded searches, above).</p></fieldset>
+      <ul class="small"><li>Download: ${esc(m.size)} once, plus the runtime (about 14 MB before compression), from Hugging Face and jsDelivr. Stored in the browser cache; clear it by clearing this site’s data.</li>
       <li>Speed: roughly a few seconds per search on a recent phone, faster on a laptop. Runs on the processor (WebAssembly).</li>
       <li>This device: WebAssembly ${d.wasm ? 'available' : '<strong>not available (the model cannot run here)</strong>'}; memory ${esc(d.mem)}.</li></ul>`;
     if (a.status === 'off') body += `<button class="btn primary" id="ai-on" ${d.wasm ? '' : 'disabled'}>Download and turn on</button>`;
@@ -876,7 +886,7 @@
         const v = onnx && onnx.versions && onnx.versions.web;
         if (v && onnx.wasm) onnx.wasm.wasmPaths = { mjs: `https://cdn.jsdelivr.net/npm/onnxruntime-web@${v}/dist/ort-wasm-simd-threaded.mjs`, wasm: `https://cdn.jsdelivr.net/npm/onnxruntime-web@${v}/dist/ort-wasm-simd-threaded.wasm` };
       } catch (e) { /* keep library default */ }
-      S.ai.pipe = await t.pipeline('feature-extraction', MODEL_ID, {
+      S.ai.pipe = await t.pipeline('feature-extraction', model().id, {
         dtype: 'q8', device: 'wasm',
         progress_callback: p => {
           if (p.status === 'progress' && p.file) { files.set(p.file, { loaded: p.loaded || 0, total: p.total || 0 }); }
@@ -905,7 +915,7 @@
     const run = ++embedRun; const token = searchToken;
     const t0 = performance.now();
     const qtext = s.analysis.semanticQuery;
-    if (!S.ai.qcache.has('q:' + qtext)) S.ai.qcache.set('q:' + qtext, (await embedTexts([qtext]))[0]);
+    if (!S.ai.qcache.has('q:' + qtext)) S.ai.qcache.set('q:' + qtext, (await embedTexts([model().qPrefix + qtext]))[0]);
     const ptext = hasProfile() ? C.profileText(S.profile) : '';
     if (ptext && !S.ai.qcache.has('p:' + ptext)) S.ai.qcache.set('p:' + ptext, (await embedTexts([ptext]))[0]);
     const todo = [...s.pool.values()].filter(w => !S.ai.cache.has(w.key));
@@ -1446,7 +1456,7 @@
     $('#version').textContent = VERSION;
     $('#api-key').value = S.settings.apiKey || '';
     renderKey(); if (S.settings.pendingKey) checkKey(false); else if (!S.budget || Date.now() - S.budget.at > 60000) refreshBudget();
-    $('#set-semantic').checked = S.settings.semantic; $('#set-crossref').checked = S.settings.crossref; $('#set-epmc').checked = S.settings.epmc;
+    $('#set-semantic').checked = S.settings.semantic; $('#set-crossref').checked = S.settings.crossref; $('#set-epmc').checked = S.settings.epmc; $('#set-rerank').checked = !!S.settings.oaRerank;
     document.querySelectorAll('input[name="scoring"]').forEach(i => { i.checked = i.value === (S.settings.scoring === 'v1' ? 'v1' : 'v2'); });
     $('#llm-provider').value = S.settings.llmProvider; $('#llm-key').value = S.settings.llmKey || ''; $('#llm-model').value = S.settings.llmModel || '';
     $('#llm-base').value = S.settings.llmBase || ''; $('#llm-consent').checked = !!S.settings.llmConsent;
@@ -1533,6 +1543,8 @@
       return;
     }
     if (t.id === 'bench-export') { exportBench(); return; }
+    if (t.id === 'bench-model') { t.disabled = true; benchMeasureModel().finally(() => { t.disabled = false; }); return; }
+    if (t.id === 'bench-rerank') { t.disabled = true; benchMeasureRerank().finally(() => { t.disabled = false; }); return; }
     if (d.benchOpen !== undefined) { const e = benchResults().rows[Number(d.benchOpen)].e; location.hash = '#search'; S.ui.grading = true; S.mode = e.mode || S.mode; renderModes(); runSearch(e.q, { choices: e.choices, sense: e.sense, allFields: e.allFields }); return; }
     if (d.benchDel !== undefined) {
       const e = benchResults().rows[Number(d.benchDel)].e;
@@ -1716,6 +1728,14 @@
     if (t.id === 'api-key') { S.settings.apiKey = t.value.trim(); if (S.settings.apiKey) S.settings.pendingKey = null; saveSettings(); S.budget = null; keyMsg = null; toast(S.settings.apiKey ? 'API key saved in this browser' : 'API key removed'); refreshBudget(); }
     if (t.id === 'set-semantic') { S.settings.semantic = t.checked; saveSettings(); }
     if (t.id === 'bench-import' && t.files[0]) { importBench(t.files[0]); t.value = ''; }
+    if (t.id === 'set-rerank') { S.settings.oaRerank = t.checked; saveSettings(); }
+    if (t.name === 'ai-model') {
+      S.settings.aiModel = t.value === 'bge' ? 'bge' : 'minilm'; saveSettings();
+      const was = S.ai.status === 'ready';
+      S.ai = { status: 'off', pipe: null, cache: new Map(), qcache: new Map(), progress: 0, lastRun: null, error: '' }; benchExtra.model.clear();
+      if (S.search) { S.search.sem = new Map(); rerank(); renderAll(); }
+      renderAI(); renderBench(); if (was) loadAI(false);
+    }
     if (t.name === 'scoring') { S.settings.scoring = t.value === 'v1' ? 'v1' : 'v2'; saveSettings(); gradingCache = null; if (S.search && S.search.pool) { rerank(); } toast(S.settings.scoring === 'v1' ? 'Using the previous ranking' : 'Using the new ranking'); }
     if (t.id === 'set-crossref') { S.settings.crossref = t.checked; saveSettings(); }
     if (t.id === 'set-epmc') { S.settings.epmc = t.checked; saveSettings(); }
@@ -2395,17 +2415,56 @@
     e.pool = [...map.values()]; e.mode = S.mode; e.at = new Date().toISOString();
     persistBench();
   }
-  function benchRank(e, how) {
-    const works = e.pool.map(w => { const c = Object.assign({}, w); delete c._prep; C.prepWork(c); return c; });
+  function benchRank(e, how, extra = {}) {
+    const works = e.pool.map(w => { const c = Object.assign({}, w, { ranks: Object.assign({}, w.ranks) }); delete c._prep; C.prepWork(c); return c; });
     if (how === 'source') return works.sort((a, b) => rrfOf(b) - rrfOf(a)).map(w => w.key);
+    if (extra.rr) { const pos = new Map(extra.rr.map((k, i) => [k, i + 1])); works.forEach(w => { if (pos.has(w.key)) w.ranks.oa_kw = pos.get(w.key); else delete w.ranks.oa_kw; }); }
     const analysis = C.analyzeQuery(e.q, S.profile, e.choices || {});
-    return C.rankWorks(works, { analysis, profile: S.profile, mode: e.mode || 'all', nowYear: new Date().getFullYear(), scoring: how, sem: null }).map(w => w.key);
+    return C.rankWorks(works, { analysis, profile: S.profile, mode: e.mode || 'all', nowYear: new Date().getFullYear(), scoring: how, sem: extra.sem || null }).map(w => w.key);
   }
+  // Extra measurements, made on request: the on-device model (needs it downloaded) and OpenAlex's reranker (costs a request per search).
+  const benchExtra = { model: new Map(), modelName: '' };
   function benchResults() {
-    const rows = S.bench.filter(e => Object.keys(e.grades).length).map(e => ({ e, n: Object.keys(e.grades).length,
-      m: { source: C.benchMetrics(benchRank(e, 'source'), e.grades), v1: C.benchMetrics(benchRank(e, 'v1'), e.grades), v2: C.benchMetrics(benchRank(e, 'v2'), e.grades) } }));
-    const mean = k => C.meanMetrics(rows.map(r => r.m[k]));
-    return { rows, mean: rows.length ? { source: mean('source'), v1: mean('v1'), v2: mean('v2') } : null };
+    const rows = S.bench.filter(e => Object.keys(e.grades).length).map(e => {
+      const m = { source: C.benchMetrics(benchRank(e, 'source'), e.grades), v1: C.benchMetrics(benchRank(e, 'v1'), e.grades), v2: C.benchMetrics(benchRank(e, 'v2'), e.grades) };
+      const sem = benchExtra.model.get(e.id); if (sem) m.model = C.benchMetrics(benchRank(e, 'v2', { sem }), e.grades);
+      if (e.rr && e.rr.order) { m.rrAlone = C.benchMetrics(e.rr.order, e.grades); m.rr = C.benchMetrics(benchRank(e, 'v2', { rr: e.rr.order }), e.grades); }
+      return { e, n: Object.keys(e.grades).length, m };
+    });
+    const mean = k => { const l = rows.filter(r => r.m[k]).map(r => r.m[k]); return l.length ? Object.assign(C.meanMetrics(l), { n: l.length }) : null; };
+    return { rows, mean: rows.length ? { source: mean('source'), v1: mean('v1'), v2: mean('v2'), model: mean('model'), rr: mean('rr'), rrAlone: mean('rrAlone') } : null };
+  }
+  async function benchMeasureModel() {
+    if (S.ai.status !== 'ready') { toast('Turn on the on-device model first (below)'); return; }
+    const list = S.bench.filter(e => Object.keys(e.grades).length); let done = 0;
+    for (const e of list) {
+      const qtext = C.analyzeQuery(e.q, S.profile, e.choices || {}).semanticQuery;
+      const qv = (await embedTexts([model().qPrefix + qtext]))[0];
+      const ptext = hasProfile() ? C.profileText(S.profile) : ''; const pv = ptext ? (await embedTexts([ptext]))[0] : null;
+      const todo = e.pool.filter(w => !S.ai.cache.has(w.key));
+      for (let i = 0; i < todo.length; i += 8) {
+        const batch = todo.slice(i, i + 8);
+        const vecs = await embedTexts(batch.map(w => `${w.title}. ${C.splitSentences(w.abstract).slice(0, 2).join(' ')}`.slice(0, 700)));
+        batch.forEach((w, k) => S.ai.cache.set(w.key, vecs[k])); await sleep(0);
+      }
+      const sem = new Map(); e.pool.forEach(w => { const v = S.ai.cache.get(w.key); if (v) sem.set(w.key, { q: dot(qv, v), p: pv ? dot(pv, v) : null }); });
+      benchExtra.model.set(e.id, sem); done++;
+      const b = $('#bench-progress'); if (b) b.textContent = `Measuring the on-device model: ${done} of ${list.length} searches…`;
+    }
+    benchExtra.modelName = model().name; renderBench();
+  }
+  async function benchMeasureRerank() {
+    const list = S.bench.filter(e => Object.keys(e.grades).length && !(e.rr && e.rr.order)); let done = 0, failed = 0;
+    for (const e of list) {
+      const a = C.analyzeQuery(e.q, S.profile, e.choices || {});
+      const r = await getJSON(oaURL({ search: a.keywordQuery, filter: e.sense ? `primary_topic.domain.id:${e.sense.id}` : '', per_page: 100, rerank: 'true', select: 'id,doi,display_name,publication_year' }));
+      if (!r.ok) { failed++; continue; }
+      const byDoi = new Map(e.pool.filter(w => w.doi).map(w => [w.doi, w.key])); const byTitle = new Map(e.pool.map(w => [C.normTitle(w.title), w.key]));
+      e.rr = { at: new Date().toISOString(), order: (r.data.results || []).map(x => { const w = C.normOpenAlex(x, 'oa_kw', 1); return byDoi.get(w.doi) || byTitle.get(C.normTitle(w.title)) || C.workKey(w); }) };
+      done++; const b = $('#bench-progress'); if (b) b.textContent = `Asking OpenAlex’s reranker: ${done} of ${list.length} searches…`;
+    }
+    persistBench(); renderBench();
+    if (failed) toast(`OpenAlex refused ${failed} request${failed === 1 ? '' : 's'}; try again later`);
   }
   const pct = x => `${Math.round(100 * x)}%`;
   function benchHTML() {
@@ -2420,6 +2479,11 @@
       <ul class="bench-list">${rows.map(({ e, n, m }, i) => `<li><p class="bq">${esc(e.q)} <span class="tiny">${n} graded</span></p>
         <p class="small">Top 10 quality: previous ${cell(m.v1, 'ndcg10')} → new <span${better(m.v1.ndcg10, m.v2.ndcg10)}>${cell(m.v2, 'ndcg10')}</span>. Relevant in top 5: ${cell(m.v1, 'p5')} → <span${better(m.v1.p5, m.v2.p5)}>${cell(m.v2, 'p5')}</span>.</p>
         <div class="row bench-act"><button type="button" class="btn link" data-bench-open="${i}">Open and grade more</button><button type="button" class="btn link" data-bench-del="${i}" aria-label="Delete grades for ${esc(e.q)}">Delete</button></div></li>`).join('')}</ul>
+      <h4>Models</h4>
+      ${mean.model ? `<p class="small">New ranking with the on-device model (${esc(benchExtra.modelName)}): top 10 <strong>${mean.model.ndcg10.toFixed(2)}</strong> (without it ${mean.v2.ndcg10.toFixed(2)}), relevant in top 5 ${pct(mean.model.p5)}. Graded share of its top 10: ${pct(mean.model.judged10)}.</p>` : ''}
+      ${mean.rr ? `<p class="small">OpenAlex’s reranker on its own: top 10 ${mean.rrAlone.ndcg10.toFixed(2)}; new ranking using the reranked order: <strong>${mean.rr.ndcg10.toFixed(2)}</strong> (without it ${mean.v2.ndcg10.toFixed(2)}), over ${mean.rr.n} search${mean.rr.n === 1 ? '' : 'es'}. Graded share of the reranker’s top 10: ${pct(mean.rrAlone.judged10)}; papers it ranks that you have not graded count as not relevant, so grade more of them before trusting this.</p>` : ''}
+      <div class="row"><button type="button" class="btn small" id="bench-model">${mean.model ? 'Measure the on-device model again' : 'Measure the on-device model'}</button><button type="button" class="btn small" id="bench-rerank">${mean.rr ? 'Ask the reranker for new searches' : 'Measure OpenAlex’s reranker'}</button></div>
+      <p class="tiny" id="bench-progress" role="status">${S.ai.status === 'ready' ? 'The model runs on this device; nothing is sent.' : 'The on-device model must be turned on first (below).'} The reranker costs about $0.002 of your OpenAlex allowance per graded search, once.</p>
       <p class="tiny">nDCG compares each ranking’s top 10 with the best possible order of your grades; ungraded papers count as not relevant. Graded share of each top 10: previous ${pct(mean.v1.judged10)}, new ${pct(mean.v2.judged10)}. Grades are kept on this device.</p>${tools}</section>`;
   }
   function renderBench() { const b = $('#bench-box'); if (b) b.innerHTML = benchHTML(); }
