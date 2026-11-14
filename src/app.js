@@ -6,6 +6,7 @@
   const PAGE = 10;
   const OA = 'https://api.openalex.org';
   const CR = 'https://api.crossref.org';
+  const ORCID_API = 'https://pub.orcid.org/v3.0';
   const EP = 'https://www.ebi.ac.uk/europepmc/webservices/rest';
   const OA_SELECT = 'id,doi,display_name,publication_year,publication_date,type,cited_by_count,authorships,primary_location,best_oa_location,open_access,primary_topic,keywords,abstract_inverted_index,citation_normalized_percentile,is_retracted';
   const LIBS = {
@@ -74,12 +75,12 @@
   const shortId = id => String(id || '').split('/').pop();
 
   // ---------------------------------------------------------------- network
-  async function getJSON(url, { timeout = 20000, retries = 1 } = {}) {
+  async function getJSON(url, { timeout = 20000, retries = 1, headers } = {}) {
     for (let attempt = 0; attempt <= retries; attempt++) {
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), timeout);
       try {
-        const res = await fetch(url, { signal: ctl.signal });
+        const res = await fetch(url, headers ? { signal: ctl.signal, headers } : { signal: ctl.signal });
         clearTimeout(timer);
         if (res.status === 429 && attempt < retries) { await sleep(1300 * (attempt + 1)); continue; }
         if (!res.ok) { let body = ''; try { body = (await res.text()).slice(0, 300); } catch (e) { /* ignore */ } return { ok: false, status: res.status, error: body }; }
@@ -344,6 +345,7 @@
       if (f.yearTo && (!w.year || w.year > Number(f.yearTo))) return false;
       if (f.oaOnly && !w.isOA) return false;
       if (tkeys && !tkeys.has(w.key)) return false;
+      if (s.kind === 'author' && (isAside(s, w) || isVersionDup(s, w))) return false;
       return true;
     });
   }
@@ -951,6 +953,7 @@
     } else s.status.groupby = { ok: false, label: 'OpenAlex field counts', msg: failText('OpenAlex', gb) };
     details.forEach((d, i) => { if (d.ok) { const full = C.normAuthor(d.data); const idx = cands.indexOf(needDetails[i]); if (full && idx >= 0) cands[idx] = full; } });
     await fetchAuthorBatch(token);
+    if (token === searchToken) await verifyAuthor(token);
   }
   async function fetchAuthorBatch(token) {
     const s = S.search; if (!s || s.kind !== 'author' || s.exhausted.oa_author) return;
@@ -970,7 +973,7 @@
     if (!s.totalWorks) s.totalWorks = total;
     s.pages.oa_author++;
     if (res.length < 200 || s.fetched >= total) s.exhausted.oa_author = true;
-    rerank(); renderAll();
+    recheck(); rerank(); renderAll();
   }
   // Fetch all of the author's works in one field (used when the first pages did not include them all).
   async function loadField(name) {
@@ -991,9 +994,111 @@
       if (res.length < 200) break;
     }
     s.fieldDone[name] = true; s.fetched = s.pool.size;
-    setLoading(null); rerank();
+    setLoading(null); recheck(); rerank();
     return true;
   }
+  // ---- ORCID cross-check: the person's ORCID record and publisher ORCID tags (Crossref) decide which papers are theirs.
+  async function verifyAuthor(token) {
+    const s = S.search; if (!s || s.kind !== 'author') return;
+    const orcids = [...new Set(s.author.cands.map(c => C.orcidOf(c.orcid)).filter(Boolean))];
+    if (!orcids.length) { s.verify = { state: 'none' }; renderAuthorView(); return; }
+    s.verify = { state: 'loading', orcids, showAside: false }; renderAuthorView();
+    const jobs = [];
+    orcids.forEach(o => {
+      jobs.push(getJSON(`${ORCID_API}/${o}/record`, { headers: { Accept: 'application/json' }, timeout: 20000 }));
+      jobs.push(getJSON(`${CR}/works?filter=orcid:${o}&rows=1000&select=DOI,title,issued,published,container-title,author,type,URL,is-referenced-by-count`, { timeout: 20000 }));
+    });
+    const res = await Promise.all(jobs);
+    if (token !== searchToken) return;
+    const v = s.verify; v.records = []; v.crossref = []; v.errors = [];
+    res.forEach((r, i) => {
+      const isOrcid = i % 2 === 0;
+      if (!r.ok) { v.errors.push(isOrcid ? `ORCID could not be read (${r.status === 0 ? r.error : r.status}).` : failText('Crossref', r)); return; }
+      if (isOrcid) v.records.push(C.parseOrcidRecord(r.data));
+      else v.crossref.push(...((r.data.message && r.data.message.items) || []));
+    });
+    if (!v.records.length && !v.crossref.length) { v.state = 'failed'; renderAuthorView(); return; }
+    // what the ORCID record and Crossref say this person wrote
+    const orcidWorks = v.records.flatMap(rec => rec.works);
+    const listed = new Map(); // version key -> {from, doi}
+    orcidWorks.forEach(w => w.dois.forEach(d => listed.set(C.versionKey(d), { from: 'ORCID', doi: d })));
+    v.crossref.forEach(it => { const d = C.cleanDoi(it.DOI); const k = C.versionKey(d); if (d && !listed.has(k)) listed.set(k, { from: 'Crossref', doi: d }); });
+    const have = new Set([...s.pool.values()].map(w => w.doi ? C.versionKey(w.doi) : '').filter(Boolean));
+    // fetch papers OpenAlex did not link to this profile, every listed version, by DOI
+    const wanted = [...new Set([...orcidWorks.flatMap(w => w.dois), ...v.crossref.map(it => C.cleanDoi(it.DOI)).filter(Boolean)])]
+      .filter(d => !have.has(C.versionKey(d)));
+    const missingKeys = new Set(wanted.map(C.versionKey).filter(k => !have.has(k)));
+    const found = [];
+    for (let i = 0; i < wanted.length; i += 50) {
+      const chunk = wanted.slice(i, i + 50);
+      const r = await getJSON(oaURL({ filter: `doi:${chunk.join('|')}`, per_page: 100, select: OA_SELECT }), { timeout: 30000 });
+      if (token !== searchToken) return;
+      if (!r.ok) { v.errors.push(failText('OpenAlex', r)); continue; }
+      addCost(r);
+      found.push(...(r.data.results || []).map((w, k) => C.normOpenAlex(w, 'oa_orcid', i + k + 1)));
+    }
+    const foundKeys = new Set(found.map(w => C.versionKey(w.doi)));
+    const extra = [];
+    v.crossref.forEach((it, k) => { const d = C.cleanDoi(it.DOI); if (d && missingKeys.has(C.versionKey(d)) && !foundKeys.has(C.versionKey(d))) { extra.push(C.normCrossref(it, k + 1)); foundKeys.add(C.versionKey(d)); } });
+    orcidWorks.forEach((w, k) => {
+      const key = w.dois[0] ? C.versionKey(w.dois[0]) : '';
+      if (key ? !missingKeys.has(key) || foundKeys.has(key) : [...s.pool.values(), ...found, ...extra].some(x => C.titleSimilarity(x.title, w.title) >= 0.9)) return;
+      extra.push(C.normOrcidWork(w, k + 1)); if (key) foundKeys.add(key);
+    });
+    [...found, ...extra].forEach(w => { w.addedFrom = listed.get(C.versionKey(w.doi)) ? listed.get(C.versionKey(w.doi)).from : 'ORCID'; });
+    const before = new Set(s.pool.keys());
+    C.dedupeInto(s.pool, [...found, ...extra]);
+    v.added = new Set([...s.pool.keys()].filter(k => !before.has(k)));
+    // papers with the person's full name that neither OpenAlex's profile nor ORCID has (kept only with other evidence)
+    const rec0 = v.records.find(r => r.given && r.family);
+    v.nameFound = new Set();
+    if (rec0 && C.nameForm(`${rec0.given} ${rec0.family}`, [rec0]) === 'full' && rec0.given.replace(/[^\p{L}]/gu, '').length > 2) {
+      const r = await getJSON(oaURL({ filter: `raw_author_name.search:${rec0.given} ${rec0.family}`, per_page: 50, select: OA_SELECT }), { timeout: 30000 });
+      if (token !== searchToken) return;
+      if (r.ok) {
+        addCost(r);
+        const cand = (r.data.results || []).map((w, k) => C.normOpenAlex(w, 'oa_name', k + 1))
+          .filter(w => (w.ships || []).some(a => C.nameForm(a.raw || a.name, v.records) === 'full'))
+          .filter(w => !s.pool.has(C.workKey(w)) && ![...s.pool.values()].some(x => x.doi && w.doi && C.versionKey(x.doi) === C.versionKey(w.doi)));
+        cand.forEach(w => { w.key = C.workKey(w); });
+        v.nameCandidates = cand;
+      }
+    }
+    v.state = 'done';
+    recheck(); rerank(); renderAuthorView();
+  }
+  // Re-run the evidence check over everything loaded (after more works arrive).
+  function recheck() {
+    const s = S.search; const v = s && s.verify; if (!v || v.state !== 'done') return;
+    const ev = {
+      persons: v.records.filter(r => r.family).map(r => ({ given: r.given, family: r.family, others: [r.credit, ...r.others].filter(Boolean) })),
+      ids: new Set(s.author.ids.map(id => `https://openalex.org/${id}`)), orcids: new Set(v.orcids),
+      orcidDOIs: new Set(v.records.flatMap(r => r.works.flatMap(w => w.dois.map(C.versionKey)))),
+      orcidWorks: v.records.flatMap(r => r.works), crossrefDOIs: new Set(v.crossref.map(it => C.versionKey(it.DOI)).filter(Boolean)),
+      orgs: v.records.flatMap(r => r.orgs),
+    };
+    if (!ev.persons.length) ev.persons = s.author.cands.map(c => { const t = String(c.name).split(/\s+/); return { given: t.slice(0, -1).join(' '), family: t.slice(-1)[0] || '', others: [] }; });
+    // name-search finds join only if the evidence says they are likely theirs
+    if (v.nameCandidates && v.nameCandidates.length) {
+      const trial = C.verifyAuthorWorks([...s.pool.values(), ...v.nameCandidates], ev);
+      const keep = v.nameCandidates.filter(w => { const r = trial.get(w.key); return r && r.status === 'likely'; });
+      keep.forEach(w => { w.addedFrom = 'name'; });
+      const before = new Set(s.pool.keys());
+      C.dedupeInto(s.pool, keep);
+      [...s.pool.keys()].filter(k => !before.has(k)).forEach(k => { v.added.add(k); v.nameFound.add(k); });
+      v.nameCandidates = null;
+    }
+    v.status = C.verifyAuthorWorks([...s.pool.values()], ev);
+    v.versions = C.collapseVersions([...s.pool.values()]);
+    const n = { orcid: 0, publisher: 0, likely: 0, unconfirmed: 0 };
+    s.pool.forEach((w, k) => { if (v.versions.hide.has(k)) return; const st = v.status.get(k); if (st) n[st.status]++; });
+    v.counts = n;
+    v.onRecord = ev.orcidWorks.length;
+    // Only set papers aside when the ORCID record or publishers confirmed at least one paper; otherwise there is nothing to compare with.
+    v.active = n.orcid + n.publisher > 0;
+  }
+  const isAside = (s, w) => !!(s.verify && s.verify.active && !s.verify.showAside && s.verify.status && (s.verify.status.get(w.key) || {}).status === 'unconfirmed');
+  const isVersionDup = (s, w) => !!(s.verify && s.verify.versions && s.verify.versions.hide.has(w.key));
   function authorSorted(list) {
     const by = S.sort === 'cited' ? (a, b) => (b.cites || 0) - (a.cites || 0)
       : S.sort === 'best' && hasProfile() ? (a, b) => (b.rank.prof - a.rank.prof) || String(b.date || b.year).localeCompare(String(a.date || a.year))
@@ -1001,18 +1106,43 @@
     return list.slice().sort(by);
   }
   const fieldSlug = f => 'fg-' + f.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const VBADGE = { orcid: ['ok', 'On ORCID'], publisher: ['ok', 'ORCID on paper'], likely: ['likely', 'Likely theirs'], unconfirmed: ['warn', 'Not confirmed'] };
+  function verifyBits(w) {
+    const s = S.search; const v = s && s.verify;
+    if (!v || v.state !== 'done' || !v.status || !v.active) return { badge: '', note: '' };
+    const st = v.status.get(w.key); if (!st) return { badge: '', note: '' };
+    const [cls, label] = VBADGE[st.status];
+    const added = v.added && v.added.has(w.key) ? `<span class="badge added">${w.addedFrom === 'name' ? 'Found by full name' : 'Added from ' + esc(w.addedFrom === 'Crossref' ? 'publisher record' : 'ORCID')}</span>` : '';
+    const vers = v.versions && v.versions.count.get(w.key) ? `<span class="badge">${v.versions.count.get(w.key)} versions</span>` : '';
+    const showWhy = st.status === 'likely' || st.status === 'unconfirmed';
+    return { badge: `<span class="badge v-${cls}">${label}</span>${added}${vers}`, note: showWhy ? `<p class="vwhy">${st.why.map(esc).join('. ')}.</p>` : '' };
+  }
+  function verifyPanel(s) {
+    const v = s.verify; if (!v) return '';
+    if (v.state === 'none') return `<p class="tiny ah-note">OpenAlex links papers to people automatically and sometimes merges people with similar names. This profile has no ORCID iD, so its papers can’t be cross-checked; a field that looks out of place may hold someone else’s papers, and you can hide it below.</p>`;
+    if (v.state === 'loading') return `<p class="vpanel tiny" role="status">Checking these papers against ORCID ${esc(v.orcids.join(', '))}…</p>`;
+    if (v.state === 'failed') return `<p class="vpanel warn tiny" role="alert">Could not check against ORCID: ${esc(v.errors.join(' '))} Papers by people with similar names may be mixed in.</p>`;
+    if (!v.active) return `<p class="vpanel tiny" role="status">Checked ORCID <a href="https://orcid.org/${esc(v.orcids[0])}" target="_blank" rel="noopener">${esc(v.orcids[0])}</a>: ${v.onRecord ? `none of the ${fmt(v.onRecord)} papers on the ORCID record match this profile` : 'the ORCID record lists no papers'}, and no publisher has tagged these papers with the iD, so they can’t be cross-checked. Papers by people with similar names may be mixed in; a field that looks out of place can be hidden below.${v.errors.length ? ` ${esc(v.errors.join(' '))}` : ''}</p>`;
+    const n = v.counts; const addedN = v.added ? [...v.added].filter(k => s.pool.has(k) && !isVersionDup(s, s.pool.get(k))).length : 0;
+    const confirmed = n.orcid + n.publisher;
+    const parts = [`<strong>${fmt(confirmed)}</strong> confirmed`, n.likely ? `<strong>${fmt(n.likely)}</strong> likely theirs` : '', n.unconfirmed ? `<strong>${fmt(n.unconfirmed)}</strong> not confirmed` : ''].filter(Boolean);
+    return `<div class="vpanel" role="status"><p><strong>Checked against ORCID</strong> <a href="https://orcid.org/${esc(v.orcids[0])}" target="_blank" rel="noopener">${esc(v.orcids[0])}</a>: ${parts.join(', ')}${addedN ? `; <strong>${fmt(addedN)}</strong> added that OpenAlex had not linked to this profile` : ''}.</p>
+      <p class="tiny">Confirmed means the paper is on their ORCID record (${fmt(v.onRecord)} entries) or the publisher lists their ORCID iD on it. Likely means it shares co-authors, the study or their full name with confirmed papers.${v.errors.length ? ` ${esc(v.errors.join(' '))}` : ''}</p>
+      ${v.active && n.unconfirmed ? `<button type="button" class="btn small" id="verify-toggle" aria-pressed="${v.showAside}">${v.showAside ? 'Hide the papers that were not confirmed' : `Show the ${fmt(n.unconfirmed)} papers that were not confirmed`}</button>` : ''}</div>`;
+  }
   function wrowHTML(w) {
     const ti = w.typeInfo; const link = primaryLink(w); const saved = S.saved.has(w.key);
     const co = (w.authors || []).length ? `<div class="wco">${authorLinks(w, 4)}</div>` : '';
-    return `<li class="wrow" data-key="${esc(w.key)}">
-      <div class="badges"><span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}</div>
+    const vb = verifyBits(w);
+    return `<li class="wrow${vb.note && /Not confirmed/.test(vb.badge) ? ' unconf' : ''}" data-key="${esc(w.key)}">
+      <div class="badges">${vb.badge}<span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}</div>
       ${link ? `<a class="wt" href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : `<span class="wt">${esc(w.title)}</span>`}
       <div class="wmeta">${w.venue ? `<span class="venue">${esc(w.venue)}</span>, ` : ''}${w.year || 'n.d.'}${w.cites ? `, cited by ${fmt(w.cites)}` : ''}${w.topic ? `. ${esc(w.topic.name)}` : ''}</div>
-      ${co}
+      ${co}${vb.note}
       <div class="actions"><button type="button" class="save" data-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>
         ${w.cites ? `<button type="button" class="btn link" data-trail="cites" data-key="${esc(w.key)}">Cited by ${fmt(w.cites)}</button>` : ''}
-        <button type="button" class="btn link" data-trail="refs" data-key="${esc(w.key)}">References</button>
-        <button type="button" class="btn link" data-trail="related" data-key="${esc(w.key)}">Similar</button></div></li>`;
+        ${w.openalexId ? `<button type="button" class="btn link" data-trail="refs" data-key="${esc(w.key)}">References</button>` : ''}
+        ${w.openalexId ? `<button type="button" class="btn link" data-trail="related" data-key="${esc(w.key)}">Similar</button>` : ''}</div></li>`;
   }
   function renderAuthorView() {
     const s = S.search; const a = s.author; const c0 = a.cands[0];
@@ -1020,30 +1150,37 @@
     const years = [...s.pool.values()].map(w => w.year).filter(Boolean);
     const y0 = s.exhausted.oa_author || !s.firstYear ? (years.length ? Math.min(...years) : null) : s.firstYear;
     const y1 = years.length ? Math.max(...years) : null;
-    const cites = a.cands.reduce((t, c) => t + (c.cites || 0), 0);
-    const hs = a.cands.map(c => c.h).filter(h => h != null);
+    const v = s.verify || null;
+    const rec0 = v && v.state === 'done' && v.records && v.records.find(r => r.given && r.family);
+    const orcidName = rec0 ? (rec0.credit || `${rec0.given} ${rec0.family}`) : '';
+    const checked = v && v.state === 'done' && v.active && s.exhausted.oa_author;
+    const kept = checked ? [...s.pool.values()].filter(w => !isVersionDup(s, w) && (v.status.get(w.key) || {}).status !== 'unconfirmed') : null;
+    const cites = checked ? kept.reduce((t, w) => t + (w.cites || 0), 0) : a.cands.reduce((t, c) => t + (c.cites || 0), 0);
+    const hs = checked ? [C.hIndex(kept.map(w => w.cites || 0))] : a.cands.map(c => c.h).filter(h => h != null);
     const fails = Object.values(s.status).filter(x => x && x.ok === false);
     $('#interp').innerHTML = `${fails.length ? `<div class="panel warn" role="alert"><strong>Incomplete.</strong> ${fails.map(f => esc(f.msg)).join(' ')}</div>` : ''}
       <div class="panel author-head">
-        <div class="ah-top"><span class="avatar big" aria-hidden="true">${esc(C.initials(a.name))}</span>
-          <div><h2 class="ah-name">${esc(a.name)}</h2><p class="small muted" style="margin:0">${esc(c0.inst || '')}${c0.country ? `, ${esc(c0.country)}` : ''}</p>
+        <div class="ah-top"><span class="avatar big" aria-hidden="true">${esc(C.initials(orcidName || a.name))}</span>
+          <div><h2 class="ah-name">${esc(orcidName || a.name)}</h2>${orcidName && orcidName !== a.name ? `<p class="tiny" style="margin:0">Name from ORCID; OpenAlex lists “${esc(a.name)}”</p>` : ''}<p class="small muted" style="margin:0">${esc(c0.inst || '')}${c0.country ? `, ${esc(c0.country)}` : ''}</p>
           ${c0.orcid ? `<p class="tiny" style="margin:2px 0 0">ORCID <a href="https://orcid.org/${esc(c0.orcid)}" target="_blank" rel="noopener">${esc(c0.orcid)}</a></p>` : ''}</div></div>
         <dl class="ah-stats">
-          <div><dt>Works</dt><dd>${s.totalWorks != null ? fmt(s.totalWorks) : '–'}</dd></div>
+          <div><dt>Works</dt><dd>${checked ? fmt(kept.length) : s.totalWorks != null ? fmt(s.totalWorks) : '–'}</dd></div>
           <div><dt>Citations</dt><dd>${fmt(cites)}</dd></div>
           <div><dt>h-index</dt><dd>${hs.length ? Math.max(...hs) : '–'}</dd></div>
           <div><dt>Active</dt><dd>${y0 && y1 ? (y0 === y1 ? y0 : `${y0}–${y1}`) : '–'}</dd></div></dl>
-        <p class="tiny ah-note">OpenAlex links papers to people automatically and sometimes merges people with similar names. A field that looks out of place may hold someone else’s papers; you can hide it below.</p>
-        ${a.cands.length > 1 ? `<p class="tiny">Combining ${a.cands.length} OpenAlex profiles: ${esc(a.cands.map(c => c.name).join('; '))}. Citations are summed; the h-index shown is the largest single profile’s.</p>` : ''}
+        ${checked ? `<p class="tiny ah-note">Figures count only papers that passed the ORCID check. OpenAlex’s own profile lists ${fmt(s.totalWorks || 0)} works and ${fmt(a.cands.reduce((t, c) => t + (c.cites || 0), 0))} citations.</p>` : ''}
+        ${verifyPanel(s)}
+        ${a.cands.length > 1 && !checked ? `<p class="tiny">Combining ${a.cands.length} OpenAlex profiles: ${esc(a.cands.map(c => c.name).join('; '))}. Citations are summed; the h-index shown is the largest single profile’s.</p>` : ''}
         <div class="row">${S.prevSearch ? `<button type="button" class="btn small" id="trail-back">Back to “${esc(S.prevSearch.q.length > 32 ? S.prevSearch.q.slice(0, 30) + '…' : S.prevSearch.q)}”</button>` : ''}
           <a class="small" href="${esc(safeUrl(c0.id))}" target="_blank" rel="noopener">OpenAlex profile</a></div>
         <p class="tiny" style="margin:6px 0 0">${s.status.oa_author && s.status.oa_author.ok ? `${fmt(s.fetched)} of ${fmt(s.status.oa_author.total)} works loaded. ` : ''}OpenAlex cost: $${s.cost.toFixed(4)}.</p></div>`;
     // field bars: counts over all works (group_by), else over loaded works
-    const rows = s.fieldCounts && s.fieldCounts.length ? s.fieldCounts.slice() : C.groupByField(vis).map(g => ({ name: g.field, count: g.count }));
+    const fromChecked = !!(v && v.state === 'done' && v.active);
+    const rows = s.fieldCounts && s.fieldCounts.length && !fromChecked ? s.fieldCounts.slice() : C.groupByField(vis).map(g => ({ name: g.field, count: g.count }));
     rows.sort((x, y) => (x.name === 'Not classified') - (y.name === 'Not classified') || y.count - x.count);
     const total = rows.reduce((t, r) => t + r.count, 0) || 1; const max = Math.max(1, ...rows.map(r => r.count));
     $('#map-holder').innerHTML = rows.length ? `<section class="panel fields" aria-labelledby="fields-h"><h3 id="fields-h">Works by field</h3>
-      <p class="tiny" style="margin-top:0">${s.fieldCounts ? `All ${fmt(total)} works, by the field of each work’s main topic in OpenAlex.` : 'Works loaded so far, by the field of each work’s main topic.'} Tap a field to open it.</p>
+      <p class="tiny" style="margin-top:0">${fromChecked ? `The ${fmt(total)} papers that passed the ORCID check${s.exhausted.oa_author ? '' : ' among those loaded so far'}, by the field of each paper’s main topic.` : s.fieldCounts ? `All ${fmt(total)} works, by the field of each work’s main topic in OpenAlex.` : 'Works loaded so far, by the field of each work’s main topic.'} Tap a field to open it.</p>
       <ul class="fbars">${rows.map(r => `<li><button type="button" data-field-jump="${esc(r.name)}"><span class="fb-label"><span>${esc(r.name)}</span><span class="fb-n">${fmt(r.count)} <span class="tiny">${Math.round(100 * r.count / total)}%</span></span></span><span class="fb-track" aria-hidden="true"><span class="fb-bar" style="width:${(100 * r.count / max).toFixed(1)}%"></span></span></button></li>`).join('')}</ul></section>` : '';
     $('#answer-holder').innerHTML = ''; $('#compare-holder').innerHTML = '';
     renderFilterbar(vis);
@@ -1058,13 +1195,20 @@
       const missing = !s.exhausted.oa_author && !s.fieldDone[g.field] && sf && sf.id && all > g.count && !filtersActive();
       const more = g.count > n ? `Show all ${fmt(missing ? all : g.count)} in ${esc(g.field)}` : missing ? `Load the other ${fmt(all - g.count)} in ${esc(g.field)}` : '';
       return `<li class="fgroup" id="${fieldSlug(g.field)}"><details ${s.openFields.has(g.field) ? 'open' : ''} data-field-group="${esc(g.field)}">
-        <summary><span class="fg-name">${esc(g.field)}</span> <span class="fg-n">${fmt(g.count)}${missing ? ` <span class="tiny">of ${fmt(all)}</span>` : ''}</span><span class="fg-sub tiny">${g.years ? `${g.years[0]}–${g.years[1]}` : ''}${g.topTopics.length ? `${g.years ? '. ' : ''}${esc(g.topTopics.map(t => t.name).join('; '))}` : ''}</span></summary>
+        <summary><span class="fg-name">${esc(g.field)}</span> <span class="fg-n">${fmt(g.count)}${missing ? ` <span class="tiny">of ${fmt(all)}</span>` : ''}</span><span class="fg-sub tiny">${g.years ? (g.years[0] === g.years[1] ? g.years[0] : `${g.years[0]}–${g.years[1]}`) : ''}${g.topTopics.length ? `${g.years ? '. ' : ''}${esc(g.topTopics.map(t => t.name).join('; '))}` : ''}</span></summary>
         <ol class="wlist">${list.slice(0, n).map(wrowHTML).join('')}</ol>
         <div class="row fg-foot">${more ? `<button type="button" class="btn small fg-more" data-fg-more="${esc(g.field)}">${more}</button>` : ''}
           <button type="button" class="btn link" data-fg-hide="${esc(g.field)}">Hide this field</button></div></details></li>`;
     }).join('') + (hidden.length ? `<li class="fg-hidden small muted">Hidden: ${hidden.map(g => `${esc(g.field)} (${fmt(g.count)}) <button type="button" class="btn link" data-fg-show="${esc(g.field)}">Show</button>`).join('; ')}</li>` : '')
       : `<li class="panel">${s.status.oa_author && s.status.oa_author.ok ? 'No works match your filters.' : 'No works loaded.'}</li>`;
-    $('#more').innerHTML = !s.exhausted.oa_author ? `<button type="button" class="btn" id="author-more">Load more works</button><span class="tiny">${fmt(s.fetched)} of ${fmt(s.status.oa_author ? s.status.oa_author.total : 0)} loaded. Field counts above already cover all works.</span>` : '';
+    const aside = v && v.state === 'done' && v.active && !v.showAside ? authorSorted([...s.pool.values()].filter(w => !isVersionDup(s, w) && (v.status.get(w.key) || {}).status === 'unconfirmed')) : [];
+    if (aside.length) {
+      $('#results').insertAdjacentHTML('beforeend', `<li class="fgroup aside" id="fg-aside"><details data-field-group="__aside" ${s.openFields.has('__aside') ? 'open' : ''}>
+        <summary><span class="fg-name">Not confirmed</span> <span class="fg-n">${fmt(aside.length)}</span><span class="fg-sub tiny">Linked to this profile by OpenAlex, but not on the ORCID record and with no other evidence. They may be someone else’s.</span></summary>
+        <ol class="wlist">${aside.map(wrowHTML).join('')}</ol>
+        <div class="row fg-foot"><button type="button" class="btn small" data-verify-show="1">Count them as theirs after all</button></div></details></li>`);
+    }
+    $('#more').innerHTML = !s.exhausted.oa_author ? `<button type="button" class="btn" id="author-more">Load more works</button><span class="tiny">${fmt(s.fetched)} of ${fmt(s.status.oa_author ? s.status.oa_author.total : 0)} loaded.${fromChecked ? ' Papers are checked against ORCID as they load.' : ' Field counts above already cover all works.'}</span>` : '';
   }
   const doiPath = doi => encodeURI(doi).replace(/[#?]/g, c => encodeURIComponent(c));
   async function runDOI(doi) {
@@ -1224,6 +1368,7 @@
     ['Profile from CV or statement', 'ok', 'Rule-based extraction in the browser (PDF, .docx, text). Editable. Works best on English CVs with section headings.'],
     ['Profile from ORCID', 'ok', 'Reads your publications in OpenAlex: their keywords, topics, titles and abstracts.'],
     ['Author search', 'ok', 'Search by name or ORCID iD; pick or combine profiles; all works grouped by field with counts. Tap any author name on a result to open their works.'],
+    ['ORCID check of an author’s papers', 'ok', 'When an author has an ORCID iD, their papers are checked against their ORCID record and publisher ORCID tags. Papers that don’t match and have no other evidence are set aside with the reasons; papers OpenAlex missed are added.'],
     ['DOI lookup', 'ok', 'Paste a DOI in the search box to open that paper (OpenAlex, then Crossref).'],
     ['Related terms from the results', 'ok', 'Works in any field: terms OpenAlex attaches to many top results. Tap to search them too.'],
     ['Citation trail', 'ok', 'Citing papers, references and similar papers for any result.'],
@@ -1349,6 +1494,7 @@
     if (d.fgHide !== undefined) { S.search.hiddenFields.add(d.fgHide); renderAuthorView(); toast(`Hid ${d.fgHide}`); return; }
     if (d.fgShow !== undefined) { S.search.hiddenFields.delete(d.fgShow); S.search.openFields.add(d.fgShow); renderAuthorView(); return; }
     if (t.id === 'author-more') { fetchAuthorBatch(searchToken); return; }
+    if (t.id === 'verify-toggle' || d.verifyShow) { const v = S.search.verify; v.showAside = !v.showAside; renderAuthorView(); toast(v.showAside ? 'Showing papers that were not confirmed' : 'Not-confirmed papers set aside'); return; }
     if (d.trail && d.key) { const w = S.search && S.search.pool.get(d.key); if (w) runTrail(w, d.trail); return; }
     if (d.trailSwitch) { runTrail(S.search.trail.seed, d.trailSwitch); return; }
     if (t.id === 'trail-back' && S.prevSearch) {

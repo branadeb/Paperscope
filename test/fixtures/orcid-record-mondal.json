@@ -1,0 +1,244 @@
+{
+ "orcid-identifier": {
+  "path": "0000-0003-4764-0737"
+ },
+ "person": {
+  "name": {
+   "given-names": {
+    "value": "Monosij"
+   },
+   "family-name": {
+    "value": "Mondal"
+   },
+   "credit-name": null
+  },
+  "other-names": {
+   "other-name": []
+  }
+ },
+ "activities-summary": {
+  "educations": {
+   "affiliation-group": [
+    {
+     "summaries": [
+      {
+       "education-summary": {
+        "organization": {
+         "name": "University of Pennsylvania"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "employments": {
+   "affiliation-group": [
+    {
+     "summaries": [
+      {
+       "employment-summary": {
+        "organization": {
+         "name": "Columbia University"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "works": {
+   "group": [
+    {
+     "external-ids": {
+      "external-id": [
+       {
+        "external-id-type": "doi",
+        "external-id-value": "10.26434/chemrxiv-2025-ndqzk/v4",
+        "external-id-normalized": {
+         "value": "10.26434/chemrxiv-2025-ndqzk/v4"
+        },
+        "external-id-relationship": "self"
+       }
+      ]
+     },
+     "work-summary": [
+      {
+       "title": {
+        "title": {
+         "value": "Evidence for significant multi-Li+ clustering in common lithium-ion battery electrolytes"
+        }
+       },
+       "type": "preprint",
+       "publication-date": {
+        "year": {
+         "value": "2026"
+        }
+       },
+       "journal-title": null,
+       "source": {
+        "source-name": {
+         "value": "Crossref"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "external-ids": {
+      "external-id": [
+       {
+        "external-id-type": "doi",
+        "external-id-value": "10.26434/chemrxiv-2025-ndqzk-v2",
+        "external-id-normalized": {
+         "value": "10.26434/chemrxiv-2025-ndqzk-v2"
+        },
+        "external-id-relationship": "self"
+       }
+      ]
+     },
+     "work-summary": [
+      {
+       "title": {
+        "title": {
+         "value": "Evidence for significant multi-Li+ clustering in common lithium-ion battery electrolytes"
+        }
+       },
+       "type": "preprint",
+       "publication-date": {
+        "year": {
+         "value": "2025"
+        }
+       },
+       "journal-title": null
+      }
+     ]
+    },
+    {
+     "external-ids": {
+      "external-id": [
+       {
+        "external-id-type": "doi",
+        "external-id-value": "10.1021/acs.jpclett.2c02304",
+        "external-id-normalized": {
+         "value": "10.1021/acs.jpclett.2c02304"
+        },
+        "external-id-relationship": "self"
+       }
+      ]
+     },
+     "work-summary": [
+      {
+       "title": {
+        "title": {
+         "value": "Strong Coupling in Infrared Plasmonic Cavities"
+        }
+       },
+       "type": "journal-article",
+       "publication-date": {
+        "year": {
+         "value": "2022"
+        }
+       },
+       "journal-title": {
+        "value": "The Journal of Physical Chemistry Letters"
+       }
+      }
+     ]
+    },
+    {
+     "external-ids": {
+      "external-id": [
+       {
+        "external-id-type": "doi",
+        "external-id-value": "10.1063/5.0077739",
+        "external-id-normalized": {
+         "value": "10.1063/5.0077739"
+        },
+        "external-id-relationship": "self"
+       }
+      ]
+     },
+     "work-summary": [
+      {
+       "title": {
+        "title": {
+         "value": "Coupling, lifetimes, and \u201cstrong coupling\u201d maps for single molecules at plasmonic interfaces"
+        }
+       },
+       "type": "journal-article",
+       "publication-date": {
+        "year": {
+         "value": "2022"
+        }
+       },
+       "journal-title": {
+        "value": "The Journal of Chemical Physics"
+       }
+      }
+     ]
+    },
+    {
+     "external-ids": {
+      "external-id": [
+       {
+        "external-id-type": "eid",
+        "external-id-value": "2-s2.0-84958521444",
+        "external-id-relationship": "self"
+       },
+       {
+        "external-id-type": "doi",
+        "external-id-value": "10.1080/00268976.2016.1142126",
+        "external-id-normalized": {
+         "value": "10.1080/00268976.2016.1142126"
+        },
+        "external-id-relationship": "self"
+       }
+      ]
+     },
+     "work-summary": [
+      {
+       "title": {
+        "title": {
+         "value": "A state-specific multi-reference coupled-cluster approach with a cost-effective treatment of connected triples: Implementation to geometry optimisation"
+        }
+       },
+       "type": "journal-article",
+       "publication-date": {
+        "year": {
+         "value": "2016"
+        }
+       },
+       "journal-title": {
+        "value": "Molecular Physics"
+       }
+      }
+     ]
+    },
+    {
+     "external-ids": {
+      "external-id": []
+     },
+     "work-summary": [
+      {
+       "title": {
+        "title": {
+         "value": "A conference talk listed without a DOI"
+        }
+       },
+       "type": "conference-abstract",
+       "publication-date": {
+        "year": {
+         "value": "2021"
+        }
+       },
+       "journal-title": {
+        "value": "APS March Meeting"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

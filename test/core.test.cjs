@@ -239,5 +239,85 @@ t('related-term matches raise a paper and are explained', () => {
   assert(C.explain(a, { analysis }).reasons.some(x => /related term “singlet fission”/.test(x.text)));
 });
 
+
+// ---------------------------------------------------------------- ORCID cross-check (modelled on a real merged OpenAlex profile)
+const rec = C.parseOrcidRecord(JSON.parse(fs.readFileSync(fx('orcid-record-mondal.json'), 'utf8')));
+t('ORCID record: name, organisations and works with DOIs', () => {
+  assert.strictEqual(rec.orcid, '0000-0003-4764-0737');
+  assert.strictEqual(rec.given, 'Monosij'); assert.strictEqual(rec.family, 'Mondal');
+  assert.deepStrictEqual(rec.orgs.sort(), ['Columbia University', 'University of Pennsylvania']);
+  assert.strictEqual(rec.works.length, 6);
+  assert.deepStrictEqual(rec.works[4].dois, ['10.1080/00268976.2016.1142126']);
+  assert.strictEqual(rec.works[5].dois.length, 0);
+  const item = C.normOrcidWork(rec.works[5], 1);
+  assert.strictEqual(item.crType, 'proceedings-article'); assert.strictEqual(item.year, 2021);
+});
+t('preprint versions share a version key', () => {
+  assert.strictEqual(C.versionKey('10.26434/chemrxiv-2025-ndqzk/v4'), '10.26434/chemrxiv-2025-ndqzk');
+  assert.strictEqual(C.versionKey('10.26434/chemrxiv-2025-ndqzk-v2'), '10.26434/chemrxiv-2025-ndqzk');
+  assert.strictEqual(C.versionKey('https://doi.org/10.1063/5.0077739'), '10.1063/5.0077739');
+});
+t('name forms: full, initial only, other person', () => {
+  const P = [{ given: 'Monosij', family: 'Mondal', others: [] }];
+  assert.strictEqual(C.nameForm('Monosij Mondal', P), 'full');
+  assert.strictEqual(C.nameForm('Mondal, Monosij', P), 'full');
+  assert.strictEqual(C.nameForm('M. Mondal', P), 'initial');
+  assert.strictEqual(C.nameForm('M Mondal', P), 'initial');
+  assert.strictEqual(C.nameForm('Mintu Mondal', P), 'variant');
+  assert.strictEqual(C.nameForm('Arup Mondal', P), 'other');
+  assert.strictEqual(C.nameForm('José Pérez', [{ given: 'Jose', family: 'Perez' }]), 'full');
+});
+t('verification separates two people merged into one profile', () => {
+  const ME = 'https://openalex.org/A5084327602';
+  const sh = (id, name, raw, inst = [], orcid = '') => ({ id, name, raw, orcid, inst });
+  const w = (key, title, year, doi, field, ships) => ({ key, title, year, doi, topic: field ? { field } : null, ships, authors: ships.map(x => x.name), ranks: { oa_author: 1 } });
+  const nitzan = sh('A1', 'Abraham Nitzan', 'Abraham Nitzan'), ochoa = sh('A2', 'Maicol A. Ochoa', 'Maicol A. Ochoa');
+  const lab = ['James Stevenson', 'Garvit Agarwal', 'Leif D. Jacobson', 'Richard A. Friesner'].map((n, i) => sh('B' + i, n, n));
+  const works = [
+    // in OpenAlex's profile
+    w('nature', 'Evidence for multi-Li+ clustering in lithium-ion battery electrolytes', 2026, '10.1038/s41586-026-11138-7', 'Engineering', [lab[0], lab[1], sh(ME, 'M. Mondal', 'Monosij Mondal', ['Columbia University']), lab[2], lab[3]]),
+    w('molphys', 'A state-specific multi-reference coupled-cluster approach with a cost-effective treatment of connected triples: implementation to geometry optimisation', 2016, '10.1080/00268976.2016.1142126', 'Physics and Astronomy', [sh('C1', 'Debi Banerjee', 'Debi Banerjee'), sh(ME, 'M. Mondal', 'Monosij Mondal', ['Indian Institute of Engineering Science and Technology, Shibpur'])]),
+    w('thesis', 'Semiclassical Modeling of Optical Properties of Molecules in Cavity Environments', 2023, '', 'Physics and Astronomy', [sh(ME, 'M. Mondal', 'Mondal, Monosij')]),
+    w('coll1', 'Electron capture and excitation in He+ + He collisions at intermediate and high energies', 2025, '10.1103/wktq-w1zb', 'Physics and Astronomy', [sh('D1', 'B. Mandal', 'B. Mandal'), sh('D2', 'T.K. Mistry', 'T.K. Mistry'), sh(ME, 'M. Mondal', 'M. Mondal', ['Ramakrishna Mission Residential College']), sh('D3', 'Malay Purkait', 'Malay Purkait')]),
+    w('coll2', 'Positronium formation in collisions of positron with water and methane molecules', 2025, '10.1088/1402-4896/adefa1', 'Physics and Astronomy', [sh(ME, 'M. Mondal', 'M Mondal', ['Ramakrishna Mission Residential College']), sh('D2', 'T.K. Mistry', 'T.K. Mistry'), sh('D3', 'Malay Purkait', 'Malay Purkait')]),
+    // added from ORCID (OpenAlex had not linked them: author id is empty, ORCID on the authorship)
+    w('jpcl', 'Strong Coupling in Infrared Plasmonic Cavities', 2022, '10.1021/acs.jpclett.2c02304', 'Physics and Astronomy', [sh('', 'Monosij Mondal', 'Monosij Mondal', [], '0000-0003-4764-0737'), ochoa, nitzan]),
+    w('chemrxiv', 'Evidence for significant multi-Li+ clustering in common lithium-ion battery electrolytes', 2025, '10.26434/chemrxiv-2025-ndqzk-v2', 'Engineering', [lab[0], lab[1], sh('', 'Monosij Mondal', 'Monosij Mondal', [], '0000-0003-4764-0737'), lab[2], lab[3]]),
+  ];
+  const ev = { persons: [{ given: rec.given, family: rec.family, others: [] }], ids: new Set([ME]), orcids: new Set([rec.orcid]),
+    orcidDOIs: new Set(rec.works.flatMap(x => x.dois.map(C.versionKey))), orcidWorks: rec.works, crossrefDOIs: new Set(), orgs: rec.orgs };
+  const r = C.verifyAuthorWorks(works, ev);
+  const st = k => r.get(k).status;
+  assert.strictEqual(st('molphys'), 'orcid'); assert.strictEqual(st('jpcl'), 'orcid'); assert.strictEqual(st('chemrxiv'), 'orcid');
+  assert.strictEqual(st('nature'), 'likely', JSON.stringify(r.get('nature')));
+  assert(/co-authors/.test(r.get('nature').why[0]));
+  assert.strictEqual(st('thesis'), 'likely', JSON.stringify(r.get('thesis')));
+  assert(/full name/.test(r.get('thesis').why[0]));
+  assert.strictEqual(st('coll1'), 'unconfirmed'); assert.strictEqual(st('coll2'), 'unconfirmed');
+  const why = r.get('coll1').why.join(' | ');
+  assert(/Not on their ORCID record/.test(why) && /“M\. Mondal”/.test(why) && /Ramakrishna Mission/.test(why) && /No co-authors in common/.test(why), why);
+  // publisher-tagged ORCID iDs count as confirmation too
+  const r2 = C.verifyAuthorWorks(works, { ...ev, orcidDOIs: new Set(), orcidWorks: [], crossrefDOIs: new Set(['10.1021/acs.jpclett.2c02304']) });
+  assert.strictEqual(r2.get('jpcl').status, 'publisher');
+});
+t('with nothing to compare against, full names count and nothing is set aside', () => {
+  const ev = { persons: [{ given: 'Monosij', family: 'Mondal', others: [] }], ids: new Set(['X']), orcids: new Set(), orcidDOIs: new Set(), orcidWorks: [], crossrefDOIs: new Set(), orgs: [] };
+  const r = C.verifyAuthorWorks([{ key: 'a', title: 'T', ships: [{ id: 'X', name: 'M. Mondal', raw: 'Monosij Mondal', inst: [] }], authors: [] },
+    { key: 'b', title: 'U', ships: [{ id: 'X', name: 'M. Mondal', raw: 'M. Mondal', inst: [] }], authors: [] }], ev);
+  assert.strictEqual(r.get('a').status, 'likely'); assert.strictEqual(r.get('b').status, 'unconfirmed');
+});
+t('preprint versions collapse to one entry', () => {
+  const mk = (key, doi, year, inProfile) => ({ key, doi, year, ranks: inProfile ? { oa_author: 1 } : { oa_orcid: 1 } });
+  const v = C.collapseVersions([mk('a', '10.26434/chemrxiv-2025-ndqzk-v2', 2025), mk('b', '10.26434/chemrxiv-2025-ndqzk/v4', 2026), mk('c', '10.1063/5.0077739', 2022)]);
+  assert.deepStrictEqual([...v.hide], ['a']); assert.strictEqual(v.count.get('b'), 2);
+});
+t('h-index from citation counts', () => {
+  assert.strictEqual(C.hIndex([10, 8, 5, 4, 3]), 4); assert.strictEqual(C.hIndex([]), 0); assert.strictEqual(C.hIndex([0, 0]), 0);
+});
+t('OpenAlex works keep authorship detail for the check', () => {
+  const x = C.normOpenAlex({ id: 'W1', display_name: 'T', authorships: [{ author: { id: 'https://openalex.org/A1', display_name: 'M. Mondal', orcid: 'https://orcid.org/0000-0003-4764-0737' }, raw_author_name: 'Monosij Mondal', institutions: [{ display_name: 'Columbia University' }] }] }, 'oa_author', 1);
+  assert.deepStrictEqual(x.ships[0], { id: 'https://openalex.org/A1', name: 'M. Mondal', raw: 'Monosij Mondal', orcid: '0000-0003-4764-0737', inst: ['Columbia University'] });
+});
+
 console.log(`\n${pass}/${pass + fail} unit tests passed`);
 process.exit(fail ? 1 : 0);

@@ -12,7 +12,7 @@ const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'test', 'out');
 fs.mkdirSync(OUT, { recursive: true });
 
-const log = []; const calls = [];
+const log = []; const calls = []; const orcidAccept = [];
 const check = (name, ok, detail = '') => { log.push({ name, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
 const server = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(fs.readFileSync(path.join(ROOT, 'dist', 'index.html'))); }).listen(8768);
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
@@ -71,6 +71,45 @@ const DOI_FOUND = aw(TOP.chem, 2021, [ADA, BO], 12); DOI_FOUND.doi = 'https://do
 const TOPIC_RESULTS = [aw(TOP.chem, 2022, [ADA, BO], 80), aw(TOP.eng, 2020, [BO, ADA], 50), aw(TOP.chem, 2019, [{ display_name: 'Cy Other' }], 20)];
 TOPIC_RESULTS.forEach((w, i) => { w.display_name = ['Electron transfer in organic photochemistry', 'Organic photochemistry for photovoltaics', 'Photochemistry of electron transfer'][i]; });
 
+// ---------- a merged profile, modelled on a real one: two people with the same surname and initial
+const MM = 'https://openalex.org/A5084327602'; const MORCID = '0000-0003-4764-0737';
+const MREC = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'orcid-record-mondal.json'), 'utf8'));
+let mn = 0;
+function mw({ title, year, doi, field, ships, cites = 0 }) {
+  mn++;
+  const t = field ? { id: `${OA}T95${mn}`, display_name: field === 'Engineering' ? 'Advancements in Battery Materials' : field === 'Chemistry' ? 'Machine Learning in Materials Science' : 'Atomic and Molecular Physics', subfield: { display_name: 'x' }, field: { id: `${OA}fields/${{ Engineering: 22, Chemistry: 16 }[field] || 31}`, display_name: field }, domain: { display_name: 'Physical Sciences' } } : null;
+  return { id: `${OA}W8${String(mn).padStart(6, '0')}`, doi: doi ? `https://doi.org/${doi}` : null, display_name: title, publication_year: year, publication_date: `${year}-03-01`, type: 'article', cited_by_count: cites,
+    authorships: ships.map(([id, name, raw, inst, orcid]) => ({ author: { id: id || null, display_name: name, orcid: orcid ? `https://orcid.org/${orcid}` : null }, raw_author_name: raw || name, institutions: (inst || []).map(d => ({ display_name: d })) })),
+    primary_location: { landing_page_url: doi ? `https://doi.org/${doi}` : null, raw_type: 'journal-article', source: { display_name: 'Some Journal' } }, best_oa_location: null, open_access: { is_oa: false }, primary_topic: t, keywords: [], abstract_inverted_index: null, is_retracted: false };
+}
+const LAB = [['L1', 'James Stevenson'], ['L2', 'Garvit Agarwal'], ['L3', 'Leif D. Jacobson'], ['L4', 'Richard A. Friesner']];
+const COLL = [['P1', 'B. Mandal'], ['P2', 'T.K. Mistry'], ['P3', 'Malay Purkait']];
+const RKM = ['Ramakrishna Mission Residential College'];
+const MPROFILE = [
+  mw({ title: 'Evidence for multi-Li+ clustering in lithium-ion battery electrolytes', year: 2026, doi: '10.1038/s41586-026-11138-7', field: 'Engineering', cites: 4, ships: [LAB[0], LAB[1], [MM, 'M. Mondal', 'Monosij Mondal', ['Columbia University'], MORCID], LAB[2], LAB[3]] }),
+  mw({ title: 'Electron capture and excitation in He+ + He collisions at intermediate and high energies', year: 2025, doi: '10.1103/wktq-w1zb', field: 'Physics and Astronomy', cites: 1, ships: [COLL[0], COLL[1], [MM, 'M. Mondal', 'M. Mondal', RKM, MORCID], COLL[2]] }),
+  mw({ title: 'Positronium formation in collisions of positron with water and methane molecules', year: 2025, doi: '10.1088/1402-4896/adefa1', field: 'Physics and Astronomy', cites: 2, ships: [[MM, 'M. Mondal', 'M Mondal', RKM, MORCID], COLL[1], COLL[2]] }),
+  mw({ title: 'Theoretical triple differential cross sections for ionization of N2 and CH4 molecules by electron impact', year: 2024, doi: '10.1088/1402-4896/ad3e42', field: 'Physics and Astronomy', cites: 3, ships: [[MM, 'M. Mondal', 'M Mondal', RKM, MORCID], COLL[0], COLL[2]] }),
+  mw({ title: 'Single-electron-capture from helium by projectile ions in intermediate-to-high energies', year: 2023, doi: '10.1007/s12648-023-02787-9', field: 'Physics and Astronomy', cites: 5, ships: [COLL[2], [MM, 'M. Mondal', 'M. Mondal', RKM, MORCID]] }),
+  mw({ title: 'Semiclassical Modeling of Optical Properties of Molecules in Cavity Environments', year: 2023, doi: null, field: 'Physics and Astronomy', ships: [[MM, 'M. Mondal', 'Mondal, Monosij', [], MORCID]] }),
+  mw({ title: 'A state-specific multi-reference coupled-cluster approach with a cost-effective treatment of connected triples: implementation to geometry optimisation', year: 2016, doi: '10.1080/00268976.2016.1142126', field: 'Physics and Astronomy', cites: 9, ships: [['Q1', 'Debi Banerjee'], [MM, 'M. Mondal', 'Monosij Mondal', ['Indian Institute of Engineering Science and Technology, Shibpur'], MORCID]] }),
+];
+const UNLINKED = [ // in OpenAlex, but the authorship has no author id
+  mw({ title: 'Strong Coupling in Infrared Plasmonic Cavities', year: 2022, doi: '10.1021/acs.jpclett.2c02304', field: 'Physics and Astronomy', cites: 30, ships: [[null, 'Monosij Mondal', 'Monosij Mondal', [], MORCID], ['N2', 'Maicol A. Ochoa'], ['N1', 'Abraham Nitzan']] }),
+  mw({ title: 'Coupling, lifetimes, and “strong coupling” maps for single molecules at plasmonic interfaces', year: 2022, doi: '10.1063/5.0077739', field: 'Physics and Astronomy', cites: 20, ships: [[null, 'Monosij Mondal', 'Monosij Mondal', [], MORCID], ['N2', 'Maicol A. Ochoa'], ['N3', 'Maxim Sukharev'], ['N1', 'Abraham Nitzan']] }),
+  mw({ title: 'Evidence for significant multi-Li+ clustering in common lithium-ion battery electrolytes', year: 2025, doi: '10.26434/chemrxiv-2025-ndqzk-v2', field: 'Engineering', ships: [LAB[0], LAB[1], [null, 'Monosij Mondal', 'Monosij Mondal', [], MORCID], LAB[2], LAB[3]] }),
+  mw({ title: 'Evidence for significant multi-Li+ clustering in common lithium-ion battery electrolytes', year: 2026, doi: '10.26434/chemrxiv-2025-ndqzk/v4', field: 'Engineering', ships: [LAB[0], LAB[1], [null, 'Monosij Mondal', 'Monosij Mondal', [], MORCID], LAB[2], LAB[3]] }),
+];
+const BY_NAME = [ // raw-name search: one of his, one by a different Mondal
+  mw({ title: 'Scalable and Generalizable Machine Learning Force Fields for Modeling Complex Battery Materials', year: 2025, doi: '10.1149/ma2025-02291586mtgabs', field: 'Chemistry', ships: [LAB[1], [null, 'Monosij Mondal', 'Monosij Mondal'], LAB[2]] }),
+  mw({ title: 'Silent Threshold Traitor Tracing', year: 2025, doi: '10.1145/3719027.3765099', field: 'Chemistry', ships: [['Z1', 'Arup Mondal', 'Arup Mondal']] }),
+];
+const MAUTH = { id: MM, display_name: 'M. Mondal', orcid: `https://orcid.org/${MORCID}`, works_count: 7, cited_by_count: 24, summary_stats: { h_index: 3 }, last_known_institutions: [{ display_name: 'Columbia University', country_code: 'US' }], topics: [] };
+const CR_ORCID = [ // what Crossref has with this ORCID attached by publishers
+  { DOI: '10.1021/acs.jpclett.2c02304', title: ['Strong Coupling in Infrared Plasmonic Cavities'], issued: { 'date-parts': [[2022]] }, type: 'journal-article', author: [{ given: 'Monosij', family: 'Mondal', ORCID: `https://orcid.org/${MORCID}` }] },
+  { DOI: '10.26434/chemrxiv-2025-ndqzk/v3', title: ['Evidence for significant multi-Li+ clustering in common lithium-ion battery electrolytes'], issued: { 'date-parts': [[2026]] }, type: 'posted-content', author: [{ given: 'Monosij', family: 'Mondal', ORCID: `https://orcid.org/${MORCID}` }] },
+];
+
 function mockOpenAlex(req, u) {
   const p = u.searchParams; const f = p.get('filter') || '';
   const per = Number(p.get('per_page') || 25); const page = Number(p.get('page') || 1);
@@ -78,9 +117,20 @@ function mockOpenAlex(req, u) {
   const authorMatch = u.pathname.match(/^\/authors\/(A\d+)$/);
   if (authorMatch) return AUTH[authorMatch[1]] ? json(req, AUTH[authorMatch[1]]) : json(req, { error: 'not found' }, 404);
   if (u.pathname.startsWith('/authors/orcid:')) return u.pathname.endsWith('0000-0002-1825-0097') ? json(req, AUTH.A1001) : json(req, { error: 'not found' }, 404);
+  if (u.pathname === '/authors/A5084327602') return json(req, MAUTH);
+  if (/raw_author_name\.search:/.test(f)) return json(req, { meta: meta(/Monosij/.test(f) ? 2 : 0, 0.001), results: /Monosij Mondal/.test(f) ? BY_NAME : [] });
+  if (/^doi:/.test(f)) {
+    const want = f.slice(4).split('|');
+    return json(req, { meta: meta(0, 0.0001), results: UNLINKED.filter(w => want.includes(w.doi.replace('https://doi.org/', ''))) });
+  }
+  if (u.pathname === '/works' && /author\.id:A5084327602/.test(f)) {
+    if (p.get('group_by')) return json(req, { meta: meta(7, 0.0001), group_by: [{ key: `${OA}fields/31`, key_display_name: 'Physics and Astronomy', count: 6 }, { key: `${OA}fields/22`, key_display_name: 'Engineering', count: 1 }] });
+    if (p.get('sort') === 'publication_year:asc') return json(req, { meta: meta(7, 0.0001), results: [{ publication_year: 2016 }] });
+    return json(req, { meta: meta(7, 0.0001), results: MPROFILE });
+  }
   if (u.pathname === '/authors') {
     const q = (p.get('search') || '').toLowerCase();
-    const res = q === 'ada example' ? [AUTH.A1001, AUTH.A1002, AUTH.A1003] : q === 'solo person' ? [AUTH.A3001] : [];
+    const res = q === 'ada example' ? [AUTH.A1001, AUTH.A1002, AUTH.A1003] : q === 'solo person' ? [AUTH.A3001] : q === 'monosij mondal' ? [MAUTH] : [];
     return json(req, { meta: meta(res.length, 0.001), results: res });
   }
   if (u.pathname.startsWith('/works/doi:')) {
@@ -122,6 +172,15 @@ function mockOpenAlex(req, u) {
     if (req.method() === 'OPTIONS') return req.respond({ status: 204, headers: CORS });
     calls.push(`${u.hostname}${decodeURIComponent(u.pathname)}?${decodeURIComponent(u.search.slice(1).replace(/\+/g, ' '))}`);
     if (u.hostname === 'api.openalex.org') return mockOpenAlex(req, u);
+    if (u.hostname === 'pub.orcid.org') {
+      orcidAccept.push(req.headers().accept || '');
+      if (u.pathname === `/v3.0/${MORCID}/record`) return json(req, MREC);
+      if (u.pathname === '/v3.0/0000-0002-1825-0097/record') return json(req, { 'orcid-identifier': { path: '0000-0002-1825-0097' }, person: { name: { 'given-names': { value: 'Ada' }, 'family-name': { value: 'Example' } } }, 'activities-summary': { works: { group: [] } } });
+      return json(req, { 'response-code': 404 }, 404);
+    }
+    if (u.hostname === 'api.crossref.org' && /filter=orcid/.test(decodeURIComponent(u.search))) {
+      return json(req, { message: { 'total-results': 0, items: decodeURIComponent(u.search).includes(MORCID) ? CR_ORCID : [] } });
+    }
     if (u.hostname === 'api.crossref.org') {
       if (u.pathname.startsWith('/works/')) {
         const doi = decodeURIComponent(u.pathname.slice(7)).toLowerCase();
@@ -140,7 +199,7 @@ function mockOpenAlex(req, u) {
   const idle = () => page.waitForFunction(() => document.querySelector('#loading').hidden, { timeout: 15000 });
   const type = (v) => page.$eval('#q', (el, x) => { el.value = x; }, v);
   const submit = async v => { await type(v); await tap('#search-form button'); };
-  const waitAuthor = name => page.waitForFunction(n => { const h = document.querySelector('.ah-name'); return h && h.textContent === n && document.querySelector('#loading').hidden && document.querySelectorAll('.wrow').length > 0; }, { timeout: 15000 }, name);
+  const waitAuthor = name => page.waitForFunction(n => { const h = document.querySelector('.ah-name'); const v = window.Paperscope.S.search.verify; return h && h.textContent === n && document.querySelector('#loading').hidden && document.querySelectorAll('.wrow').length > 0 && v && v.state !== 'loading'; }, { timeout: 15000 }, name);
   const axeRun = async () => {
     if (!(await page.evaluate(() => !!window.axe))) await page.addScriptTag({ path: path.join(VENDOR, 'axe-core/axe.min.js') });
     return page.evaluate(async () => (await window.axe.run(document, { runOnly: ['wcag2a', 'wcag2aa'] })).violations.map(v => `${v.id} (${v.nodes.length}) ${v.nodes.slice(0, 3).map(n => n.target.join(' ')).join(' ; ')}`));
@@ -189,7 +248,8 @@ function mockOpenAlex(req, u) {
   check('header sums citations and shows largest h-index', head.stats.some(s => /Citations 9,126/.test(s)) && head.stats.some(s => /h-index 41/.test(s)), head.stats.join(' | '));
   check('header shows the full active span (oldest work fetched separately)', head.stats.some(s => /Active 2001–2024/.test(s)), head.stats.join(' | '));
   check('header explains combined profiles', /Combining 2 OpenAlex profiles/.test(head.text));
-  check('header warns that author matching can mix people', /merges people with similar names/.test(head.text));
+  check('header explains why papers cannot be cross-checked (empty ORCID record)', /ORCID record lists no papers/.test(head.text) && /similar names may be mixed in/.test(head.text), head.text.slice(0, 400));
+  check('no ORCID badges when nothing could be confirmed', !(await page.$('.badge.v-ok, .badge.v-warn, .badge.v-likely')));
   check('header shows ORCID and cost', /0000-0002-1825-0097/.test(head.text) && /OpenAlex cost: \$0\.0/.test(head.text));
 
   // ---------- field bars
@@ -318,6 +378,60 @@ function mockOpenAlex(req, u) {
   await submit('Nobody Here');
   await page.waitForFunction(() => /No authors named/.test(document.querySelector('#clarify').innerText), { timeout: 10000 });
   check('no match explains what to try', /initials/.test(await page.$eval('#clarify', c => c.innerText)));
+
+  // ---------- ORCID cross-check on a profile that merges two people
+  calls.length = 0; orcidAccept.length = 0;
+  await submit('Monosij Mondal');
+  await waitAuthor('Monosij Mondal');
+  check('heading uses the name on the ORCID record', /OpenAlex lists “M\. Mondal”/.test(await page.$eval('.author-head', h => h.innerText)));
+  check('ORCID record read from the ORCID public API as JSON', calls.some(c => c.startsWith(`pub.orcid.org/v3.0/${MORCID}/record`)) && orcidAccept.every(a => /application\/json/.test(a)), calls.filter(c => /orcid/.test(c)).join(' | '));
+  check('publisher ORCID tags read from Crossref', calls.some(c => /api\.crossref\.org\/works\?filter=orcid:0000-0003-4764-0737/.test(c)));
+  const doiCall = calls.find(c => /filter=doi:/.test(c)) || '';
+  check('papers OpenAlex had not linked are fetched by DOI', /10\.1021\/acs\.jpclett\.2c02304/.test(doiCall) && /10\.1063\/5\.0077739/.test(doiCall) && !/10\.1080\/00268976/.test(doiCall), doiCall);
+  check('full-name search runs for missing papers', calls.some(c => /raw_author_name\.search:Monosij Mondal/.test(c)));
+  const vp = await page.$eval('.vpanel', p => p.innerText.replace(/\s+/g, ' '));
+  check('panel sums up the check', /Checked against ORCID 0000-0003-4764-0737: 5 confirmed, 3 likely theirs, 4 not confirmed; 5 added/.test(vp), vp);
+  const shown = await page.$$eval('details[data-field-group]:not([data-field-group="__aside"]) .wrow .wt', els => els.map(e => e.textContent));
+  const aside = await page.$$eval('details[data-field-group="__aside"] .wrow', els => els.map(e => ({ t: e.querySelector('.wt').textContent, why: e.querySelector('.vwhy').textContent })));
+  check('the other person’s papers are set aside', aside.length === 4 && aside.every(a => /collision|Positronium|cross sections|capture/i.test(a.t)) && !shown.some(t => /collision|Positronium|cross sections|capture/i.test(t)), aside.map(a => a.t).join(' | '));
+  check('set-aside papers say why', aside.every(a => /Not on their ORCID record/.test(a.why) && /Ramakrishna Mission/.test(a.why) && /No co-authors in common/.test(a.why)) && aside.some(a => /“M\. Mondal”/.test(a.why)), aside[0] && aside[0].why);
+  check('his unlinked papers are added', shown.includes('Strong Coupling in Infrared Plasmonic Cavities') && shown.some(t => /strong coupling” maps/.test(t)), shown.join(' | '));
+  check('preprint versions shown once', shown.filter(t => /significant multi-Li\+ clustering/.test(t)).length === 1);
+  check('an ORCID entry with no DOI is listed', shown.includes('A conference talk listed without a DOI'));
+  check('a paper found by his full name joins only with evidence', shown.some(t => /Machine Learning Force Fields/.test(t)) && !shown.some(t => /Traitor Tracing/.test(t)));
+  const rowList = await page.$$eval('.wrow', els => els.map(e => ({ t: e.querySelector('.wt').textContent, b: [...e.querySelectorAll('.badge')].map(b => b.textContent).join(','), why: (e.querySelector('.vwhy') || {}).textContent || '' })));
+  const row = start => rowList.find(r => r.t.startsWith(start));
+  const natureRow = row('Evidence for multi-Li+');
+  check('published paper counted as likely, via shared co-authors', natureRow && /Likely theirs/.test(natureRow.b) && /Shares co-authors/.test(natureRow.why), JSON.stringify(natureRow));
+  const thesis = row('Semiclassical Modeling');
+  check('thesis counted as likely from his full name', thesis && /Likely theirs/.test(thesis.b) && /full name/.test(thesis.why), JSON.stringify(thesis));
+  const jpcl = row('Strong Coupling in Infrared');
+  check('confirmed and added papers are labelled', jpcl && /On ORCID/.test(jpcl.b) && /Added from ORCID/.test(jpcl.b), JSON.stringify(jpcl));
+  const crRow = row('Evidence for significant');
+  check('preprint row shows its versions', crRow && /\d versions/.test(crRow.b), JSON.stringify(crRow));
+  const mstats = await page.$$eval('.ah-stats div', els => els.map(d => d.innerText.replace(/\s+/g, ' ')));
+  check('header figures count only checked papers', mstats.some(x => /Works 8/.test(x)) && mstats.some(x => /Citations 63/.test(x)) && mstats.some(x => /h-index 4/.test(x)), mstats.join(' | '));
+  check('header notes OpenAlex’s own totals', /OpenAlex’s own profile lists 7 works and 24 citations/.test(await page.$eval('.author-head', h => h.innerText)));
+  const mbars = await page.$$eval('.fbars button', els => els.map(b => `${b.dataset.fieldJump}=${b.querySelector('.fb-n').firstChild.textContent.trim()}`));
+  check('field bars count only checked papers', mbars.join(',') === 'Physics and Astronomy=4,Engineering=2,Chemistry=1,Not classified=1', mbars.join(','));
+  for (const mode of ['light', 'dark']) {
+    await page.evaluate(m => { document.documentElement.dataset.appearance = m; window.scrollTo(0, 0); }, mode);
+    await new Promise(r => setTimeout(r, 450));
+    await page.screenshot({ path: path.join(OUT, `orcid-${mode}.png`) });
+    const vax = await axeRun();
+    check(`ORCID check (${mode}): no WCAG A/AA violations`, vax.length === 0, vax.join(' | '));
+  }
+  await page.evaluate(() => { document.documentElement.dataset.appearance = 'light'; });
+  await page.$eval('details[data-field-group="__aside"]', d => { d.open = true; d.scrollIntoView(); });
+  await new Promise(r => setTimeout(r, 300));
+  await page.screenshot({ path: path.join(OUT, 'orcid-aside.png') });
+  await tap('#verify-toggle');
+  const after = await page.evaluate(() => ({ aside: !!document.querySelector('details[data-field-group="__aside"]'), warn: document.querySelectorAll('.badge.v-warn').length, label: document.querySelector('#verify-toggle').textContent }));
+  check('set-aside papers can be shown again, still flagged', !after.aside && after.warn === 4 && /Hide/.test(after.label), JSON.stringify(after));
+  await tap('#verify-toggle');
+  check('and set aside again', await page.$$eval('details[data-field-group="__aside"] .wrow', e => e.length) === 4);
+  const noOrcid = await page.evaluate(() => { const S = window.Paperscope.S; return S.search.verify.state; });
+  check('verification finished', noOrcid === 'done');
 
   // ---------- topic pathway: byline names open authors
   await tap('.pathways [data-pathway="topic"]');

@@ -378,3 +378,25 @@ button.auth:hover { color: var(--focus); text-decoration-color: currentColor; }
 .ah-note { margin: 0 0 8px; }
 .aname { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
 .aname .badge { margin-left: 0; }
+
+/* ORCID cross-check */
+.vpanel { margin: 4px 0 10px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--ok) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--ok) 28%, var(--rule)); }
+.vpanel p { margin: 0 0 6px; }
+.vpanel p:last-of-type { margin-bottom: 8px; }
+.vpanel.warn { background: color-mix(in srgb, var(--adj) 9%, var(--surface)); border-color: color-mix(in srgb, var(--adj) 35%, var(--rule)); }
+p.vpanel { margin-bottom: 10px; }
+.badge.v-ok { color: #155c37; background: #e3f3ea; border-color: #b9dfc9; }
+.badge.v-likely { color: #3b4a8a; background: #eaedfb; border-color: #c9d0f1; }
+.badge.v-warn { color: #8a3b12; background: #fbece3; border-color: #f0cdb8; }
+.badge.added { color: var(--ink-2); background: var(--surface-2); border-color: var(--rule); }
+:root[data-appearance="dark"] .badge.v-ok { color: #9fe0bb; background: #133a27; border-color: #23573b; }
+:root[data-appearance="dark"] .badge.v-likely { color: #c4cdfb; background: #1f2850; border-color: #33407a; }
+:root[data-appearance="dark"] .badge.v-warn { color: #f6c3a5; background: #47240f; border-color: #6b3a1c; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-appearance="light"]) .badge.v-ok { color: #9fe0bb; background: #133a27; border-color: #23573b; }
+  :root:not([data-appearance="light"]) .badge.v-likely { color: #c4cdfb; background: #1f2850; border-color: #33407a; }
+  :root:not([data-appearance="light"]) .badge.v-warn { color: #f6c3a5; background: #47240f; border-color: #6b3a1c; }
+}
+.vwhy { margin: 4px 0 0; font-size: .82rem; color: var(--ink-2); }
+.wrow.unconf .wt { color: var(--ink-2); }
+.fgroup.aside details { border-style: dashed; }

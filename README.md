@@ -31,6 +31,7 @@ OpenAlex meters its free API. Without a key you get about $0.10 of free use per 
 | Synonym and related-term expansion | Working | A small curated synonym list (shown and switchable per search) plus OpenAlex's meaning-based search. Not a full thesaurus. |
 | Related terms from the results | Working | Works in any field: terms OpenAlex attaches to many of the top results, shown as chips. Tap one to search it too (one extra call). |
 | Author search | Working | Switch the search box to **Authors** and type a name or ORCID iD. If several OpenAlex profiles match, pick one or tick several to combine them (OpenAlex sometimes splits one person). Shows works, citations, h-index and active years, a bar chart of works by field, and every work grouped by field (newest or most cited first). Any field can be loaded in full or hidden. Tap any author's name on a result to open their works. |
+| ORCID check of an author's papers | Working | When the author has an ORCID iD, Paperscope reads their public ORCID record and the ORCID iDs publishers attach to papers (Crossref). A paper is **confirmed** if it is on the record or tagged with the iD; **likely theirs** if it shares two or more co-authors, the same study (e.g. preprint and published version) or their full name plus their field or affiliation with confirmed papers; otherwise **not confirmed** and set aside in its own section, with the reasons (e.g. "Name given only as 'M. Mondal'; affiliation not in their record; no co-authors in common"). Papers on the record that OpenAlex had not linked to the profile are added, and so are papers found by the person's full name when the same evidence supports them. Preprint versions are shown once. Header figures and field bars then count only checked papers. You can bring the set-aside papers back with one tap. |
 | DOI lookup | Working | Paste a DOI (or a doi.org link) in the topic search box to open that paper; falls back to Crossref if OpenAlex lacks it. |
 | Citation trail | Working | On any result: papers citing it, its references, or similar papers. "Back" returns to your search. |
 | Sort: best match, newest, most cited | Working | "Newest first" also fetches papers from the last three years; weakly matching papers stay below relevant ones. |
@@ -62,6 +63,7 @@ OpenAlex meters its free API. Without a key you get about $0.10 of free use per 
 | Saved papers and followed searches | Nowhere. |
 | Your ORCID iD (only if you import from ORCID) | OpenAlex, to find your publications. |
 | An author name or ORCID iD you search for, or a DOI | OpenAlex (and Crossref for a DOI OpenAlex lacks). |
+| The ORCID iD of an author you open | ORCID (their public record), Crossref (papers tagged with the iD) and OpenAlex (the papers listed). |
 | For "Write a short answer" (only if you set it up): your search and the titles and abstracts of the top papers | The AI provider you choose, using your own key and billed to you. Never your CV or profile. |
 
 Code is downloaded only when needed, and never with your data: pdf.js or mammoth.js (about 1 MB, from jsDelivr) when you open a PDF or Word file, and the optional model (below). As with any website, each service sees your IP address.
@@ -105,7 +107,9 @@ The brief asked for a free, open-weight model running on the device. What was bu
 - Saved papers and settings are per browser. Clearing site data deletes them; export first.
 - The synonym list is small and hand-made. Meaning-based search covers much of the rest.
 - Author profiles are OpenAlex's automatic matching of papers to people. It sometimes splits one person into several profiles and sometimes merges people with similar names (for example, one well-known chemist's profile also holds an atmospheric scientist's papers). The field breakdown makes this easy to spot, and the author view lets you combine profiles or hide a field, but it cannot fix the underlying data.
-- An author's h-index and citation total are OpenAlex's figures; when profiles are combined, citations are summed and the largest single h-index is shown (a true combined h-index would need every work's citations).
+- The ORCID check is only as good as the evidence. An ORCID record can be incomplete, so a real paper with only initials, new co-authors and a new affiliation can be set aside; one tap brings these back. Two people who share co-authors could still be mixed. Profiles without an ORCID iD can't be checked.
+- ORCID's free public API is licensed for non-commercial use. If Paperscope starts earning money, the ORCID check would need ORCID membership (the Member API) or another source, such as the publisher tags in Crossref.
+- An author's h-index and citation total are OpenAlex's figures unless the ORCID check ran, in which case they are computed from the checked papers; when profiles are combined, citations are summed and the largest single h-index is shown (a true combined h-index would need every work's citations).
 
 ## Design
 

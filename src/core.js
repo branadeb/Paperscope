@@ -560,6 +560,8 @@
       year: w.publication_year || null, date: w.publication_date || '',
       authors: (w.authorships || []).filter(a => a && a.author && a.author.display_name).map(a => a.author.display_name),
       authorIds: (w.authorships || []).filter(a => a && a.author && a.author.display_name).map(a => a.author.id || ''),
+      ships: (w.authorships || []).filter(a => a && a.author).map(a => ({ id: a.author.id || '', name: a.author.display_name || '', raw: a.raw_author_name || '',
+        orcid: orcidOf(a.author.orcid), inst: (a.institutions || []).map(i => i && i.display_name).filter(Boolean) })),
       venue: (prim.source && prim.source.display_name) || '',
       abstract: reconstructAbstract(w.abstract_inverted_index), abstractFrom: w.abstract_inverted_index ? 'OpenAlex' : '',
       oaType: w.type || '', crType: prim.raw_type || '', epmcTypes: [],
@@ -580,6 +582,7 @@
     return {
       key: '', openalexId: '', doi: cleanDoi(it.DOI), title: stripTags((it.title && it.title[0]) || ''), year: dp[0] || null, date: dp.join('-'),
       authors: (it.author || []).map(a => normSpace([a.given, a.family].filter(Boolean).join(' ')) || a.name).filter(Boolean),
+      ships: (it.author || []).map(a => { const n = normSpace([a.given, a.family].filter(Boolean).join(' ')) || a.name || ''; return { id: '', name: n, raw: n, orcid: orcidOf(a.ORCID), inst: (a.affiliation || []).map(x => x && x.name).filter(Boolean) }; }),
       venue: (it['container-title'] && it['container-title'][0]) || '', abstract: abs, abstractFrom: abs ? 'Crossref' : '',
       oaType: '', crType: it.type || '', epmcTypes: [], isOA: false, oaStatus: '',
       landing: it.URL || (it.DOI ? `https://doi.org/${it.DOI}` : ''), oaUrl: '', pdf: '', oaHost: '',
@@ -618,6 +621,8 @@
     if (!a.oaUrl && b.oaUrl) { a.oaUrl = b.oaUrl; a.oaHost = b.oaHost; }
     if (!a.venue && b.venue) a.venue = b.venue;
     if (!a.authors.length && b.authors.length) a.authors = b.authors;
+    if ((!a.ships || !a.ships.length) && b.ships && b.ships.length) a.ships = b.ships;
+    if (b.addedFrom && !a.addedFrom && !a.ranks.oa_author) a.addedFrom = b.addedFrom;
     if (!a.year && b.year) a.year = b.year;
     a.cites = Math.max(a.cites || 0, b.cites || 0);
     if (!a.topic && b.topic) a.topic = b.topic;
@@ -1135,12 +1140,160 @@
     return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
   }
 
+  // ---------------------------------------------------------------- ORCID cross-check for author profiles
+  // OpenAlex links papers to people automatically and can merge two people with the same surname and initial.
+  // These functions check a profile's papers against the person's own ORCID record and the ORCID iDs
+  // that publishers attach to papers (Crossref), and weigh the remaining evidence.
+  function orcidOf(x) { const m = String(x || '').match(/(\d{4}-\d{4}-\d{4}-\d{3}[\dX])/i); return m ? m[1].toUpperCase() : ''; }
+  // Preprint versions (…-v2, …/v3) share one key.
+  function versionKey(doi) { return cleanDoi(doi).replace(/([-/.])v\d+$/i, ''); }
+  function versionNo(doi) { const m = cleanDoi(doi).match(/[-/.]v(\d+)$/i); return m ? Number(m[1]) : 1; }
+  const ORCID_TYPES = { 'journal-article': 'journal-article', preprint: 'posted-content', 'book-chapter': 'book-chapter', book: 'book',
+    'conference-paper': 'proceedings-article', 'conference-abstract': 'proceedings-article', 'dissertation-thesis': 'dissertation', dissertation: 'dissertation',
+    'review': 'journal-article', 'data-set': 'dataset', report: 'report', 'working-paper': 'report' };
+  function parseOrcidRecord(j) {
+    j = j || {};
+    const v = x => (x && typeof x === 'object' ? x.value : x) || '';
+    const person = j.person || {}; const nm = person.name || {};
+    const acts = j['activities-summary'] || {};
+    const worksJ = acts.works || (Array.isArray(j.group) ? j : { group: [] });
+    const orgs = new Set();
+    ['employments', 'educations', 'qualifications', 'invited-positions', 'distinctions', 'memberships', 'services'].forEach(k => {
+      const sec = acts[k]; if (!sec) return;
+      (sec['affiliation-group'] || []).forEach(g => (g.summaries || []).forEach(sm => {
+        const x = sm && Object.values(sm)[0]; const org = x && x.organization && x.organization.name; if (org) orgs.add(org);
+      }));
+    });
+    const works = (worksJ.group || []).map(g => {
+      const ws = (g['work-summary'] || [])[0] || {};
+      const ids = ((g['external-ids'] || {})['external-id'] || []);
+      const dois = [...new Set(ids.filter(e => String(e['external-id-type']).toLowerCase() === 'doi' && e['external-id-relationship'] !== 'part-of')
+        .map(e => cleanDoi((e['external-id-normalized'] && e['external-id-normalized'].value) || e['external-id-value'])).filter(Boolean))];
+      const pd = ws['publication-date'] || {};
+      return { title: stripTags(v(ws.title && ws.title.title)), year: pd.year ? Number(v(pd.year)) || null : null, type: ws.type || '',
+        journal: v(ws['journal-title']), dois, url: v(ws.url), source: v(ws.source && ws.source['source-name']) };
+    }).filter(w => w.title || w.dois.length);
+    return { orcid: orcidOf((j['orcid-identifier'] && j['orcid-identifier'].path) || j.path), given: v(nm['given-names']), family: v(nm['family-name']),
+      credit: v(nm['credit-name']), others: (((person['other-names'] || {})['other-name']) || []).map(o => o && o.content).filter(Boolean),
+      orgs: [...orgs], works };
+  }
+  function normOrcidWork(w, rank) {
+    const doi = w.dois[0] || '';
+    return { key: '', openalexId: '', doi, title: w.title, year: w.year, date: w.year ? String(w.year) : '', authors: [], authorIds: [], ships: [],
+      venue: w.journal, abstract: '', abstractFrom: '', oaType: '', crType: ORCID_TYPES[w.type] || '', epmcTypes: [], isOA: false, oaStatus: '',
+      landing: doi ? `https://doi.org/${doi}` : (/^https?:/i.test(w.url) ? w.url : ''), oaUrl: '', pdf: '', oaHost: '', cites: 0, pct: null,
+      top1: false, top10: false, topic: null, keywords: [], retracted: false, sources: ['ORCID'], ranks: { orcid: rank } };
+  }
+  const deaccent = x => String(x || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const nameToks = x => deaccent(x).split(/[^a-z]+/).filter(Boolean);
+  // How a byline name relates to the person: 'full' (given name spelled out), 'initial' (surname + initial only) or 'other'.
+  function nameForm(raw, persons) {
+    const t = nameToks(raw); if (!t.length) return 'other';
+    let best = 'other';
+    for (const p of persons || []) {
+      const names = [[p.given, p.family], ...((p.others || []).map(o => { const k = nameToks(o); return [k.slice(0, -1).join(' '), k.slice(-1)[0] || '']; }))];
+      for (const [g, f] of names) {
+        const ft = nameToks(f), gt = nameToks(g);
+        if (!ft.length || !ft.every(x => t.includes(x))) continue;
+        const rest = t.filter(x => !ft.includes(x));
+        if (gt.length && gt[0].length > 1 && rest.includes(gt[0])) return 'full';
+        if (gt.length && rest.some(x => x.length === 1 && x === gt[0][0])) best = 'initial';
+        else if (gt.length && rest.some(x => x[0] === gt[0][0])) best = best === 'other' ? 'variant' : best;
+      }
+    }
+    return best;
+  }
+  // "Maicol A. Ochoa" and "M. Ochoa" share the key "ochoa m".
+  function coKey(name) { const t = nameToks(name); return t.length ? `${t[t.length - 1]} ${t[0][0]}` : ''; }
+  const normOrg = x => deaccent(x).replace(/\b(the|of|university|univ|college|institute|inst)\b/g, ' ').replace(/[^a-z]+/g, ' ').trim();
+  function selfShip(w, ev) {
+    const sh = w.ships || [];
+    return sh.find(a => a.id && ev.ids.has(a.id)) || sh.find(a => a.orcid && ev.orcids.has(a.orcid))
+      || sh.find(a => nameForm(a.raw || a.name, ev.persons) !== 'other') || null;
+  }
+  // ev: { persons:[{given,family,others}], ids:Set(OpenAlex author ids), orcids:Set, orcidDOIs:Set(version keys),
+  //       orcidWorks:[{title,year}], crossrefDOIs:Set(version keys), orgs:[names] }
+  // Returns Map key -> { status: 'orcid'|'publisher'|'likely'|'unconfirmed', why: [..] }
+  function verifyAuthorWorks(works, ev) {
+    const out = new Map();
+    const confirmed = [];
+    for (const w of works) {
+      const vk = w.doi ? versionKey(w.doi) : '';
+      if (vk && ev.orcidDOIs.has(vk)) out.set(w.key, { status: 'orcid', why: ['On their ORCID record'] });
+      else if (ev.orcidWorks.some(o => o.title && titleSimilarity(o.title, w.title) >= 0.9 && (!o.year || !w.year || Math.abs(o.year - w.year) <= 1)))
+        out.set(w.key, { status: 'orcid', why: ['On their ORCID record (matched by title)'] });
+      else if (vk && ev.crossrefDOIs.has(vk)) out.set(w.key, { status: 'publisher', why: ['The publisher lists their ORCID iD on this paper'] });
+      else continue;
+      confirmed.push(w);
+    }
+    const coauthors = new Map(); const orgs = new Set((ev.orgs || []).map(normOrg).filter(Boolean)); const fields = new Set(); const titles = [];
+    const selfKeys = new Set((ev.persons || []).map(p => coKey(`${p.given} ${p.family}`)).filter(Boolean));
+    const learn = w => {
+      const me = selfShip(w, ev);
+      (w.ships && w.ships.length ? w.ships : (w.authors || []).map(n => ({ name: n }))).forEach(a => {
+        if (a === me) return; const k = coKey(a.name || a.raw); if (!k || selfKeys.has(k)) return;
+        if (!coauthors.has(k)) coauthors.set(k, a.name || a.raw);
+      });
+      if (me) (me.inst || []).forEach(i => { const n = normOrg(i); if (n) orgs.add(n); });
+      if (w.topic && w.topic.field) fields.add(w.topic.field);
+      titles.push(w.title);
+    };
+    confirmed.forEach(learn);
+    const anyEvidence = confirmed.length > 0;
+    for (let round = 0; round < 2; round++) {
+      const promoted = [];
+      for (const w of works) {
+        if (out.has(w.key) && out.get(w.key).status !== 'unconfirmed') continue;
+        const me = selfShip(w, ev);
+        const form = me ? nameForm(me.raw || me.name, ev.persons) : 'other';
+        const shared = [...new Set((w.ships && w.ships.length ? w.ships : (w.authors || []).map(n => ({ name: n })))
+          .filter(a => a !== me).map(a => coKey(a.name || a.raw)).filter(k => coauthors.has(k)))].map(k => coauthors.get(k));
+        const inst = me ? (me.inst || []).filter(i => orgs.has(normOrg(i))) : [];
+        const sameStudy = titles.some(t => titleSimilarity(t, w.title) >= 0.6);
+        const fieldOk = !!(w.topic && fields.has(w.topic.field));
+        const shownName = me ? (me.raw || me.name) : '';
+        let why = null;
+        if (anyEvidence && shared.length >= 2) why = `Shares co-authors with their confirmed papers: ${shared.slice(0, 3).join(', ')}${shared.length > 3 ? ' and others' : ''}`;
+        else if (anyEvidence && sameStudy) why = 'Same study as a confirmed paper (for example a preprint and its published version)';
+        else if (form === 'full' && (inst.length || shared.length || fieldOk || !anyEvidence))
+          why = `Their full name appears on it (“${shownName}”)${inst.length ? ` with ${inst[0]}` : shared.length ? `, with co-author ${shared[0]}` : fieldOk ? ', in the same field as their confirmed papers' : ''}`;
+        else if (inst.length && shared.length) why = `Affiliation ${inst[0]} and co-author ${shared[0]} match their confirmed papers`;
+        if (why) { out.set(w.key, { status: 'likely', why: [why] }); promoted.push(w); continue; }
+        const reasons = [];
+        if (form === 'initial' || form === 'variant') reasons.push(`Name given only as “${shownName}”`);
+        else if (!me) reasons.push('Their name was not found in the author list');
+        if (me && (me.inst || []).length) reasons.push(`Affiliation: ${me.inst.slice(0, 2).join('; ')}, not in their ORCID record or confirmed papers`);
+        if (anyEvidence && !shared.length) reasons.push('No co-authors in common with their confirmed papers');
+        if (anyEvidence && w.topic && w.topic.field && !fieldOk) reasons.push(`Field: ${w.topic.field}`);
+        reasons.unshift('Not on their ORCID record');
+        out.set(w.key, { status: 'unconfirmed', why: reasons });
+      }
+      if (!promoted.length) break;
+      promoted.forEach(learn);
+    }
+    return out;
+  }
+  // Groups works that are versions of one preprint (same DOI apart from -v2, /v3 …); returns keys to hide and counts.
+  function collapseVersions(works) {
+    const groups = new Map();
+    works.forEach(w => { if (!w.doi) return; const k = versionKey(w.doi); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(w); });
+    const hide = new Set(); const count = new Map();
+    groups.forEach(list => {
+      if (list.length < 2) return;
+      list.sort((a, b) => (b.ranks.oa_author !== undefined) - (a.ranks.oa_author !== undefined) || versionNo(b.doi) - versionNo(a.doi) || (b.year || 0) - (a.year || 0));
+      list.slice(1).forEach(w => hide.add(w.key)); count.set(list[0].key, list.length);
+    });
+    return { hide, count };
+  }
+  function hIndex(cites) { const c = cites.slice().sort((a, b) => b - a); let h = 0; while (h < c.length && c[h] >= h + 1) h++; return h; }
+
   const Core = {
     stem, stems, words, contentStems, phraseStems, hasPhrase, splitSentences, cleanDoi, normTitle, stripTags, reconstructAbstract,
     extractGlossary, extractProfile, profileTerms, profileText, analyzeQuery, assessFieldAmbiguity,
     normOpenAlex, normCrossref, normEPMC, workKey, dedupeInto, classifyType, prepWork, scoreQuery, scoreProfile, rankWorks,
     explain, highlightStems, computeThemes, parseScholarLines, titleSimilarity, compareWithList, toBibTeX, toRIS, toCSV, slim,
     normAuthor, groupByField, isDOI, initials,
+    orcidOf, versionKey, versionNo, parseOrcidRecord, normOrcidWork, nameForm, coKey, verifyAuthorWorks, collapseVersions, hIndex,
     relatedTerms, normOrcid, orcidChecksumOk, profileFromWorks, mergeProfiles, buildAnswerPrompt, checkAnswer, expandRefs, sortWorks,
     ACRONYMS, SYNONYMS, FIELD_DOMAIN, DOMAINS, STOP,
   };
