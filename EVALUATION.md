@@ -259,8 +259,17 @@ The checks also cover:
 - Parallel requests failed ("Failed to fetch"), because Crossref's public service allows one request at a time. Requests now go one after another, retried twice.
 - Wiley lists cover and frontispiece pages as articles (titles ending "(Adv. Mater. 63/2026)"), and Springer Nature has "Author Correction" entries. Both are now left out.
 - Topics that many papers share ("charge transfer") now count for less than rare ones. A paper has to score at least 0.15 to be listed, and the same title under two DOIs appears once.
+- **Reported by the user: "ultrafast spectroscopy" found nothing.** Live, that topic alone gave 24 candidates and 0 papers shown. There were two causes. First, the discount for common topics also hit a lone topic, which pushed every paper below the 0.15 cut-off. Second, Crossref searches titles only, and titles rarely say "ultrafast spectroscopy". It also counted papers whose abstract merely contained both words anywhere, such as "ultrafast hydrogen spillover … Raman spectroscopy".
+  - A topic is now discounted only relative to the most specific one, so a lone topic is not discounted.
+  - Each topic also counts a few related phrasings from a small curated list, plus synonyms, and the panel lists them. For ultrafast spectroscopy these are transient absorption, pump-probe, 2DES, 2D IR, excited-state dynamics, time-domain spectroscopy and others.
+  - Words of a phrase must sit within a few words of each other.
+  - Crossref gets each word once, in groups of at most 7.
+  - A first version also counted single words ("time-resolved", "femtosecond"). That brought in time-resolved FRET sensing and femtosecond laser machining, so only spectroscopy phrases are kept.
+  - Live after the fix: 3 requests per publisher, 12 seconds, no errors, 266 candidates and 14 shown. The top papers were the transient-absorption papers on plasmonic Cu (J. Phys. Chem. C) and on MoS₂ dark excitons (Nano Letters), THz time-domain carrier dynamics (Laser Photonics Rev.), and coherent-oscillation conical intersections (ChemPhysChem).
+  - Borderline papers remained: time-resolved SERS of blood, and time-domain NIR spectroscopy of muscle. Nature and Science had nothing for this topic in those two days.
+  - A list saved by the previous version is fetched again when the app is next opened.
 
-**Tested** (`test/lab-today.test.cjs`, 26/26, Crossref mocked; plus 3 unit checks in `test/lab-core.test.cjs`):
+**Tested** (`test/lab-today.test.cjs`, 29/29, Crossref mocked; plus 5 unit checks in `test/lab-core.test.cjs`):
 - Setup asks for topics; the default publishers are the four requested.
 - Requests per publisher (one per group of topics), journal articles only, from the last check.
 - Matching papers come best first; corrections and unrelated papers are left out. Each paper names the topics it mentions, and says when there is no abstract.
