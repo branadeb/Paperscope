@@ -400,3 +400,9 @@ p.vpanel { margin-bottom: 10px; }
 .vwhy { margin: 4px 0 0; font-size: .82rem; color: var(--ink-2); }
 .wrow.unconf .wt { color: var(--ink-2); }
 .fgroup.aside details { border-style: dashed; }
+
+/* install as an app */
+.install-hint { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 18px; padding: 10px 12px; border-radius: 16px; background: var(--surface); border: 1px solid var(--rule); }
+.install-hint img { border-radius: 10px; flex: none; }
+.install-hint > span:not(.row) { flex: 1 1 180px; font-size: .92rem; }
+.install-hint .row { gap: 6px; margin-left: auto; }

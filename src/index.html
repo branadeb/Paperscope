@@ -9,6 +9,12 @@
 <meta name="description" content="Free research discovery: search OpenAlex, Crossref and Europe PMC, ranked against your own research profile, which never leaves your device.">
 <title>Paperscope: find papers that fit your research</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='none' stroke='%230b7480' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='7.5' fill='none' stroke='%23c47f12' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%230c1430'/%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Paperscope">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>/*@@CSS@@*/</style>
 </head>
 <body>
@@ -43,7 +49,7 @@
     </div>
     <form id="search-form" class="searchbar" role="search">
       <label for="q" class="sr-only">Search terms, research question or DOI</label>
-      <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Keywords, a phrase, a question or a DOI">
+      <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Topic, question or DOI">
       <button class="btn primary" type="submit">Search</button>
     </form>
     <p class="profile-line" id="profile-line"></p>
@@ -56,6 +62,7 @@
     </div>
 
     <div id="start">
+      <div id="install-hint"></div>
       <div id="follows-start"></div>
       <h2 class="start-h">Try a search</h2>
       <p class="muted small">Add a profile first for personalised ranking, or tap an example:</p>
@@ -140,6 +147,9 @@
 
     <h3>Cost and limits</h3>
     <p class="small">OpenAlex now meters its free API. Without a key you get about $0.10 of free use a day (roughly 30 searches here); with a free key, $1 a day (roughly 300). Paperscope shows what each search used. When the allowance runs out, OpenAlex refuses requests until midnight UTC; it does not bill you unless you have bought prepaid credit on openalex.org. Crossref and Europe PMC are free and need no key, but may slow down busy users.</p>
+
+    <h3>Install as an app</h3>
+    <div id="install-panel"></div>
 
     <h3>Settings</h3>
     <fieldset class="appearance" id="appearance-picker"><legend>Appearance</legend>

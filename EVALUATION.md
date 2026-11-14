@@ -155,3 +155,21 @@ Opening an author costs about $0.0003 in OpenAlex usage (field counts, first yea
 **Tested:** 9 new unit checks (49/49 in total) on a fixture with the real record's structure, and 25 new browser checks (93/93 for the author pathway) with a mocked version of this exact case. The checks confirm that the four collision papers are set aside with their reasons; the two unlinked papers, the preprint (shown once, "2 versions") and a no-DOI ORCID entry are added; the Nature paper and thesis are counted as likely; a full-name hit by another Mondal is rejected; the figures and field bars count only checked papers; and the set-aside papers can be shown again. Requests are checked too: the ORCID record is read as JSON, publisher iDs come from Crossref, and missing papers are fetched by DOI. A profile with an empty ORCID record shows no badges and sets nothing aside. axe-core found no WCAG 2 A/AA violations in light or dark mode.
 
 **Cost:** about $0.0012 more in OpenAlex usage per author with an ORCID iD (one DOI lookup, one full-name search). ORCID and Crossref are free; ORCID's anonymous API allows 25,000 reads a day per IP address.
+
+## Installable app (14 November 2026)
+
+Paperscope is now a progressive web app: a manifest, icons (192 and 512 px, a maskable icon and a 180 px Apple touch icon) and a service worker. The service worker stores only the app itself (one page, its manifest and icons) in a cache named after the build, so each release replaces the last. Page loads try the network first, so updates arrive on the next launch. Requests to OpenAlex, Crossref, Europe PMC, ORCID, jsDelivr or AI services pass straight through and are never stored.
+
+**Tested** (`test/pwa.test.cjs`, 26/26, headless Chrome, served like GitHub Pages):
+
+- Chrome parses the manifest with no errors and reports the app installable (no installability errors).
+- The icons load at their declared sizes, and the iOS home-screen tags are present.
+- The service worker takes control and caches only the app's own files.
+- The app opens with the network off, and an offline search explains what still works.
+- The Install button calls the browser's own install dialog, and "Not now" is remembered.
+- iPhone users get Add to Home Screen instructions plus a note that the Home Screen app's storage is separate from Safari's.
+- An installed app says so, and the "Search by author" shortcut opens the Authors pathway.
+- axe-core found no WCAG 2 A/AA violations.
+- The other suites (43, 32 and 93 checks) still pass with the service worker active.
+
+**Not tested on real devices** in this session: installation on an actual iPhone, Android phone or Mac. The behaviour above follows each platform's documented install flow.

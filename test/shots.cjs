@@ -3,7 +3,7 @@
 const path = require('path'); const fs = require('fs'); const http = require('http');
 const puppeteer = require('/home/claude/vendor/node_modules/puppeteer-core');
 const M = require('./mock-data.js'); const ROOT = path.join(__dirname, '..'); const OUT = path.join(ROOT, 'test', 'out');
-const server = http.createServer((q, r) => { r.writeHead(200, { 'content-type': 'text/html' }); r.end(fs.readFileSync(path.join(ROOT, 'dist/index.html'))); }).listen(8767);
+const server = require('./static-server.cjs')(8767);
 const json = (req, o) => req.respond({ status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify(o) });
 (async () => {
   const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });

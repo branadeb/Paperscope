@@ -67,6 +67,7 @@
   S.mode = store.get('mode', 'all');
   S.sort = store.get('sort', 'best');
   S.pathway = store.get('pathway', 'topic') === 'author' ? 'author' : 'topic';
+  { const by = new URLSearchParams(location.search).get('by'); if (by === 'author' || by === 'topic') S.pathway = by; } // app shortcuts
   function saveSettings() { store.set('settings', S.settings); }
   function persistProfile() { if (S.settings.rememberProfile && S.profile) store.set('profile', S.profile); else store.del('profile'); }
   function persistSaved() { return store.set('saved', [...S.saved.values()].map(C.slim)); }
@@ -111,6 +112,7 @@
     if (r.status === 429) return src.startsWith('OpenAlex') ? 'OpenAlex refused the request: the free daily allowance is used up or requests came too fast. It resets at midnight UTC; a free API key (About › Settings) gives 10× more.' : `${src} is limiting requests. Try again in a minute.`;
     if (r.status === 401 || r.status === 403) return `${src} refused the request (${r.status}). If you added an API key, check it in About › Settings.`;
     if (r.status === 400) return `${src} could not read this query (400). Try simpler wording.`;
+    if (r.status === 0 && navigator.onLine === false) return 'You’re offline. Saved papers and your profile still work; searching needs a connection.';
     if (r.status === 0) return `${src} could not be reached (${r.error}).`;
     return `${src} returned an error (${r.status}).`;
   }
@@ -364,7 +366,7 @@
   function renderPathway() {
     document.querySelectorAll('.pathways [data-pathway]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.pathway === S.pathway)));
     $('#hero').dataset.searchBy = S.pathway;
-    $('#q').placeholder = S.pathway === 'author' ? 'Author name or ORCID iD' : 'Keywords, a phrase, a question or a DOI';
+    $('#q').placeholder = S.pathway === 'author' ? 'Author name or ORCID iD' : 'Topic, question or DOI';
     $('#hero-lede').textContent = S.pathway === 'author' ? 'Look up a researcher by name or ORCID iD and see all their work, grouped by field.' : 'Search open scholarly databases and see, for each paper, why it may matter to you.';
     const lab = document.querySelector('label[for="q"]'); if (lab) lab.textContent = S.pathway === 'author' ? 'Author name or ORCID iD' : 'Search terms, research question or DOI';
   }
@@ -1369,6 +1371,7 @@
     ['Profile from ORCID', 'ok', 'Reads your publications in OpenAlex: their keywords, topics, titles and abstracts.'],
     ['Author search', 'ok', 'Search by name or ORCID iD; pick or combine profiles; all works grouped by field with counts. Tap any author name on a result to open their works.'],
     ['ORCID check of an author’s papers', 'ok', 'When an author has an ORCID iD, their papers are checked against their ORCID record and publisher ORCID tags. Papers that don’t match and have no other evidence are set aside with the reasons; papers OpenAlex missed are added.'],
+    ['Install as an app', 'ok', 'Add to the home screen, dock or Start menu from the browser: own icon and window, opens offline, updates by itself. Not in app stores.'],
     ['DOI lookup', 'ok', 'Paste a DOI in the search box to open that paper (OpenAlex, then Crossref).'],
     ['Related terms from the results', 'ok', 'Works in any field: terms OpenAlex attaches to many top results. Tap to search them too.'],
     ['Citation trail', 'ok', 'Citing papers, references and similar papers for any result.'],
@@ -1470,6 +1473,8 @@
       applyAppearance(next); toast(`Appearance: ${APPEARANCE_NAMES[next]}`); return;
     }
     if (t.id === 'home-link') { goHome(); return; }
+    if (t.id === 'install-btn' || t.id === 'install-btn2') { promptInstall(); return; }
+    if (t.id === 'install-dismiss') { store.set('installHintDismissed', true); renderInstall(); return; }
     if (d.pathway && t.closest('.pathways')) {
       S.pathway = d.pathway; store.set('pathway', S.pathway); renderPathway(); $('#q').focus(); return;
     }
@@ -1624,8 +1629,55 @@
   drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) readFile(f); });
   window.addEventListener('hashchange', route);
 
+  // ---------------------------------------------------------------- install as an app (progressive web app)
+  let installEvent = null;
+  const isStandalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  function platform() {
+    const ua = navigator.userAgent || '';
+    if (/iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
+    if (/Android/.test(ua)) return 'android';
+    if (/Macintosh/.test(ua) && /Safari\//.test(ua) && !/Chrome|Chromium|Edg\//.test(ua)) return 'mac-safari';
+    return 'desktop';
+  }
+  const INSTALL_STEPS = {
+    ios: 'Tap the Share button, then “Add to Home Screen”.',
+    android: 'In Chrome, open the ⋮ menu and choose “Install app” or “Add to Home screen”.',
+    'mac-safari': 'In Safari, choose File › Add to Dock.',
+    desktop: 'In Chrome or Edge, click the install icon at the right of the address bar, or choose “Install Paperscope” in the browser menu.',
+  };
+  function renderInstall() {
+    const panel = $('#install-panel'); const hint = $('#install-hint'); if (!panel || !hint) return;
+    if (isStandalone()) {
+      panel.innerHTML = '<p class="small">You are using Paperscope as an installed app. It opens offline; searching needs a connection. Updates arrive by themselves.</p>';
+      hint.innerHTML = ''; return;
+    }
+    const p = platform();
+    panel.innerHTML = `<p class="small">Put Paperscope on your home screen, dock or Start menu. It opens in its own window without browser bars, opens even when you’re offline (searching still needs a connection), and updates by itself. Nothing to download from a store.</p>
+      ${installEvent ? '<button type="button" class="btn primary" id="install-btn">Install Paperscope</button>' : `<p class="small"><strong>How:</strong> ${esc(INSTALL_STEPS[p])}</p>`}
+      ${p === 'ios' ? '<p class="tiny">On iPhone and iPad the Home Screen app keeps its own storage, separate from Safari, so saved papers and your profile don’t carry over.</p>' : ''}`;
+    const show = !store.get('installHintDismissed', false) && (installEvent || p === 'ios');
+    hint.innerHTML = show ? `<div class="install-hint" role="note">
+        <img src="icons/icon-192.png" alt="" width="40" height="40">
+        <span>${installEvent ? 'Use Paperscope as an app, with its own icon and window.' : 'Use Paperscope as an app: tap Share, then “Add to Home Screen”.'}</span>
+        <span class="row">${installEvent ? '<button type="button" class="btn small primary" id="install-btn2">Install</button>' : ''}<button type="button" class="btn link" id="install-dismiss">Not now</button></span></div>` : '';
+  }
+  async function promptInstall() {
+    if (!installEvent) return;
+    const ev = installEvent; installEvent = null;
+    ev.prompt();
+    try { await ev.userChoice; } catch (e) { /* ignore */ }
+    renderInstall();
+  }
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; renderInstall(); });
+  window.addEventListener('appinstalled', () => { installEvent = null; store.set('installHintDismissed', true); toast('Paperscope installed'); renderInstall(); });
+  if ('serviceWorker' in navigator && window.isSecureContext && !/[?&]nosw\b/.test(location.search)) {
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').catch(() => { /* the page still works without offline support */ });
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) toast('Paperscope was updated. Reopen it to use the new version.'); });
+  }
+
   // ---------------------------------------------------------------- init
-  updateSavedCount(); renderModes(); route(); renderFollows(); renderAppearance();
+  updateSavedCount(); renderModes(); route(); renderFollows(); renderAppearance(); renderInstall();
   if (S.settings.ai) loadAI(true);
   window.Paperscope = { S, runSearch, version: VERSION }; // for debugging and tests
 })();

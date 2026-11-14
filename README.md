@@ -6,6 +6,17 @@ Paperscope is **not** Google Scholar. It searches different sources, ranks diffe
 
 The whole app is one file, `index.html` (about 290 KB, including its typeface). There is no server, account or paid AI service.
 
+## Install it as an app
+
+Paperscope is a progressive web app: install it from the browser and it gets its own icon and window, opens offline, and updates itself.
+
+- **iPhone or iPad:** open the site, tap Share, then **Add to Home Screen**. (The Home Screen app keeps its own storage, separate from Safari.)
+- **Android:** in Chrome, tap **Install** on the start screen, or ⋮ › **Install app**.
+- **Mac:** Safari › File › **Add to Dock**; or the install icon in Chrome's or Edge's address bar.
+- **Windows, ChromeOS, Linux:** the install icon in Chrome's or Edge's address bar.
+
+App-store versions would need developer accounts (Google Play $25 once, Apple $99 a year; check the Microsoft Store's current terms). Google Play and the Microsoft Store accept a packaged web app (PWABuilder or Bubblewrap); Apple generally rejects apps that only wrap a website (guideline 4.2), so an iOS store version would need native features first.
+
 ## Running it
 
 Paperscope has to be served from an ordinary web address, because it calls the database APIs directly from your browser.
@@ -42,6 +53,7 @@ OpenAlex meters its free API. Without a key you get about $0.10 of free use per 
 | Theme map | Working | Built from OpenAlex topics. Inner ring overlaps your profile; outer ring is adjacent; dashed ring marks themes with many recent papers. Tap to filter. |
 | Filters: publication type, year, open access | Working | Applied to fetched results; can re-query the databases with year, open-access, review or preprint filters. |
 | Paging | Working | 10 at a time, then fetches more from the databases. |
+| Install as an app (home screen, dock, Start menu) | Working | Web app manifest, icons (including maskable and Apple touch icons) and a service worker that keeps only the app itself on the device, so it opens offline. Searches and anything sent to other services are never cached. Chrome reports it installable; an Install button appears where the browser allows it, and iPhone users get Add to Home Screen instructions. |
 | Appearance: Light, Dark or Auto | Working | Like macOS: Auto follows the device setting. Header button or About › Settings; remembered on the device. |
 | Save, export (BibTeX, RIS, CSV), open publisher or repository page | Working | Saved papers live in this browser only. |
 | Incomplete-results warnings | Working | Each source's status is shown; failures and exhausted allowances are explained. |
@@ -123,11 +135,14 @@ src/app.js       user interface
 src/styles.css   styles (light and dark themes)
 src/fonts/       Spectral web fonts and licence (OFL)
 src/index.html   page template
-tools/build.mjs  inlines everything into dist/index.html
+tools/build.mjs  inlines everything into dist/index.html; writes dist/manifest.webmanifest, dist/sw.js (cache versioned per build) and dist/icons/
+tools/icons.mjs  renders the app icons from one SVG
+src/pwa/         manifest, service worker and icons
 test/core.test.cjs   unit tests (node test/core.test.cjs)
 test/ui.test.cjs     end-to-end test in headless Chrome with mocked APIs (needs puppeteer-core and axe-core)
 test/ui-step1.test.cjs  browser tests for related terms, citation trail, sorting, follows, ORCID and answers
 test/ui-author.test.cjs browser tests for author search, works by field, co-author navigation and DOI lookup
+test/pwa.test.cjs       install and offline tests (manifest, icons, service worker, install prompts)
 ```
 
 Build: `node tools/build.mjs`. Licence for the data: OpenAlex is CC0; check each publisher's terms for full texts.

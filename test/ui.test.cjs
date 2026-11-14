@@ -15,10 +15,7 @@ const MODEL_DIR = '/home/claude/testmodel';
 const log = []; const calls = [];
 const check = (name, ok, detail = '') => { log.push({ name, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
 
-const server = http.createServer((req, res) => {
-  const f = path.join(ROOT, 'dist', 'index.html');
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(fs.readFileSync(f));
-}).listen(8765);
+const server = require('./static-server.cjs')(8765);
 
 const ctype = p => p.endsWith('.wasm') ? 'application/wasm' : /\.m?js$/.test(p) ? 'application/javascript' : p.endsWith('.json') ? 'application/json' : 'application/octet-stream';
 function serveFile(req, file) {

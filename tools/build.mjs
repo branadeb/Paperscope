@@ -1,5 +1,6 @@
 // Inlines CSS and JS into one self-contained HTML file: dist/index.html
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,3 +16,11 @@ html = html.replace('/*@@CSS@@*/', () => fonts + '\n' + r('src/styles.css'))
 mkdirSync(join(root, 'dist'), { recursive: true });
 writeFileSync(join(root, 'dist/index.html'), html);
 console.log(`dist/index.html: ${(html.length / 1024).toFixed(1)} KB`);
+// Installable-app files: manifest, icons and a service worker whose cache name changes with every build.
+const version = createHash('sha256').update(html).update(r('src/pwa/manifest.webmanifest')).digest('hex').slice(0, 10);
+JSON.parse(r('src/pwa/manifest.webmanifest')); // fail the build on a broken manifest
+writeFileSync(join(root, 'dist/manifest.webmanifest'), r('src/pwa/manifest.webmanifest'));
+writeFileSync(join(root, 'dist/sw.js'), r('src/pwa/sw.js').replace('@@VERSION@@', version));
+mkdirSync(join(root, 'dist/icons'), { recursive: true });
+for (const f of readdirSync(join(root, 'src/pwa/icons'))) copyFileSync(join(root, 'src/pwa/icons', f), join(root, 'dist/icons', f));
+console.log(`dist/sw.js: cache paperscope-${version}`);
