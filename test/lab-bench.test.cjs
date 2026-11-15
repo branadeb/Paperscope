@@ -45,7 +45,8 @@ function route(req) {
   await page.$eval('#lab-note-hide', b => b.click());
   await search('exciton migration in molecular crystals');
   check('the new ranking is on by default', await page.evaluate(() => window.Paperscope.S.search.ranked[0].rank.scoring === 'v2'));
-  check('a “Grade results” button is offered', !!(await page.$('#grade-toggle')));
+  await page.$eval('#open-filters', b => b.click()); await sleep(250); // grading is offered in the Filters sheet
+  check('a “Grade results” button is offered', !!(await page.$('#sheet-root #grade-toggle')));
 
   // ---------- grading mode
   await page.$eval('#grade-toggle', b => b.click()); await sleep(200);
@@ -115,25 +116,25 @@ function route(req) {
   check('…and then deletes', await page.evaluate(() => window.Paperscope.S.bench.length === 0 && /No graded searches yet/.test(document.querySelector('#bench-box').innerText)));
 
   // ---------- ranking switch in Settings
-  await page.evaluate(() => { location.hash = '#about'; }); await sleep(300);
+  await page.evaluate(() => { location.hash = '#settings'; }); await sleep(300);
   check('Settings offers new and previous ranking, new selected', await page.$eval('input[name="scoring"][value="v2"]', i => i.checked));
   await page.$eval('input[name="scoring"][value="v1"]', i => i.click()); await sleep(100);
   check('choosing the previous ranking is remembered', await page.evaluate(() => JSON.parse(localStorage.getItem('paperscope-lab.settings')).scoring === 'v1'));
   await page.evaluate(() => { location.hash = '#search'; }); await sleep(200);
   await search('exciton migration in molecular crystals');
   check('searches then use the previous ranking', await page.evaluate(() => window.Paperscope.S.search.ranked[0].rank.scoring === 'v1'));
-  await page.evaluate(() => { location.hash = '#about'; }); await sleep(200);
+  await page.evaluate(() => { location.hash = '#settings'; }); await sleep(200);
   await page.$eval('input[name="scoring"][value="v2"]', i => i.click()); await sleep(100);
 
   // ---------- the reranker in normal searches
-  await page.evaluate(() => { location.hash = '#about'; }); await sleep(200);
+  await page.evaluate(() => { location.hash = '#settings'; }); await sleep(200);
   check('the OpenAlex reranker is off by default', !(await page.$eval('#set-rerank', i => i.checked)));
   await page.$eval('#set-rerank', i => i.click()); await sleep(100);
   rrCalls.length = 0;
   await page.evaluate(() => { location.hash = '#search'; }); await sleep(200);
   await search('exciton migration in molecular crystals');
   check('with it on, the keyword search asks OpenAlex to rerank', rrCalls.length >= 1 && rrCalls[0].search);
-  await page.evaluate(() => { location.hash = '#about'; }); await sleep(200);
+  await page.evaluate(() => { location.hash = '#settings'; }); await sleep(200);
   await page.$eval('#set-rerank', i => i.click()); await sleep(100);
   check('model choice offers MiniLM and bge-small', await page.evaluate(() => { location.hash = '#profile'; return true; }) && (await sleep(300), await page.$$eval('input[name="ai-model"]', l => l.map(i => i.value).join(','))) === 'minilm,bge');
 

@@ -114,7 +114,7 @@ function route(req) {
   check('without a key, the AI check is offered but disabled', await page.$eval('#ai-check', b => b.disabled));
   await page.evaluate(() => { const S = window.Paperscope.S; Object.assign(S.settings, { llmProvider: 'openai', llmBase: 'https://llm.example/v1', llmModel: 'test-model', llmKey: 'k', llmConsent: true }); localStorage.setItem('paperscope-lab.settings', JSON.stringify(S.settings)); });
   // grade this search first, so the check is kept for the benchmark
-  await page.$eval('#grade-toggle', b => b.click()); await sleep(150);
+  await page.$eval('#open-filters', b => b.click()); await sleep(250); await page.$eval('#sheet-root #grade-toggle', b => b.click()); await sleep(600);
   const gk = await page.$$eval('#results .grade button[data-grade="3"]', l => l.slice(0, 2).map(b => b.dataset.key));
   for (const k of gk) await page.evaluate(k => document.querySelector(`.grade button[data-key="${CSS.escape(k)}"][data-grade="3"]`).click(), k);
   await page.$eval('#grade-done', b => b.click()); await sleep(150);

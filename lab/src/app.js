@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const C = window.Core;
-  const VERSION = '0.9.0-lab';
+  const VERSION = '0.10.0-lab';
   const PAGE = 10;
   const OA = 'https://api.openalex.org';
   const CR = 'https://api.crossref.org';
@@ -66,7 +66,7 @@
     search: null,
     sessionCost: 0,
     ai: { status: 'off', pipe: null, cache: new Map(), qcache: new Map(), progress: 0, lastRun: null, error: '' },
-    ui: { openDetails: new Set(), grading: false },
+    ui: { openDetails: new Set(), openAbstracts: new Set(), grading: false },
     bench: store.get('bench', []) || [],
   };
   if (S.settings.rememberProfile) S.profile = store.get('profile', null);
@@ -156,8 +156,14 @@
     const root = document.documentElement;
     if (a === 'light' || a === 'dark') root.setAttribute('data-appearance', a); else root.removeAttribute('data-appearance');
     store.set('appearance', a);
-    renderAppearance();
+    renderAppearance(); syncThemeColor();
   }
+  // The phone's status bar takes the colour of the app bar, in light and dark.
+  function syncThemeColor() {
+    const m = document.querySelector('meta[name="theme-color"]'); if (!m) return;
+    const c = getComputedStyle(document.documentElement).getPropertyValue('--night').trim(); if (c) m.setAttribute('content', c);
+  }
+  if (window.matchMedia) { const mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', () => syncThemeColor()); }
   function renderAppearance() {
     const a = currentAppearance();
     const b = $('#appearance-btn');
@@ -167,37 +173,44 @@
   function goHome() {
     searchToken++;
     S.search = null; S.prevSearch = null; S.filters.theme = null; S.quest = null;
-    ['#clarify', '#interp', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
+    ['#clarify', '#interp', '#interp-more', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
     setLoading(null);
     $('#start').hidden = false; $('#hero').classList.remove('compact'); $('#q').value = '';
-    renderModes(); renderFollows(); renderToday();
+    renderModes(); renderFollows(); renderToday(); updateBack();
   }
 
   // ---------------------------------------------------------------- routing
-  const VIEWS = ['search', 'profile', 'saved', 'about'];
+  // Search, Today, Saved and Profile are the tabs at the bottom; Settings and About open from the ⋯ menu.
+  const VIEWS = ['search', 'today', 'saved', 'profile', 'settings', 'about'];
+  const VIEW_TITLES = { search: 'Search', today: 'Papers of the day', saved: 'Saved papers', profile: 'Your research profile', settings: 'Settings', about: 'About' };
   function showView(view) {
     if (!VIEWS.includes(view)) view = 'search';
     nav.view = view;
     VIEWS.forEach(x => { $('#view-' + x).hidden = x !== view; });
-    document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.view === view ? 'page' : 'false'));
+    document.querySelectorAll('.tabs a').forEach(a => { if (a.dataset.view === view) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    document.body.dataset.view = view;
     if (view === 'saved') { renderSaved(); renderFollows(); }
     if (view === 'search') renderFollows();
+    if (view === 'today') renderToday();
     if (view === 'profile') { renderProfileEditor(); renderAI(); const tb = $('#taste-box'); if (tb) tb.innerHTML = tasteHTML(); renderBench(); }
-    if (view === 'about') renderAbout();
+    if (view === 'settings' || view === 'about') { renderAbout(); renderInstall(); }
+    document.title = view === 'search' ? 'Paperscope Lab: experimental copy' : `${VIEW_TITLES[view]}: Paperscope Lab`;
     updateBack();
   }
+  // Open a group in Settings (e.g. the OpenAlex key) and bring it into view.
+  function openGroup(id) { const g = $(id); if (!g) return; if (g.tagName === 'DETAILS') g.open = true; setTimeout(() => g.scrollIntoView({ block: 'start' }), 0); }
   // A link to #profile, #saved, #about, #install or #key inside the app (or typed in the address bar).
   function route() {
     const v = (location.hash || '#search').slice(1);
     if (v.startsWith('trail=')) { history.replaceState(navState(), '', '#search'); showView('search'); openSharedTrail(v.slice(6)); return; }
-    const view = v === 'install' || v === 'key' ? 'about' : VIEWS.includes(v) ? v : 'search'; // #install, #key: links into About
+    const view = v === 'install' ? 'about' : v === 'key' ? 'settings' : VIEWS.includes(v) ? v : 'search'; // #install → About, #key → Settings
     if (!history.state || !history.state.ps) { // the browser added this entry; give it a state like a tab tap would
       const from = nav.view; if (from === 'search') nav.searchState = nav.lastSearchState || { ps: 'home', depth: 0 };
-      history.replaceState(view === 'search' ? (nav.searchState || { ps: 'home', depth: 0 }) : { ps: 'tab', view, depth: (nav.depth || 0) + 1 }, '', '#' + (view === 'about' && v !== 'about' ? v : view));
+      history.replaceState(view === 'search' ? (nav.searchState || { ps: 'home', depth: 0 }) : { ps: 'tab', view, depth: (nav.depth || 0) + 1 }, '', '#' + (v === 'install' || v === 'key' ? v : view));
       nav.tabBase = from === 'search' && view !== 'search';
     }
     showView(view);
-    if (v === 'install' || v === 'key') { renderInstall(); const h = $(v === 'key' ? '#key-box' : '#install-h'); if (h) setTimeout(() => h.scrollIntoView({ block: 'start' }), 0); return; }
+    if (v === 'install' || v === 'key') { renderInstall(); openGroup(v === 'key' ? '#g-key' : '#install-h'); return; }
     window.scrollTo(0, nav.scroll[view] || 0);
   }
 
@@ -344,7 +357,7 @@
     if (!nav.popping && nav.view === 'search') saveScroll(); // remember where you were before the page empties
     $('#start').hidden = true;
     $('#hero').classList.add('compact');
-    ['#clarify', '#interp', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
+    ['#clarify', '#interp', '#interp-more', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
   }
 
   // Follow the citation trail from one paper: papers citing it, its references, or OpenAlex's related works.
@@ -581,7 +594,7 @@
       all: hp ? 'Ranked by match to your search, with a light nudge towards your profile.' : 'Add a profile to separate papers close to your work from adjacent ones.',
       adjacent: 'Favouring relevant papers outside your listed areas, and recent ones.',
     };
-    $('#mode-hint').textContent = hints[hp ? S.mode : 'all'];
+    $('#mode-hint').textContent = hints[hp ? S.mode : 'all']; $('#mode-hint').hidden = !hp; // without a profile, the line below says it
     const pl = $('#profile-line');
     if (hp) {
       const n = (S.profile.interests || []).length + (S.profile.methods || []).length + (S.profile.areas || []).length;
@@ -692,7 +705,7 @@
     const sugg = C.relatedTerms(s.ranked, a, 8);
     const active = a.related.map(r => `<li class="chip on">+ ${esc(r.text)} <button type="button" data-related-rm="${esc(r.text)}" aria-label="Stop searching ${esc(r.text)}">×</button></li>`).join('');
     if (!sugg.length && !active) return '';
-    return `<div class="related"><p class="small" style="margin:0"><strong>Related terms in these results</strong> <span class="tiny">Tap one to search it as well</span></p>
+    return `<div class="related"><p class="small" style="margin:0"><strong>Related terms</strong> <span class="tiny">tap to add one to the search</span></p>
       <ul class="chips">${active}${sugg.map(t => `<li><button type="button" class="chip add" data-related-add="${esc(t.text)}">${esc(t.text)} <span class="tiny">${t.n}</span></button></li>`).join('')}</ul></div>`;
   }
 
@@ -700,6 +713,7 @@
 
   function renderInterp() {
     const s = S.search;
+    $('#interp-more').innerHTML = '';
     if (s.kind === 'trail') { renderTrailHeader(); return; }
     if (s.kind === 'like') { renderLikeHeader(); return; }
     if (s.kind === 'doi') {
@@ -740,7 +754,8 @@
     const fi = followIndex(s);
     const since = s.since ? `<div class="panel since"><strong>Papers published since ${esc(s.since)}</strong> for “${esc(s.q)}”. ${s.pool.size ? '' : 'Nothing new yet.'} <span class="tiny">Uses publication dates, so papers indexed late with older dates can be missed.</span></div>` : '';
     const follow = `<div class="row follow-row"><button type="button" class="btn small" id="follow-toggle" aria-pressed="${fi >= 0}">${fi >= 0 ? 'Following this search' : 'Follow this search'}</button><span class="tiny">${fi >= 0 ? 'Check it for new papers from the Saved tab.' : 'Keep it on this device and check later for new papers.'}</span></div>`;
-    $('#interp').innerHTML = `${warn}${since}${sourcesLine(s)}${renderRelated()}<details class="panel interp"><summary class="small"><strong>How this was searched</strong></summary>${bits.join('')}</details>${follow}`;
+    $('#interp').innerHTML = `${warn}${since}${sourcesLine(s)}${renderRelated()}${follow}`;
+    $('#interp-more').innerHTML = `<details class="panel interp"><summary class="small"><strong>How this was searched</strong></summary>${bits.join('')}</details>`;
   }
 
   // Always visible above the results: which databases answered this search and how many papers each gave.
@@ -839,7 +854,7 @@
     const legend = `<div class="legend"><span><i style="background:var(--close)"></i>${hp ? 'Close to your profile' : 'Most of the top results'}</span><span><i style="background:var(--adj)"></i>${hp ? 'Adjacent to your profile' : 'Further from the top results'}</span><span><i class="e"></i>Emerging: many papers from the last 3 years</span></div>`;
     const list = `<ul class="theme-list">${top.map(t => `<li><button type="button" data-theme="${esc(t.id)}" aria-pressed="${sel === t.id}"><span class="dot ${t.close ? 'close' : 'adj'}" aria-hidden="true">${num.get(t.id)}</span><span class="tl"><span>${esc(t.name)}</span><span class="meta">${t.count} paper${t.count === 1 ? '' : 's'}${t.field ? `, ${esc(t.field)}` : ''}${t.emerging ? ', emerging' : ''}</span></span></button></li>`).join('')}</ul>`;
     const wasOpen = $('#map-holder details') ? $('#map-holder details').open : true;
-    $('#map-holder').innerHTML = `<details class="map" ${wasOpen ? 'open' : ''}><summary>Theme map</summary>
+    $('#map-holder').innerHTML = `<details class="map" ${wasOpen ? 'open' : ''}><summary>Theme map <span class="map-n">${top.length} themes</span></summary>
       <p class="small muted">Themes are the OpenAlex topics of the papers found. ${hp ? 'Inner ring: themes that overlap your profile. Outer ring: adjacent themes.' : 'Inner ring: themes holding most of the top results.'} Bigger bubbles hold more papers; numbers match the list below. Tap a theme to see only its papers.</p>
       ${svg}${legend}${list}</details>`;
   }
@@ -853,9 +868,8 @@
     if (f.oaOnly) chips.push(`<li class="chip">Open access <button data-clear="oaOnly" aria-label="Clear">×</button></li>`);
     if (f.theme && s.themes) { const t = s.themes.themes.find(x => x.id === f.theme); if (t) chips.push(`<li class="chip">Theme: ${esc(t.name)} <button data-clear="theme" aria-label="Clear theme">×</button></li>`); }
     const canSwipe = s.kind !== 'author' && !inQuest() && vis.some(w => !S.saved.has(w.key) && !S.later.has(w.key));
-    $('#filterbar').innerHTML = `<div class="filterbar">${canSwipe ? '<button type="button" class="btn small swipe-btn" id="swipe-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="3"/><path d="M2.5 9.5 1 12l1.5 2.5M21.5 9.5 23 12l-1.5 2.5"/></svg>Swipe to sort</button>' : ''}<button type="button" class="btn small" id="open-filters">Filters${filtersActive() ? ' (on)' : ''}</button>${s.kind === 'search' ? `<button type="button" class="btn small" id="grade-toggle" aria-pressed="${S.ui.grading}">${S.ui.grading ? 'Done grading' : 'Grade results'}</button>` : ''}
-      <label class="sortsel"><span class="sr-only">Sort results</span><select id="sort">${sortOptions(s)}</select></label>
-      <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${s.kind === 'author' ? `${fmt(vis.length)} works` : grading() ? `${gradingList().length} to grade` : `${Math.min(s.shown, vis.length)} of ${vis.length} shown`}</span></div>`;
+    $('#filterbar').innerHTML = `<div class="filterbar">${canSwipe ? '<button type="button" class="btn small swipe-btn" id="swipe-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="3"/><path d="M2.5 9.5 1 12l1.5 2.5M21.5 9.5 23 12l-1.5 2.5"/></svg>Swipe to sort</button>' : ''}<button type="button" class="btn small" id="open-filters"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filters${filtersActive() ? ' (on)' : ''}</button>${S.ui.grading && s.kind === 'search' ? '<button type="button" class="btn small" id="grade-toggle" aria-pressed="true">Done grading</button>' : ''}
+      <ul class="chips" style="margin:0">${chips.join('')}</ul><div class="fb-meta"><label class="sortsel"><span class="sr-only">Sort results</span><select id="sort">${sortOptions(s)}</select></label><span class="count">${s.kind === 'author' ? `${fmt(vis.length)} works` : grading() ? `${gradingList().length} to grade` : `${Math.min(s.shown, vis.length)} of ${vis.length} shown`}</span></div></div>`;
   }
 
   function sortOptions(s) {
@@ -897,20 +911,25 @@
       + (w.rank.orbit ? `<li class="profile">Close to papers you saved: ${esc(w.rank.orbit.hits.join(', '))}.</li>` : '');
     const ev = ex.evidence ? `<blockquote>“${highlight(ex.evidence.text, hset)}${ex.evidence.truncated ? '…' : ''}”<cite>From the abstract (${esc(ex.evidence.from)})</cite></blockquote>` : '';
     const sem = w.rank.sem ? `; model similarity to query ${w.rank.sem.q.toFixed(2)}${w.rank.sem.p != null ? `, to profile ${w.rank.sem.p.toFixed(2)}` : ''}` : '';
+    const absOpen = S.ui.openAbstracts.has(w.key);
+    const kid = cssId(w.key);
+    // A card: what the paper is, why it is here, then four actions. Citation trails, links and the score are in ⋯.
     return `<li class="paper ${closeCls}" data-key="${esc(w.key)}">
       <div class="badges">${S.search && S.search.since && w.date && w.date >= S.search.since ? '<span class="badge new">New</span>' : ''}<span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}${w.cites ? `<span class="badge">Cited by ${fmt(w.cites)}</span>` : ''}${meter}</div>
-      <h3>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
-      <p class="byline">${authors}${authors ? '. ' : ''}${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
-      <div class="why"><ul>${reasons}</ul>${ev}${ex.note ? `<p class="note">${esc(ex.note)}</p>` : ''}</div>
+      <h3 id="t-${kid}">${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
+      ${authors ? `<p class="byline">${authors}</p>` : ''}
+      ${w.venue || w.year ? `<p class="publine">${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.venue && w.year ? ', ' : ''}${w.year ? `<span class="year">${w.year}</span>` : ''}</p>` : ''}
+      <div class="why"><p class="why-h">Why it’s here</p><ul>${reasons}</ul>${ev}${ex.note ? `<p class="note">${esc(ex.note)}</p>` : ''}</div>
+      ${w.abstract ? `<div class="abstract" id="abs-${kid}" ${absOpen ? '' : 'hidden'}><p class="abs-h">Abstract${w.abstractFrom ? ` <span class="tiny">from ${esc(w.abstractFrom)}</span>` : ''}</p><p>${highlight(w.abstract, hset)}</p></div>` : ''}
       ${grading() ? gradeHTML(w) : ''}
-      <div class="actions">
-        <button type="button" class="save" data-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>
-        ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${w.doi ? 'Publisher page' : 'Source page'}</a>` : ''}
-        ${free && free !== link ? `<a href="${esc(free)}" target="_blank" rel="noopener">Free full text${w.oaHost ? ` (${esc(w.oaHost)})` : ''}</a>` : ''}
-        ${pdf && pdf !== free ? `<a href="${esc(pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}
-        <button type="button" class="btn link" data-details="${esc(w.key)}" aria-expanded="${open}">Details</button>
+      <div class="actions card-actions">
+        <button type="button" class="act save" data-save="${esc(w.key)}" aria-pressed="${saved}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.8h11v16.7l-5.5-3.9-5.5 3.9z"/></svg><span>${saved ? 'Saved' : 'Save'}</span></button>
+        ${w.abstract ? `<button type="button" class="act" data-abstract="${esc(w.key)}" aria-expanded="${absOpen}" aria-controls="abs-${kid}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 10.5h14M5 15h9"/></svg><span>Abstract</span></button>` : '<span class="act none" aria-hidden="true"></span>'}
+        ${w.doi ? `<a class="act" href="https://doi.org/${esc(w.doi)}" target="_blank" rel="noopener" aria-label="DOI: open the publisher’s page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><span>DOI</span></a>` : link ? `<a class="act" href="${esc(link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><span>Source</span></a>` : '<span class="act none" aria-hidden="true"></span>'}
+        <button type="button" class="act" data-like="${esc(w.key)}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.6"/><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/></svg><span>More like this</span></button>
+        <button type="button" class="act more" data-card-menu="${esc(w.key)}" aria-haspopup="dialog" aria-label="More actions" aria-describedby="t-${kid}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
       </div>
-      ${inQuest() ? questCardHTML(w) : w.openalexId ? `<div class="trail"><span class="tiny">Explore:</span>${w.cites ? `<button type="button" class="btn link" data-trail="cites" data-key="${esc(w.key)}">Cited by ${fmt(w.cites)}</button>` : ''}<button type="button" class="btn link" data-trail="refs" data-key="${esc(w.key)}">References</button><button type="button" class="btn link" data-trail="related" data-key="${esc(w.key)}">Similar</button><button type="button" class="btn link quest-go" data-quest-start="origin" data-key="${esc(w.key)}">Trace its origin</button><button type="button" class="btn link" data-like="${esc(w.key)}">More like this</button></div>` : ''}
+      ${inQuest() ? questCardHTML(w) : ''}
       <div class="details" ${open ? '' : 'hidden'}><dl>
         <dt>Type</dt><dd>${esc(ti.label)}: ${esc(ti.why)}</dd>
         ${w.topic ? `<dt>Topic</dt><dd>${esc(w.topic.name)} (${esc(w.topic.field || '')})</dd>` : ''}
@@ -920,6 +939,57 @@
         <dt>Score</dt><dd>${w.rank.score.toFixed(2)} (search match ${w.rank.q.toFixed(2)}, source rank ${w.rank.rrf.toFixed(2)}${hp ? `, profile ${w.rank.prof.toFixed(2)}` : ''}${sem})</dd>
       </dl></div>
     </li>`;
+  }
+
+  const cssId = k => String(k).replace(/[^A-Za-z0-9_-]/g, '_');
+  // ⋯ on a card: the citation trail, the paper's links, and the details and score.
+  function openCardMenu(key) {
+    const w = S.search && S.search.pool.get(key); if (!w) return;
+    const link = primaryLink(w); const free = safeUrl(w.oaUrl) && w.isOA ? safeUrl(w.oaUrl) : ''; const pdf = safeUrl(w.pdf);
+    const k = esc(w.key); const open = S.ui.openDetails.has(w.key);
+    const item = (attrs, label, sub) => `<button type="button" class="menu-item" ${attrs}><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</button>`;
+    const ext = (href, label, sub) => `<a class="menu-item" href="${esc(href)}" target="_blank" rel="noopener"><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</a>`;
+    const explore = w.openalexId && !inQuest() ? `<h4 class="menu-h">Follow the citation trail</h4><div class="menu-list">
+        ${w.cites ? item(`data-trail="cites" data-key="${k}"`, `Cited by ${fmt(w.cites)}`, 'Later papers that cite this one') : ''}
+        ${item(`data-trail="refs" data-key="${k}"`, 'References', 'Papers this one cites')}
+        ${item(`data-trail="related" data-key="${k}"`, 'Similar papers', 'Related works listed by OpenAlex')}
+        ${item(`class="quest-go" data-quest-start="origin" data-key="${k}"`, 'Trace its origin', 'Step back through references to where the idea started')}
+      </div>` : '';
+    const links = [link ? ext(link, w.doi ? 'Publisher page' : 'Source page', w.doi ? esc(w.doi) : '') : '',
+      free && free !== link ? ext(free, 'Free full text', w.oaHost ? esc(w.oaHost) : '') : '', pdf && pdf !== free ? ext(pdf, 'PDF', '') : '',
+      w.openalexId ? ext(safeUrl(w.openalexId), 'OpenAlex record', '') : ''].filter(Boolean).join('');
+    openSheet(`<h3 id="sheet-h" class="sheet-title">${esc(w.title)}</h3>
+      ${explore}
+      ${links ? `<h4 class="menu-h">Read it</h4><div class="menu-list">${links}</div>` : ''}
+      <h4 class="menu-h">This result</h4><div class="menu-list">${item(`data-details="${k}" data-key="${k}"`, open ? 'Hide details and score' : 'Details and score', 'Type, topic, which databases found it, and how it was ranked')}</div>
+      <button type="button" class="btn sheet-cancel" data-close-sheet>Close</button>`, 'card');
+  }
+  // Run what was picked in a paper's ⋯ sheet once the sheet (and its history entry) is gone.
+  function cardAction(d) {
+    const w = S.search && S.search.pool.get(d.key || d.details || d.like); if (!w) return;
+    if (d.trail) { runTrail(w, d.trail); return; }
+    if (d.questStart) { startQuest(w, d.questStart); return; }
+    if (d.details) {
+      const li = document.querySelector(`#results .paper[data-key="${CSS.escape(w.key)}"]`); const box = li && $('.details', li);
+      if (!box) return; box.hidden = !box.hidden; box.hidden ? S.ui.openDetails.delete(w.key) : S.ui.openDetails.add(w.key);
+      if (!box.hidden) box.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' });
+    }
+  }
+  // The ⋯ in the header: Settings, About, appearance, install, the main app.
+  function openMenu() {
+    const a = currentAppearance();
+    const seg = ['auto', 'light', 'dark'].map(x => `<button type="button" data-menu-appearance="${x}" aria-pressed="${a === x}">${APPEARANCE_ICONS[x]}<span>${x === 'auto' ? 'Auto' : APPEARANCE_NAMES[x]}</span></button>`).join('');
+    const item = (view, label, sub) => `<button type="button" class="menu-item" data-menu="${view}"><span>${label}</span><small>${sub}</small></button>`;
+    openSheet(`<h3 id="sheet-h" class="sr-only">More</h3>
+      <div class="menu-list">
+        ${item('settings', 'Settings', 'Databases, ranking, OpenAlex key, AI answers')}
+        ${item('about', 'About Paperscope', 'How it works, what leaves your device, costs')}
+        ${isStandalone() ? '' : item('install', 'Install as an app', 'Home screen icon, opens offline')}
+        <a class="menu-item" href="../"><span>Open the main app</span><small>Paperscope without the Lab experiments</small></a>
+      </div>
+      <h4 class="menu-h" id="menu-appearance-h">Appearance</h4>
+      <div class="seg" role="group" aria-labelledby="menu-appearance-h">${seg}</div>
+      <button type="button" class="btn sheet-cancel" data-close-sheet>Close</button>`, 'menu');
   }
 
   function renderResults() {
@@ -987,10 +1057,7 @@
   // ---------------------------------------------------------------- filters sheet
   function openFilters() {
     const f = S.filters;
-    const root = $('#sheet-root');
-    root.innerHTML = `<div class="sheet-backdrop" data-close-sheet></div>
-      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
-        <h3 id="sheet-h">Filter results</h3>
+    openSheet(`<h3 id="sheet-h">Filter results</h3>
         <fieldset><legend>Publication type</legend>
           ${CATS.map(([k, label, sub]) => `<label class="check"><input type="checkbox" name="cat" value="${k}" ${f.cats.has(k) ? 'checked' : ''}><span>${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ''}</span></label>`).join('')}
           <label class="check"><input type="checkbox" id="f-inferred" ${f.hideInferred ? 'checked' : ''}><span>Hide types that are only inferred<small>Types marked with ? come from title or abstract wording, not from the database.</small></span></label>
@@ -1001,11 +1068,32 @@
         <fieldset><legend>Access</legend><label class="check"><input type="checkbox" id="f-oa" ${f.oaOnly ? 'checked' : ''}><span>Open access only</span></label></fieldset>
         <div class="row"><button type="button" class="btn primary" id="apply-filters">Apply</button><button type="button" class="btn" id="reset-filters">Reset</button><button type="button" class="btn link" data-close-sheet>Cancel</button></div>
         <p class="tiny" style="margin-top:12px">Filters apply to the papers already fetched. If few remain, you can search the databases again with them.</p>
-      </div>`;
-    $('.sheet input', root).focus();
-    navOverlay('sheet');
+        ${S.search && S.search.kind === 'search' ? `<h4 class="menu-h">Benchmark (Lab)</h4><button type="button" class="btn" id="grade-toggle" aria-pressed="${S.ui.grading}">${S.ui.grading ? 'Done grading' : 'Grade these results'}</button><p class="tiny">Mark how relevant each paper is. Your grades measure how well the ranking works (Profile › Graded searches).</p>` : ''}`, 'filters');
   }
-  function closeSheet(fromBack) { if (!$('#sheet-root').innerHTML) return; $('#sheet-root').innerHTML = ''; if (!fromBack) navCloseOverlay(); const b = $('#open-filters'); if (b) b.focus(); }
+  // Bottom sheets (filters, the ⋯ menu, a paper's actions) have their own history entry, so back closes them.
+  // `then` runs once that entry is gone, so an action picked in a sheet adds its own entry in the right place.
+  let sheetOpener = null;
+  function openSheet(html, kind, label) {
+    sheetOpener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    $('#sheet-root').innerHTML = `<div class="sheet-backdrop" data-close-sheet></div><div class="sheet" data-kind="${kind}" role="dialog" aria-modal="true" aria-labelledby="sheet-h"><div class="sheet-grip" aria-hidden="true"></div>${html}</div>`;
+    document.body.classList.add('sheet-open');
+    const first = $('#sheet-root .sheet [data-autofocus]') || $('#sheet-root .sheet button, #sheet-root .sheet a, #sheet-root .sheet input');
+    if (first) first.focus({ preventScroll: true });
+    navOverlay(kind || 'sheet');
+  }
+  // Grading mode (Lab benchmark): offered in the Filters sheet; “Done grading” sits in the toolbar while it is on.
+  function setGrading(on) {
+    S.ui.grading = on; gradingCache = null; renderResults();
+    if (!S.ui.grading) toast(benchEntry(S.search) ? 'Grades saved on this device' : 'Grading off');
+    else $('#grade-note').scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+  }
+  function closeSheet(fromBack, then) {
+    if (!$('#sheet-root').innerHTML) { if (then) then(); return; }
+    $('#sheet-root').innerHTML = ''; document.body.classList.remove('sheet-open');
+    const o = sheetOpener; sheetOpener = null;
+    if (o && document.contains(o) && !then) o.focus({ preventScroll: true }); else if (!then) { const b = $('#open-filters'); if (b) b.focus({ preventScroll: true }); }
+    if (!fromBack) navCloseOverlay(then); else if (then) then();
+  }
   function applyFilters() {
     const f = S.filters;
     f.cats = new Set([...document.querySelectorAll('.sheet input[name="cat"]:checked')].map(i => i.value));
@@ -1028,10 +1116,10 @@
       toast(store.set('__probe', 1) ? 'Saved on this device' : 'Saved for this session only (browser storage is unavailable)');
     }
     persistSaved(); updateSavedCount();
-    document.querySelectorAll(`[data-save="${CSS.escape(key)}"]`).forEach(b => { const on = S.saved.has(key); b.setAttribute('aria-pressed', on); b.textContent = on ? 'Saved' : 'Save'; });
+    document.querySelectorAll(`[data-save="${CSS.escape(key)}"]`).forEach(b => { const on = S.saved.has(key); b.setAttribute('aria-pressed', on); const sp = b.querySelector('span'); (sp || b).textContent = on ? 'Saved' : 'Save'; });
     if (S.search && S.search.kind === 'like') renderLikeHeader();
   }
-  function updateSavedCount() { $('#saved-count').textContent = S.saved.size ? `(${S.saved.size})` : ''; }
+  function updateSavedCount() { $('#saved-count').textContent = S.saved.size ? String(S.saved.size) : ''; }
   function renderSaved() {
     const list = [...S.saved.values()].sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
     if (!list.length) { $('#saved-body').innerHTML = `${skyHTML()}${trailsHTML()}<p class="muted">Papers you save appear here. They are kept in this browser, not in an account.</p>${laterHTML()}`; return; }
@@ -1587,8 +1675,10 @@
       : `<p class="small">AI checked the top ${ck.n} papers (${esc(ck.model)}${ck.usage ? `, ${esc(ck.usage)} tokens, billed to your account` : ''}): ${ck.counts[3]} directly address your search, ${ck.counts[2]} relevant, ${ck.counts[1] + ck.counts[0]} only touch it or not.${ck.missing ? ` ${ck.missing} got no grade.` : ''} <button type="button" class="btn link" id="ai-order">${ck.order ? 'Show the usual order' : 'Order by the AI check'}</button></p>`) : '';
     if (!a) {
       const n = answerPapers().length;
-      el.innerHTML = `<div class="panel answer"><div class="row"><button type="button" class="btn" id="answer-run" ${llmReady() && n >= 2 ? '' : 'disabled'}>Write a short answer from the top papers</button><button type="button" class="btn" id="ai-check" ${llmReady() && !(ck && ck.loading) ? '' : 'disabled'}>Check the top 30 with AI</button></div>${checkLine}
-        <p class="tiny" style="margin:6px 0 0">${llmReady() ? `Sends your search and the titles and abstracts of the top papers to ${S.settings.llmProvider === 'anthropic' ? 'Anthropic' : esc(S.settings.llmBase)}, billed to your account. The check asks the model whether each paper studies what you searched for, not just whether it uses the words. Your CV and profile are not sent.` : 'Optional. Uses an AI model with your own key; set it up in <a href="#about">About › Settings</a>. Off by default.'}</p></div>`;
+      const inner = `<div class="row"><button type="button" class="btn" id="answer-run" ${llmReady() && n >= 2 ? '' : 'disabled'}>Write a short answer from the top papers</button><button type="button" class="btn" id="ai-check" ${llmReady() && !(ck && ck.loading) ? '' : 'disabled'}>Check the top 30 with AI</button></div>${checkLine}
+        <p class="tiny" style="margin:6px 0 0">${llmReady() ? `Sends your search and the titles and abstracts of the top papers to ${S.settings.llmProvider === 'anthropic' ? 'Anthropic' : esc(S.settings.llmBase)}, billed to your account. The check asks the model whether each paper studies what you searched for, not just whether it uses the words. Your CV and profile are not sent.` : 'Optional. Uses an AI model with your own key; set it up in <a href="#settings">Settings</a>. Off by default.'}</p>`;
+      // Not set up: a folded line, so it does not push the papers down.
+      el.innerHTML = llmReady() || ck ? `<div class="panel answer">${inner}</div>` : `<details class="panel answer ai-off"><summary class="small"><strong>AI answer and check</strong> <span class="tiny">off: needs your own key</span></summary>${inner}</details>`;
       return;
     }
     if (a.loading) { el.innerHTML = `<div class="panel answer loading"><span class="spinner" aria-hidden="true"></span> Writing an answer from ${a.papers.length} abstracts…</div>`; return; }
@@ -1640,10 +1730,13 @@
       throw e;
     } finally { clearTimeout(timer); }
   }
+  // The AI answer and check sit in the “Theme map and search details” fold; open it when one is asked for.
+  function showSearchMore() { const m = $('#search-more'); if (m) m.open = true; }
   async function runAnswer() {
     const s = S.search; if (!s || !llmReady()) return;
     const papers = answerPapers();
     if (papers.length < 2) { toast('Need at least two papers with abstracts'); return; }
+    showSearchMore();
     const token = searchToken;
     s.answer = { loading: true, papers }; renderAnswer();
     const { system, user } = C.buildAnswerPrompt(s.q, papers);
@@ -1665,7 +1758,7 @@
     const s = S.search; if (!s || !llmReady()) return;
     const papers = visibleWorks().slice(0, 30); if (!papers.length) return;
     const token = searchToken;
-    s.aiCheck = { loading: true, n: papers.length }; renderAnswer();
+    s.aiCheck = { loading: true, n: papers.length }; showSearchMore(); renderAnswer();
     const { system, user } = C.buildCheckPrompt(s.q, papers);
     try {
       const out = await callLLM(system, user, 1500);
@@ -1811,9 +1904,27 @@
   document.addEventListener('click', e => {
     const tab = e.target.closest('.tabs a[data-view]');
     if (tab) { e.preventDefault(); goTab(tab.dataset.view); return; }
+    if (e.target.classList && e.target.classList.contains('sheet-backdrop')) { closeSheet(); return; } // tap outside a sheet
     const t = e.target.closest('button, [data-theme], [data-exp], [data-star], a[href^="#"]');
     if (!t) return;
     const d = t.dataset;
+    { const h = t.tagName === 'A' && t.getAttribute('href'); const m = h && /^#(search|today|saved|profile|settings|about)$/.exec(h);
+      if (m && !t.closest('.tabs') && t.id !== 'home-link') { e.preventDefault(); const go = () => goTab(m[1]); $('#sheet-root').innerHTML ? closeSheet(false, go) : go(); return; } }
+    if (t.id === 'menu-btn') { openMenu(); return; }
+    if (d.menu) { const v = d.menu; closeSheet(false, () => { if (v === 'install') { goTab('about'); openGroup('#install-h'); } else goTab(v); }); return; }
+    if (d.menuAppearance) {
+      applyAppearance(d.menuAppearance);
+      document.querySelectorAll('[data-menu-appearance]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.menuAppearance === d.menuAppearance)));
+      return;
+    }
+    if (d.cardMenu) { openCardMenu(d.cardMenu); return; }
+    if (t.closest('.sheet[data-kind="card"]') && (d.trail || d.questStart || d.details)) { const ds = Object.assign({}, d); closeSheet(false, () => cardAction(ds)); return; }
+    if (d.abstract) {
+      const k = d.abstract; const box = document.getElementById('abs-' + cssId(k)); if (!box) return;
+      box.hidden = !box.hidden; t.setAttribute('aria-expanded', String(!box.hidden));
+      box.hidden ? S.ui.openAbstracts.delete(k) : S.ui.openAbstracts.add(k);
+      return;
+    }
     if (d.mode && t.closest('#modes')) {
       if (t.disabled) return;
       S.mode = d.mode; store.set('mode', S.mode); renderModes();
@@ -1853,12 +1964,7 @@
     if (t.id === 'lab-import') { labImport(); return; }
     if (t.id === 'lab-note-hide') { store.set('labNoteHidden', true); const n = $('.lab-note'); if (n) n.hidden = true; return; }
     if (t.id === 'swipe-open') { openDeck(); return; }
-    if (t.id === 'grade-toggle' || t.id === 'grade-done') {
-      S.ui.grading = t.id === 'grade-toggle' ? !S.ui.grading : false; gradingCache = null; renderResults();
-      if (!S.ui.grading) toast(benchEntry(S.search) ? 'Grades saved on this device' : 'Grading off');
-      else $('#grade-note').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
+    if (t.id === 'grade-toggle' || t.id === 'grade-done') { const on = t.id === 'grade-toggle' ? !S.ui.grading : false; t.closest('.sheet') ? closeSheet(false, () => setGrading(on)) : setGrading(on); return; }
     if (d.grade !== undefined && d.key) {
       gradeWork(d.key, Number(d.grade));
       const e = benchEntry(S.search); const g = e && e.grades[d.key];
@@ -2032,6 +2138,13 @@
   }, true);
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && $('#sheet-root').innerHTML) closeSheet();
+    if (e.key === 'Tab' && $('#sheet-root').innerHTML) { // keep the keyboard inside an open sheet
+      const f = [...document.querySelectorAll('#sheet-root .sheet button, #sheet-root .sheet a[href], #sheet-root .sheet input, #sheet-root .sheet select, #sheet-root .sheet textarea')].filter(x => !x.disabled && x.offsetParent !== null);
+      if (f.length) { const first = f[0], last = f[f.length - 1];
+        if (!document.querySelector('#sheet-root .sheet').contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+        else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } }
+    }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-theme], [data-exp], [data-star]')) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent('click', { bubbles: true })); }
   });
   document.addEventListener('submit', e => {
@@ -2249,7 +2362,19 @@
   const todaySig = () => `3|${pubsOn().map(p => p.id).join(',')}|${C.todayQuery(todayTermsNow())}|${S.settings.todayS2 ? 's2' : ''}`;
   function todayWork(w) { if (!w._prep) C.prepWork(w); return w; }
   const VIA = { crossref: 'Crossref', oa_kw: 'OpenAlex', s2: 'Semantic Scholar' };
-  function renderToday() {
+  function renderToday() { renderTodayBox(); renderTodayExtras(); }
+  // The Today tab shows how many new papers there are; the start screen shows a one-line pointer to them.
+  function renderTodayExtras() {
+    const t = S.today; const n = t && t.day === localDay() ? (t.items || []).length : 0;
+    const c = $('#today-count'); if (c) c.textContent = n ? String(n) : '';
+    const tz = $('#today-teaser'); if (!tz) return;
+    const terms = todayTermsNow();
+    const body = !terms.length ? 'Choose journals and topics to get new papers each day.'
+      : todayBusy && !n ? '<span class="spinner" aria-hidden="true"></span> Checking for new papers…'
+      : n ? `${n} new: ${esc(short(t.items[0].title))}` : 'Nothing new on your topics yet today.';
+    tz.innerHTML = `<a class="teaser" href="#today"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg><span><strong>Papers of the day</strong><span class="teaser-s">${body}</span></span></a>`;
+  }
+  function renderTodayBox() {
     const box = $('#today'); if (!box) return;
     const terms = todayTermsNow(); const pubs = pubsOn(); const t = S.today; const related = C.todayRelated(terms);
     const names = pubs.map(p => p.name); const pubList = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || 'no publishers';
@@ -2259,7 +2384,7 @@
         <textarea id="today-topics" rows="3" placeholder="e.g. exciton diffusion, transient absorption, perylene diimide">${esc(S.settings.todayTopics || '')}</textarea>
         ${related.length ? `<p class="tiny" id="today-related">Related wording that also counts: ${esc(related.slice(0, 10).join(', '))}${related.length > 10 ? ` and ${related.length - 10} more` : ''}.</p>` : ''}
         <label class="switch small"><input type="checkbox" id="today-s2" ${S.settings.todayS2 ? 'checked' : ''}><span>Also suggest papers like my saved ones<br><span class="tiny">Sends the DOIs of your 10 most recently saved papers to Semantic Scholar, which suggests similar new papers. ${S.saved.size ? `You have ${S.saved.size} saved.` : 'Save some papers first.'}</span></span></label>
-        <p class="tiny">${hasProfile() ? 'Your profile’s terms are used too.' : 'Tip: a profile (Profile tab, or “Bring over” above) adds your terms automatically.'} Your topics and the publishers are sent to Crossref and OpenAlex to find new papers.</p>
+        <p class="tiny">${hasProfile() ? 'Your profile’s terms are used too.' : 'Tip: a profile (the Profile tab, or “Bring over my saved papers and profile” on Search) adds your terms automatically.'} Your topics and the publishers are sent to Crossref and OpenAlex to find new papers.</p>
         <button type="button" class="btn small primary" id="today-save">Save and check now</button></details>`;
     if (!terms.length) {
       box.innerHTML = `<section class="today" aria-labelledby="today-h"><h2 id="today-h">Papers of the day</h2>
@@ -2923,7 +3048,8 @@
 
   // ---------------------------------------------------------------- init
   { const st = history.state || {}; if (st.ps === 'res' || st.ps === 'overlay') history.replaceState({ ps: 'home', depth: st.depth || 0 }, '', '#search'); nav.depth = (history.state || {}).depth || 0; }
-  updateSavedCount(); renderModes(); route(); renderFollows(); renderAppearance(); renderInstall();
+  { const m = $('#search-more'); if (m) m.open = !(window.matchMedia && window.matchMedia('(max-width: 759px), (max-height: 500px)').matches); } // folded on phones, either way up
+  updateSavedCount(); renderModes(); route(); renderFollows(); renderAppearance(); syncThemeColor(); renderInstall();
   { const n = $('.lab-note'); if (n && store.get('labNoteHidden', false)) n.hidden = true; }
   S.today = store.get('today', null); renderToday(); if (!location.hash.startsWith('#trail=')) fetchToday(false);
   if (S.settings.pendingKey) checkKey(true);

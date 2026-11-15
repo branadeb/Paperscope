@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#1d1233">
+<meta name="theme-color" content="#0c1430">
 <script>try{var a=JSON.parse(localStorage.getItem('paperscope-lab.appearance')||'"auto"');if(a==='light'||a==='dark')document.documentElement.setAttribute('data-appearance',a);}catch(e){}</script>
 <meta name="description" content="Free research discovery: search OpenAlex, Crossref and Europe PMC, ranked against your own research profile, which never leaves your device.">
 <title>Paperscope Lab: experimental copy</title>
@@ -56,94 +56,110 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 [hidden] { display: none !important; }
 h1, h2, h3 { font-family: var(--display); line-height: 1.2; font-weight: 600; }
-h2 { font-size: 1.5rem; margin: 1.5em 0 .5em; letter-spacing: -.005em; }
-h3 { font-size: 1.12rem; margin: 1.2em 0 .4em; }
+h2 { font-size: 1.4rem; margin: 1.4em 0 .5em; letter-spacing: -.005em; }
+h3 { font-size: 1.125rem; margin: 1.2em 0 .4em; }
 p { margin: .5em 0; }
-.lede { font: 1.08rem/1.55 var(--sans); color: var(--ink-2); margin: 4px 0 14px; max-width: 60ch; }
+.lede { font: 1rem/1.55 var(--sans); color: var(--ink-2); margin: 4px 0 14px; max-width: 62ch; }
 .muted { color: var(--ink-2); }
-.small { font-size: .875rem; }
-.tiny { font-size: .8rem; color: var(--ink-3); }
+/* Body text is 16px. Secondary lines are 15px and captions 13px, never smaller. */
+.small { font-size: .9375rem; }
+.tiny { font-size: .8125rem; color: var(--ink-3); }
 
-/* ---------- header: part of the night band */
-.top { background: var(--night); color: var(--star); padding: env(safe-area-inset-top) 0 0; }
-.top-inner { max-width: 760px; margin: 0 auto; padding: 12px 16px 8px; display: flex; align-items: center; justify-content: space-between; }
-.brand { display: flex; align-items: center; gap: 10px; font: 600 1.25rem/1 var(--display); letter-spacing: .01em; color: var(--star); text-decoration: none; }
+/* ---------- app bar: back, name, ⋯ menu. Sticky, on the night band, clear of the notch */
+.skip-link { position: absolute; left: 8px; top: -60px; z-index: 80; background: var(--surface); color: var(--ink); padding: 10px 14px; border-radius: 10px; }
+.skip-link:focus { top: calc(8px + env(safe-area-inset-top)); }
+.appbar { position: sticky; top: 0; z-index: 32; background: var(--night); color: var(--star); padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+.appbar-in { max-width: 760px; margin: 0 auto; min-height: 52px; padding: 4px 6px; display: flex; align-items: center; gap: 4px; }
+.brand { display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 8px; margin-right: auto; font: 600 1.2rem/1 var(--display); letter-spacing: .01em; color: var(--star); text-decoration: none; border-radius: 12px; }
 .brand svg { width: 24px; height: 24px; flex: none; }
-.icon-btn { appearance: none; width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgb(255 255 255 / .22); background: rgb(255 255 255 / .06); color: var(--star); display: grid; place-items: center; cursor: pointer; }
-.icon-btn:hover { background: rgb(255 255 255 / .12); }
-.icon-btn svg { width: 18px; height: 18px; }
+.icon-btn { appearance: none; width: 44px; height: 44px; flex: none; border-radius: 50%; border: 0; background: transparent; color: var(--star); display: grid; place-items: center; cursor: pointer; }
+.icon-btn:hover { background: rgb(255 255 255 / .1); }
+.icon-btn:active { background: rgb(255 255 255 / .16); }
+.icon-btn svg { width: 22px; height: 22px; }
+.appbar :focus-visible { outline-color: var(--star); }
 
-/* ---------- tab bar: app-style at the bottom on phones, a strip under the header on wide screens */
-.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: color-mix(in srgb, var(--surface) 90%, transparent);
-  backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
+/* ---------- bottom navigation: four tabs, fixed, above the home indicator */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-top: 1px solid var(--rule);
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 .tabs { display: grid; grid-template-columns: repeat(4, 1fr); max-width: 560px; margin: 0 auto; }
-.tabs a { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px 7px; text-decoration: none; color: var(--ink-3); font-size: .72rem; font-weight: 500; position: relative; }
-.tabs a svg { width: 22px; height: 22px; }
-.tabs a[aria-current="page"] { color: var(--ink); }
-.tabs a[aria-current="page"]::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 2px; border-radius: 0 0 2px 2px; background: var(--spectrum); }
-.tabs .count { font-variant-numeric: tabular-nums; }
-main { max-width: 760px; margin: 0 auto; padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
-@media (min-width: 760px) {
-  .tabbar { position: sticky; top: 0; bottom: auto; border-top: 0; border-bottom: 1px solid rgb(255 255 255 / .08); background: color-mix(in srgb, var(--night) 94%, transparent); }
-  .tabs a { color: var(--star-2); }
-  .tabs a[aria-current="page"] { color: var(--star); }
+.tabs a { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 60px; padding: 6px 2px; text-decoration: none; color: var(--ink-2); font-size: .8125rem; font-weight: 500; line-height: 1.1; }
+.tabs a svg { width: 24px; height: 24px; padding: 3px 18px; box-sizing: content-box; border-radius: 999px; transition: background-color .2s; }
+.tabs a[aria-current="page"] { color: var(--ink); font-weight: 650; }
+.tabs a[aria-current="page"] svg { background: color-mix(in srgb, var(--close) 17%, transparent); color: var(--close); }
+.tabs .count { position: absolute; top: 3px; left: calc(50% + 8px); min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: var(--close); color: var(--surface);
+  font: 700 .75rem/19px var(--sans); text-align: center; font-variant-numeric: tabular-nums; }
+.tabs .count:empty { display: none; }
+main { --gutter-r: max(14px, env(safe-area-inset-right)); max-width: 760px; margin: 0 auto; padding: 0 var(--gutter-r) calc(96px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
+@media (min-width: 760px) and (min-height: 501px) {
+  .tabbar { position: sticky; top: calc(52px + env(safe-area-inset-top)); bottom: auto; z-index: 31; border-top: 0; border-bottom: 1px solid var(--rule); }
   .tabs { display: flex; max-width: 760px; padding: 0 10px; gap: 4px; }
-  .tabs a { flex-direction: row; gap: 7px; font-size: .92rem; padding: 11px 12px; }
-  .tabs a svg { width: 17px; height: 17px; }
-  .tabs a[aria-current="page"]::before { top: auto; bottom: 0; left: 10px; right: 10px; border-radius: 2px 2px 0 0; }
-  main { padding-bottom: 80px; }
+  .tabs a { flex-direction: row; gap: 8px; min-height: 48px; padding: 0 14px; font-size: .9375rem; }
+  .tabs a svg { width: 20px; height: 20px; padding: 0; background: none !important; }
+  .tabs a[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; border-radius: 2px 2px 0 0; background: var(--spectrum); }
+  .tabs .count { position: static; }
+  main { padding-bottom: 80px; width: 100%; }
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+  .skip-link { order: -3; } .appbar { order: -2; } .tabbar { order: -1; }
 }
+/* the view's own heading under the app bar */
+.view-h { margin: 20px 0 6px; font-size: 1.5rem; }
 
-/* ---------- hero: full-bleed night band with the aperture rings and the spectrum line */
-.hero { position: relative; background: var(--night); color: var(--star); padding: 18px 0 26px; margin-bottom: 18px;
+/* ---------- search panel: compact, on the night band, with the spectrum line under it */
+.searchpanel { position: relative; background: var(--night); color: var(--star); padding: 6px 0 16px; margin-bottom: 16px;
   box-shadow: 0 0 0 100vmax var(--night); clip-path: inset(0 -100vmax); }
-.hero::after { content: ""; position: absolute; left: -100vmax; right: -100vmax; bottom: 0; height: 3px; background: var(--spectrum); transform-origin: left; animation: sweep 1.1s cubic-bezier(.2, .7, .2, 1) both; }
+.searchpanel::after { content: ""; position: absolute; left: -100vmax; right: -100vmax; bottom: 0; height: 3px; background: var(--spectrum); transform-origin: left; animation: sweep 1.1s cubic-bezier(.2, .7, .2, 1) both; }
 @keyframes sweep { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.hero-rings { position: absolute; right: -70px; top: -66px; width: 270px; height: 270px; pointer-events: none; animation: dawn 1.4s ease-out both; }
-@keyframes dawn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
-.hero-rings circle.r { fill: none; stroke: rgb(255 255 255 / .11); }
-.hero-rings circle.o1 { fill: var(--glow-close); filter: drop-shadow(0 0 6px var(--glow-close)); }
-.hero-rings circle.o2 { fill: var(--glow-adj); filter: drop-shadow(0 0 6px var(--glow-adj)); }
-.hero-title { position: relative; font: 500 2.05rem/1.1 var(--display); letter-spacing: -.012em; margin: 18px 0 8px; max-width: 15ch; color: var(--star); }
-.hero-lede { position: relative; color: var(--star-2); margin: 0 0 18px; max-width: 34ch; }
-.hero.compact { padding: 12px 0 18px; }
-.hero.compact .hero-title, .hero.compact .hero-lede { display: none; }
-.hero.compact .hero-rings { width: 170px; height: 170px; right: -60px; top: -70px; opacity: .55; }
-@media (min-width: 760px) { .hero-title { font-size: 2.7rem; } .hero-rings { width: 360px; height: 360px; right: -90px; top: -100px; } }
-@media (prefers-reduced-motion: reduce) { .hero::after, .hero-rings { animation: none; } body { transition: none; } }
+.hero-lede { position: relative; color: var(--star-2); margin: 10px 0 0; font-size: .9375rem; max-width: 46ch; }
+.searchpanel.compact { padding-bottom: 12px; }
+.searchpanel.compact .hero-lede, .searchpanel.compact .profile-line, .searchpanel.compact .mode-hint { display: none; }
+@media (prefers-reduced-motion: reduce) { .searchpanel::after { animation: none; } body { transition: none; } }
 
 /* search form */
 .searchbar { position: relative; display: flex; gap: 8px; }
-.searchbar input { flex: 1; min-width: 0; padding: 14px 16px; border: 1px solid rgb(255 255 255 / .22); border-radius: 14px; background: var(--surface); color: var(--ink); font-size: 1.05rem; box-shadow: 0 8px 28px rgb(0 0 0 / .22); }
+.searchbar input { flex: 1; min-width: 0; min-height: 50px; padding: 12px 14px; border: 1px solid rgb(255 255 255 / .22); border-radius: 14px; background: var(--surface); color: var(--ink); font-size: 1.0625rem; }
 .searchbar input::placeholder { color: var(--ink-3); }
-.searchbar .btn.primary { background: var(--btn); color: var(--btn-ink); border-color: transparent; padding: 0 18px; border-radius: 14px; }
-.btn { appearance: none; border: 1px solid var(--rule); background: var(--surface); padding: 9px 14px; border-radius: 12px; cursor: pointer; line-height: 1.2; transition: border-color .15s, transform .08s; }
+.searchbar .btn.primary { background: var(--btn); color: var(--btn-ink); border-color: transparent; min-height: 50px; padding: 0 16px; border-radius: 14px; }
+.btn { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 1px solid var(--rule); background: var(--surface); padding: 10px 16px; border-radius: 12px; cursor: pointer; line-height: 1.2; text-align: center; transition: border-color .15s, transform .08s; }
 .btn:hover { border-color: var(--ink-3); }
 .btn:active { transform: translateY(1px); }
 .btn.primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); font-weight: 600; }
-.btn.small { padding: 6px 11px; font-size: .875rem; border-radius: 10px; }
-.btn.link { border: 0; background: none; padding: 4px 2px; color: var(--focus); text-decoration: underline; text-underline-offset: 2px; }
+.btn.small { padding: 8px 13px; font-size: .9375rem; border-radius: 12px; }
+.btn.link { border: 0; background: none; padding: 6px 4px; color: var(--focus); text-decoration: underline; text-underline-offset: 3px; }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.profile-line { position: relative; margin: 12px 0 0; font-size: .9rem; color: var(--star-2); }
-.profile-line a { color: var(--night-link); }
+.profile-line { position: relative; margin: 10px 0 0; font-size: .9375rem; color: var(--star-2); }
+.profile-line a { color: var(--night-link); display: inline-block; padding: 12px 0; margin: -12px 0; }
 
-/* mode selector: pills on the night band */
-.modes { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 14px 0 4px; padding: 4px; border-radius: 999px; background: rgb(255 255 255 / .07); border: 1px solid rgb(255 255 255 / .14); }
-.modes button { appearance: none; border: 0; background: none; padding: 8px 6px; font-size: .84rem; line-height: 1.15; cursor: pointer; color: var(--star-2); border-radius: 999px; transition: background .2s, color .2s; }
+/* mode selector: a segmented control on the night band */
+.modes { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 12px 0 0; padding: 4px; border-radius: 16px; background: rgb(255 255 255 / .07); border: 1px solid rgb(255 255 255 / .14); }
+.modes button { appearance: none; border: 0; background: none; min-height: 44px; padding: 6px 4px; font-size: .875rem; line-height: 1.15; cursor: pointer; color: var(--star-2); border-radius: 12px; transition: background .2s, color .2s; }
 .modes button[aria-checked="true"] { background: var(--star); color: #0c1430; font-weight: 600; }
-.modes button[data-mode="close"][aria-checked="true"] { box-shadow: inset 0 -2px 0 var(--glow-close); }
-.modes button[data-mode="adjacent"][aria-checked="true"] { box-shadow: inset 0 -2px 0 var(--glow-adj); }
-.modes button[disabled] { color: rgb(255 255 255 / .42); cursor: not-allowed; }
-.mode-hint { position: relative; font-size: .82rem; color: var(--star-2); margin: 6px 0 0; }
+.modes button[data-mode="close"][aria-checked="true"] { box-shadow: inset 0 -3px 0 var(--glow-close); }
+.modes button[data-mode="adjacent"][aria-checked="true"] { box-shadow: inset 0 -3px 0 var(--glow-adj); }
+.modes button[disabled] { color: rgb(255 255 255 / .5); cursor: not-allowed; }
+.mode-hint { position: relative; font-size: .9375rem; color: var(--star-2); margin: 8px 0 0; }
 
-/* ---------- start screen */
-#start { margin-top: 6px; }
-.start-h { font: 600 1.15rem var(--display); margin: 18px 0 6px; }
+/* search pathways (topics / authors) */
+.pathways { position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; gap: 2px; margin: 4px 0 10px; padding: 3px; border-radius: 999px; background: rgb(255 255 255 / .07); border: 1px solid rgb(255 255 255 / .14); }
+.pathways button { appearance: none; border: 0; background: none; min-height: 44px; min-width: 96px; padding: 4px 16px; font-size: .9375rem; cursor: pointer; color: var(--star-2); border-radius: 999px; transition: background .2s, color .2s; }
+.pathways button[aria-checked="true"] { background: var(--star); color: #0c1430; font-weight: 600; }
+.searchpanel[data-search-by="author"] #modes, .searchpanel[data-search-by="author"] #mode-hint { display: none; }
+.authors-ex button { font-family: var(--sans); font-weight: 500; font-size: 1rem; }
+
+/* ---------- start screen: today's papers first, then examples */
+#start { margin-top: 4px; }
+.start-h { font: 600 1.125rem var(--display); margin: 20px 0 6px; }
 .examples { list-style: none; padding: 0; display: grid; gap: 8px; margin: 8px 0; }
-.examples button { appearance: none; width: 100%; text-align: left; border: 1px solid var(--rule); background: var(--surface); padding: 12px 14px; border-radius: 14px; cursor: pointer;
-  font: 500 1.02rem/1.35 var(--display); color: var(--ink); transition: border-color .15s; }
+.examples button { appearance: none; width: 100%; min-height: 50px; text-align: left; border: 1px solid var(--rule); background: var(--surface); padding: 12px 14px; border-radius: 14px; cursor: pointer;
+  font: 500 1rem/1.35 var(--display); color: var(--ink); transition: border-color .15s; }
 .examples button:hover { border-color: var(--ink-3); }
+.teaser { display: flex; gap: 12px; align-items: center; min-height: 64px; padding: 12px 14px; margin: 0 0 12px; border-radius: 16px; background: var(--surface); border: 1px solid var(--rule); color: var(--ink); text-decoration: none; }
+.teaser > svg { width: 26px; height: 26px; flex: none; fill: none; stroke: var(--adj); stroke-width: 1.9; stroke-linecap: round; }
+.teaser > span { display: grid; gap: 2px; min-width: 0; }
+.teaser strong { font: 600 1.0625rem/1.25 var(--display); }
+.teaser .teaser-s { color: var(--ink-2); font-size: .9375rem; display: flex; gap: 8px; align-items: center; overflow: hidden; text-overflow: ellipsis; }
+.teaser::after { content: ""; flex: none; margin-left: auto; width: 9px; height: 9px; border: solid var(--ink-3); border-width: 2px 2px 0 0; transform: rotate(45deg); }
 
 /* ---------- panels */
 .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 14px 16px; margin: 14px 0; }
@@ -203,40 +219,76 @@ details.map .muted { color: var(--star-2); }
 .theme-list button:hover, .theme-list button[aria-pressed="true"] { background: rgb(255 255 255 / .07); }
 .theme-list .tl { display: grid; }
 .theme-list button { align-items: center; }
-.theme-list .dot { width: 22px; height: 22px; border-radius: 50%; flex: none; display: inline-grid; place-items: center; color: #0c1430; font: 700 .72rem/1 var(--sans); font-variant-numeric: tabular-nums; }
+.theme-list .dot { width: 26px; height: 26px; border-radius: 50%; flex: none; display: inline-grid; place-items: center; color: #0c1430; font: 700 .8125rem/1 var(--sans); font-variant-numeric: tabular-nums; }
 .theme-list .dot.close { background: var(--glow-close); box-shadow: 0 0 6px var(--glow-close); }
 .theme-list .dot.adj { background: var(--glow-adj); box-shadow: 0 0 6px var(--glow-adj); }
 .theme-list .meta { color: var(--star-2); font-size: .8rem; font-variant-numeric: tabular-nums; }
 
-/* ---------- filters */
-.filterbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 20px 0 4px; }
-.filterbar .count { margin-left: auto; font-size: .85rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.sortsel select { padding: 7px 10px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); font-size: .875rem; }
-.sheet-backdrop { position: fixed; inset: 0; background: rgb(6 10 24 / .45); backdrop-filter: blur(3px); z-index: 40; }
-.sheet { position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; max-height: 86vh; overflow: auto; background: var(--surface); border-radius: 22px 22px 0 0;
-  padding: 20px 18px calc(18px + env(safe-area-inset-bottom)); box-shadow: 0 -10px 40px rgb(0 0 0 / .25); max-width: 760px; margin: 0 auto; }
+/* ---------- results toolbar: swipe, filters, sort; then the active filters and the count */
+.filterbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 18px 0 6px; }
+.filterbar .swipe-btn { flex: 1 1 auto; }
+.filterbar #open-filters { flex: 0 0 auto; }
+.filterbar .chips { flex: 1 1 100%; }
+.filterbar .chips:empty { display: none; }
+.filterbar .fb-meta { flex: 1 1 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.filterbar .count { font-size: .9375rem; color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
+.filterbar .fb-meta .sortsel { flex: 0 1 auto; }
+.filterbar .fb-meta .sortsel select { width: auto; max-width: 100%; }
+#open-filters svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.sortsel select { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); font-size: .9375rem; }
+@media (min-width: 560px) { .filterbar .swipe-btn { flex: 0 0 auto; } }
+
+/* ---------- bottom sheets: filters, the ⋯ menu, a paper's actions */
+body.sheet-open { overflow: hidden; }
+.sheet-backdrop { position: fixed; inset: 0; background: rgb(6 10 24 / .5); z-index: 40; animation: fade .18s ease-out both; }
+.sheet { position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; max-height: 86vh; max-height: 86dvh; overflow: auto; overscroll-behavior: contain; background: var(--surface); border-radius: 22px 22px 0 0;
+  padding: 6px max(18px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); box-shadow: 0 -10px 40px rgb(0 0 0 / .25);
+  max-width: 600px; margin: 0 auto; animation: rise .22s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes rise { from { transform: translateY(24px); opacity: .4; } to { transform: none; opacity: 1; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.sheet-grip { width: 40px; height: 5px; border-radius: 3px; background: var(--rule); margin: 4px auto 10px; }
 .sheet h3 { margin-top: 0; }
+.sheet .sheet-title { font: 600 1.125rem/1.3 var(--display); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin: 2px 0 6px; }
 .sheet fieldset { border: 0; padding: 0; margin: 0 0 16px; }
 .sheet legend { font-weight: 600; margin-bottom: 6px; }
-.check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }
-.check input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--close); }
-.check span small { display: block; color: var(--ink-3); }
+.sheet .sheet-cancel { width: 100%; margin-top: 12px; }
+.menu-h { margin: 14px 0 4px; font: 600 .9375rem var(--sans); color: var(--ink-2); }
+.menu-list { display: grid; border-top: 1px solid var(--rule); }
+.menu-item { appearance: none; display: grid; gap: 1px; width: 100%; min-height: 56px; padding: 9px 4px; text-align: left; border: 0; border-bottom: 1px solid var(--rule); background: none; color: var(--ink); text-decoration: none; cursor: pointer; font-size: 1rem; align-content: center; }
+.menu-item > span { font-weight: 550; }
+.menu-item small { font-size: .875rem; color: var(--ink-2); }
+.menu-item:active { background: var(--surface-2); }
+a.menu-item > span::after { content: " ↗"; color: var(--ink-3); font-weight: 400; }
+a.menu-item[href="../"] > span::after { content: ""; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); }
+.seg button { appearance: none; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 0; border-radius: 10px; background: none; color: var(--ink-2); cursor: pointer; font-size: .9375rem; }
+.seg button svg { width: 18px; height: 18px; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / .15); }
+.check { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; min-height: 44px; }
+.check input { width: 22px; height: 22px; margin: 1px 0 0; flex: none; accent-color: var(--close); }
+.check span small { display: block; color: var(--ink-2); font-size: .875rem; }
 .years { display: flex; gap: 10px; align-items: center; }
-.years input { width: 6.5em; padding: 8px; border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); }
-@media (min-width: 640px) {
-  .sheet { left: 50%; right: auto; transform: translateX(-50%); width: min(560px, 100vw); bottom: auto; top: 10vh; border-radius: 22px; }
+.years input { width: 7em; min-height: 44px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); }
+@media (min-width: 640px) and (min-height: 560px) {
+  .sheet { left: 50%; right: auto; transform: translateX(-50%); width: min(560px, 100vw); bottom: auto; top: 8vh; border-radius: 22px; padding-bottom: 18px; animation: fade .18s ease-out both; }
+  .sheet-grip { display: none; }
 }
+@media (prefers-reduced-motion: reduce) { .sheet, .sheet-backdrop { animation: none; } }
 
-/* ---------- result cards */
+/* ---------- result cards: badges, title, authors, journal and year, why it is here, four actions */
 .results { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 12px; }
-.paper { background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: 15px 16px 13px; transition: border-color .15s; }
-.paper:hover { border-color: color-mix(in srgb, var(--ink-3) 55%, var(--rule)); }
-.paper h3 { font: 600 1.14rem/1.3 var(--display); margin: 6px 0 4px; letter-spacing: -.003em; }
+.paper { position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 18px; padding: 14px 14px 6px; }
+.paper h3 { font: 600 1.125rem/1.3 var(--display); margin: 8px 0 4px; letter-spacing: -.003em; overflow-wrap: anywhere; }
 .paper h3 a { color: var(--ink); text-decoration: none; }
 .paper h3 a:hover { text-decoration: underline; text-decoration-thickness: 1px; }
-.byline { margin: 0; font-size: .87rem; color: var(--ink-2); }
+.byline { margin: 0; font-size: .9375rem; color: var(--ink-2); overflow-wrap: anywhere; }
 .byline .venue { font-style: italic; }
-.badges { display: flex; flex-wrap: wrap; gap: 6px; font-size: .76rem; align-items: center; }
+.publine { margin: 1px 0 0; font-size: .9375rem; color: var(--ink-2); }
+.publine .venue { font-style: italic; }
+.publine .year { font-variant-numeric: tabular-nums; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; font-size: .8125rem; align-items: center; }
+.paper > .badges { padding-right: 76px; min-height: 28px; }
+.paper > .badges .meter { position: absolute; top: 19px; right: 50px; margin: 0; }
 .badge { border: 1px solid transparent; background: var(--surface-2); color: var(--ink-2); border-radius: 999px; padding: 1px 9px; line-height: 1.6; font-weight: 500; }
 .badge.inferred, .badge.unverified { background: transparent; border: 1px dashed var(--ink-3); }
 .badge.oa { color: var(--ok); background: color-mix(in srgb, var(--ok) 11%, var(--surface)); }
@@ -249,29 +301,51 @@ details.map .muted { color: var(--star-2); }
 .meter.m1 i:nth-child(-n+1), .meter.m2 i:nth-child(-n+2), .meter.m3 i:nth-child(-n+3), .meter.m4 i:nth-child(-n+4), .meter.m5 i { background: currentColor; }
 .paper.close .meter { color: var(--close); }
 .paper.adj .meter { color: var(--adj); }
-.why { margin: 9px 0 0; font-size: .9rem; }
-.why ul { margin: 0; padding-left: 1.1em; color: var(--ink-2); }
-.why li { margin: 1px 0; }
+.why { margin: 10px 0 0; font-size: 1rem; line-height: 1.45; }
+.why-h { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: 0; }
+.why ul { margin: 0; padding-left: 1.15em; color: var(--ink-2); }
+.why li { margin: 2px 0; }
 .why li.profile { color: var(--close); }
 .why li.adjacent { color: var(--adj); }
 .why li.warning { color: var(--warn); font-weight: 600; }
 .why li.missing { color: var(--ink-2); list-style-type: circle; }
-.why blockquote { margin: 10px 0 0; padding: 4px 0 4px 13px; border-left: 2px solid; border-image: var(--spectrum-v) 1; font: italic 400 .98rem/1.5 var(--display); color: var(--ink); }
-.why blockquote cite { display: block; font: normal .75rem var(--sans); color: var(--ink-3); margin-top: 3px; }
-.why .note { color: var(--ink-3); font-size: .84rem; font-style: italic; }
+.why blockquote { margin: 10px 0 0; padding: 2px 0 2px 13px; border-left: 2px solid; border-image: var(--spectrum-v) 1; font: italic 400 1rem/1.5 var(--display); color: var(--ink); }
+.why blockquote cite { display: block; font: normal .8125rem var(--sans); color: var(--ink-3); margin-top: 3px; }
+.why .note { color: var(--ink-2); font-size: .9375rem; font-style: italic; }
+.abstract { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 1rem; line-height: 1.55; }
+.abstract p { margin: 0; }
+.abstract .abs-h { font-weight: 600; margin-bottom: 4px; }
 mark { background: var(--mark); color: inherit; padding: 0 1px; border-radius: 3px; }
-.actions { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 11px; font-size: .88rem; align-items: center; }
-.actions .save { appearance: none; border: 1px solid var(--rule); background: var(--surface); border-radius: 999px; padding: 5px 13px; cursor: pointer; font-weight: 500; }
+.actions { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: .9375rem; align-items: center; }
+.actions > a { display: inline-flex; align-items: center; min-height: 44px; }
+.actions .save { appearance: none; min-height: 44px; border: 1px solid var(--rule); background: var(--surface); border-radius: 999px; padding: 8px 16px; cursor: pointer; font-weight: 500; }
 .actions .save[aria-pressed="true"] { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
-.trail { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--rule); font-size: .85rem; }
-.trail .btn.link { font-size: .85rem; }
-.details { margin-top: 10px; font-size: .84rem; color: var(--ink-2); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+/* the card's action bar: Save, Abstract, DOI, More like this, each an icon over its name; ⋯ sits top right */
+.card-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; margin: 10px -6px 0; padding-top: 4px; border-top: 1px solid var(--rule); }
+.act { appearance: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 56px; padding: 6px 2px; border: 0; border-radius: 12px; background: none; color: var(--ink-2);
+  font: 500 .8125rem/1.15 var(--sans); text-align: center; text-decoration: none; cursor: pointer; }
+.act svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.act:hover { color: var(--ink); background: var(--surface-2); }
+.act:active { background: color-mix(in srgb, var(--ink) 8%, var(--surface-2)); }
+.act.none { pointer-events: none; }
+.actions .act.save { border: 0; padding: 6px 2px; border-radius: 12px; background: none; font-weight: 500; }
+.actions .act.save[aria-pressed="true"] { color: var(--close); background: none; }
+.act.save[aria-pressed="true"] svg { fill: currentColor; }
+.act[aria-expanded="true"] { color: var(--ink); }
+.act[aria-expanded="true"] svg { stroke: var(--close); }
+.act.more { position: absolute; top: 4px; right: 4px; width: 44px; min-height: 44px; height: 44px; padding: 0; border-radius: 50%; }
+.act.more svg { fill: currentColor; stroke: none; }
+.trail { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--rule); font-size: .9375rem; }
+.details { margin: 10px 0 8px; font-size: .9375rem; color: var(--ink-2); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
 .details dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; }
 .details dt { color: var(--ink-3); }
 .details dd { margin: 0; word-break: break-word; }
-.more { margin: 18px 0; display: grid; gap: 8px; justify-items: start; }
+.paper .grade { margin-top: 12px; }
+.paper .quest-act { margin-bottom: 8px; }
+.more { margin: 18px 0; display: grid; gap: 8px; justify-items: stretch; }
+@media (min-width: 560px) { .more { justify-items: start; } }
 .loading { padding: 24px 0; color: var(--ink-2); display: flex; gap: 10px; align-items: center; }
-.spinner { width: 16px; height: 16px; border: 2px solid var(--rule); border-top-color: var(--close); border-radius: 50%; animation: spin .8s linear infinite; }
+.spinner { width: 16px; height: 16px; flex: none; border: 2px solid var(--rule); border-top-color: var(--close); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
 
@@ -331,14 +405,6 @@ th { font-weight: 600; }
 .ap-prev.auto { background: linear-gradient(90deg, #f5f6fa 50%, #0a0f1f 50%); }
 .ap input:checked + .ap-prev { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent); }
 .ap input:focus-visible + .ap-prev { outline: 2px solid var(--focus); outline-offset: 2px; }
-
-/* ---------- search pathways (topics / authors) */
-.pathways { position: relative; display: inline-flex; gap: 2px; margin: 0 0 10px; padding: 3px; border-radius: 999px; background: rgb(255 255 255 / .07); border: 1px solid rgb(255 255 255 / .14); }
-.pathways button { appearance: none; border: 0; background: none; padding: 6px 16px; font-size: .86rem; cursor: pointer; color: var(--star-2); border-radius: 999px; transition: background .2s, color .2s; }
-.pathways button[aria-checked="true"] { background: var(--star); color: #0c1430; font-weight: 600; }
-.hero[data-search-by="author"] #modes, .hero[data-search-by="author"] #mode-hint { display: none; }
-.hero.compact .pathways { margin-bottom: 8px; }
-.authors-ex button { font-family: var(--sans); font-weight: 500; font-size: .98rem; }
 
 /* tappable author names */
 button.auth { appearance: none; border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--ink-3) 55%, transparent); text-underline-offset: 3px; }
@@ -435,7 +501,6 @@ p.vpanel { margin-bottom: 10px; }
 /* iOS zooms the page when a field under 16px is focused; keep every field at 16px on touch screens */
 @media (pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { font-size: 16px !important; }
-  .actions .btn.link, .actions > a, .trail .btn.link { padding-top: 7px; padding-bottom: 7px; }
 }
 /* saved papers read like result titles, with a quiet Remove */
 .saved-list h3 a { color: var(--ink); text-decoration: none; }
@@ -453,9 +518,11 @@ p.vpanel { margin-bottom: 10px; }
   .table-wrap td + td:not([class]) { color: var(--ink-2); }
 }
 @media (max-width: 380px) {
-  .hero-rings { right: -110px; opacity: .6; }
-  .searchbar .btn.primary { padding: 0 14px; }
-  .searchbar input { padding-left: 13px; padding-right: 10px; }
+  .searchbar .btn.primary { padding: 0 13px; }
+  .searchbar input { padding-left: 12px; padding-right: 8px; }
+  .modes button { font-size: .8125rem; }
+  main { --gutter-r: max(12px, env(safe-area-inset-right)); padding-left: max(12px, env(safe-area-inset-left)); }
+  .paper { padding-left: 12px; padding-right: 12px; }
 }
 #install-h { scroll-margin-top: 70px; }
 
@@ -473,7 +540,7 @@ p.vpanel { margin-bottom: 10px; }
 .keybox .key-own input { width: 100%; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); }
 
 /* ---------- Lab */
-.lab-chip { display: inline-block; margin-left: 6px; padding: 2px 8px 3px; border-radius: 999px; font: 600 .72rem/1.2 var(--sans); letter-spacing: .02em; color: #1d1233; background: linear-gradient(90deg, #4fc8d2, #b48cff); vertical-align: 3px; }
+.lab-chip { display: inline-block; margin-left: 6px; padding: 2px 8px 3px; border-radius: 999px; font: 600 .8125rem/1.2 var(--sans); letter-spacing: .02em; color: #1d1233; background: linear-gradient(90deg, #4fc8d2, #b48cff); vertical-align: 3px; }
 .lab-note { margin: 4px 0 18px; padding: 12px 14px; border-radius: 16px; border: 1px dashed color-mix(in srgb, #b48cff 60%, var(--rule)); background: color-mix(in srgb, #b48cff 7%, var(--surface)); }
 .lab-note p { margin: 0 0 8px; font-size: .92rem; }
 
@@ -683,9 +750,7 @@ fieldset.scoring .radio input { margin-top: 4px; }
 /* app-like feel on phones: no grey flash on tap, no double-tap zoom on controls, a visible press */
 a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .save:active, .tabs a:active, .chip:active, .grade button:active, .examples button:active, .btn.link:active { opacity: .7; }
-.nav-back { margin-right: 6px; flex: none; }
-.nav-back + .brand { margin-right: auto; }
-.top-inner .nav-back[hidden] + .brand { margin-right: 0; }
+.nav-back { flex: none; }
 .today .skel { height: 64px; border-radius: 10px; margin: 10px 0; background: linear-gradient(90deg, var(--surface-2), color-mix(in srgb, var(--surface-2) 55%, var(--surface)), var(--surface-2)); background-size: 200% 100%; animation: skel 1.4s ease-in-out infinite; }
 @keyframes skel { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .today .skel { animation: none; } }
@@ -709,63 +774,220 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
 .src-check li.ok::before { content: '✓'; color: var(--ok); }
 .src-check li.fail::before { content: '✕'; color: var(--warn); }
 .src-check li.wait::before { content: '…'; color: var(--ink-3); }
+
+/* ======================================================================== mobile app layer (Lab redesign)
+   Phones 320–430 px wide, portrait and landscape. Every control is at least 44 × 44 px. */
+.toast { bottom: calc(76px + env(safe-area-inset-bottom)); font-size: .9375rem; text-align: center; }
+.late-pill { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); min-height: 44px; font-size: .9375rem; }
+
+/* collapsible groups in Profile and Settings */
+details.group { margin: 12px 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 16px; padding: 0 14px; }
+details.group > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; min-height: 54px; font: 600 1.0625rem/1.25 var(--display); }
+details.group > summary::-webkit-details-marker { display: none; }
+details.group > summary::after { content: ""; margin-left: auto; flex: none; width: 9px; height: 9px; border: solid var(--ink-3); border-width: 0 2px 2px 0; transform: rotate(45deg) translateY(-3px); transition: transform .15s; }
+details.group[open] > summary::after { transform: rotate(-135deg) translateY(-3px); }
+details.group > summary .tiny { font-family: var(--sans); font-weight: 400; }
+details.group[open] { padding-bottom: 12px; }
+details.group > :not(summary):first-of-type { margin-top: 0; }
+details.group .keybox { margin: 0; border: 0; padding: 0; background: none; }
+details.group fieldset.scoring { margin-top: 0; }
+#view-settings .appearance { margin-top: 0; }
+#view-profile .drop { padding: 16px 12px; }
+#view-profile #orcid-form { margin: 0; }
+
+/* Today is its own tab: the list sits on the page, not in a box */
+#view-today .today { margin: 14px 0 0; padding: 0; border: 0; background: none; box-shadow: none; }
+#view-today .today h2 { font-size: 1.5rem; margin: 6px 0 0; }
+.today-list .tj { font-size: .875rem; }
+.today-list h3 { font-size: 1.0625rem; }
+.today-list .byline { font-size: .9375rem; }
+.today-list .actions { gap: 4px 14px; }
+.today-list .actions .save { min-width: 88px; }
+.today-set summary, .interp > summary, .key-own summary, details.map > summary, details.compare > summary { display: flex; align-items: center; min-height: 44px; }
+.today-set .pub { min-height: 44px; align-items: center; }
+.today-set .pubs { grid-template-columns: 1fr; }
+@media (min-width: 560px) { .today-set .pubs { grid-template-columns: 1fr 1fr; } }
+
+/* touch targets for the remaining controls */
+.chip { min-height: 34px; }
+.chip button { min-width: 44px; min-height: 44px; margin: -6px -12px -6px -6px; display: inline-grid; place-items: center; font-size: 1.15rem; }
+.chip.toggle, .chip.add { min-height: 44px; padding: 6px 13px; font-size: .9375rem; }
+.add-term input { min-height: 44px; padding: 8px 14px; font-size: 1rem; }
+.switch { min-height: 44px; align-items: flex-start; padding: 4px 0; }
+.switch input, .check input { width: 22px; height: 22px; }
+.field input[type="text"], .field input[type="password"], .field select, .keybox .key-own input, .share-link input { min-height: 44px; }
+.theme-list button, .fbars button { min-height: 44px; }
+.grade button { min-height: 44px; }
+.ap { min-width: 88px; }
+fieldset.scoring .radio { min-height: 44px; align-items: center; }
+fieldset.scoring .radio input { margin-top: 0; width: 20px; height: 20px; }
+.install-hint .btn.link, .lab-note .btn { min-height: 44px; }
+.lab-note { margin: 0 0 14px; }
+.lab-note p { font-size: .9375rem; }
+.lab-note a { display: inline-block; padding: 12px 0; margin: -12px 0; }
+.saved-list .actions .btn, .wrow .actions .btn.link, .trail-list .btn, .sky-panel .btn { min-height: 44px; }
+.deck-close { width: 44px; height: 44px; }
+summary { min-height: 44px; }
+.fgroup summary { min-height: 52px; }
+.panel .btn.link { min-height: 44px; }
+.srcline .btn.link { min-height: 44px; padding: 4px 6px; }
+.chips-line .chip { min-height: 34px; }
+
+/* text that is read, not scanned, stays at 16px */
+.panel > p:not(.tiny):not(.small), .today > p:not(.tiny):not(.small), #view-about p:not(.tiny):not(.small), #view-about td, .why li, .answer-text { font-size: 1rem; }
+#view-about table, .details { font-size: .9375rem; }
+
+/* ---------- landscape phones: a shorter app bar and tab bar, so more of the page shows */
+@media (orientation: landscape) and (max-height: 500px) {
+  .appbar-in { min-height: 44px; padding-top: 0; padding-bottom: 0; }
+  .tabs { max-width: 680px; }
+  .tabs a { flex-direction: row; gap: 8px; min-height: 48px; font-size: .875rem; }
+  .tabs a svg { padding: 2px 10px; width: 22px; height: 22px; }
+  .tabs .count { position: static; }
+  main { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(60px + env(safe-area-inset-bottom)); }
+  .late-pill { bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+  .searchpanel { padding-bottom: 12px; }
+  .searchpanel .modes { margin-top: 8px; }
+  .sheet { max-height: 92vh; max-height: 92dvh; left: max(0px, env(safe-area-inset-left)); right: max(0px, env(safe-area-inset-right)); }
+  .sheet .menu-list { grid-template-columns: 1fr 1fr; column-gap: 16px; }
+}
+
+/* ---------- swipe deck in landscape: the card on the left, the buttons in a column on the right */
+@media (orientation: landscape) and (max-height: 500px) {
+  .deck { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr; column-gap: 16px;
+    padding: calc(6px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
+  .deck-top { grid-column: 1 / -1; max-width: none; }
+  .deck-top h2 { font-size: 1rem; }
+  .deck-stage { grid-column: 1; grid-row: 2; max-width: 620px; margin: 8px auto 0; width: 100%; }
+  .deck-hint { display: none; }
+  .deck-actions { grid-column: 2; grid-row: 2; display: grid; grid-template-columns: repeat(2, auto); align-content: center; justify-items: center; gap: 8px 10px; }
+  .deck-top { grid-template-columns: auto 1fr auto; row-gap: 4px; }
+  .dbtn { grid-template-columns: auto; font-size: .75rem; }
+  .dbtn svg { width: 22px; height: 22px; padding: 11px; }
+  .dbtn.undo svg { width: 18px; height: 18px; padding: 13px; }
+  .dcard { padding: 12px 16px 10px; gap: 4px; border-radius: 18px; }
+  .dcard h3 { font-size: 1.0625rem; -webkit-line-clamp: 2; }
+  .dcard .byline { -webkit-line-clamp: 1; font-size: .875rem; }
+  .dcard .why { font-size: .875rem; }
+  .dcard blockquote { -webkit-line-clamp: 3; font-size: .9375rem; }
+  .stamp { top: 10px; font-size: .95rem; }
+  .deck-done { grid-column: 1 / -1; grid-row: 2; }
+  .deck-done .dd-big { font-size: 1.5rem; }
+}
+/* the deck never sits under the notch or the home indicator in portrait either */
+.deck { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+.dbtn { min-width: 52px; }
+
+/* ---------- reduced motion: nothing slides or sweeps */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+  .tabs a svg, details.group > summary::after, .btn, .modes button, .pathways button { transition: none !important; }
+}
+
+/* titles are links: the whole line is the target, at least 44 px tall, without moving the layout */
+.paper h3 a, .today-list h3 a, .saved-list h3 a, .tbody h4 a, .sky-card h4 a, .wrow a.wt { display: block; padding: 11px 0; margin: -11px 0; }
+.wrow a.wt { margin: -7px 0 -9px; }
+.details dd a { display: inline-flex; align-items: center; min-height: 44px; }
+.field select, .field input[type="text"], .field input[type="password"] { width: 100%; max-width: 100%; }
+
+/* ---------- results header on phones: the papers come first */
+.searchpanel:not([data-search-by="author"]) .hero-lede { display: none; }
+@media (max-width: 759px) {
+  .searchpanel.compact .pathways { display: none; }
+  .searchpanel.compact { padding-top: 10px; }
+}
+.related { margin: 6px 0 2px; }
+.related .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 6px calc(-1 * var(--gutter-r, 14px)) 0 0; padding: 0 var(--gutter-r, 14px) 4px 0; scroll-snap-type: x proximity; }
+.related .chips::-webkit-scrollbar { display: none; }
+.related .chips > li { flex: none; scroll-snap-align: start; }
+.related .chip.add { white-space: nowrap; }
+details.interp, details.answer.ai-off { padding-top: 0; padding-bottom: 0; }
+details.interp > summary, details.answer.ai-off > summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 48px; cursor: pointer; }
+details.interp[open], details.answer.ai-off[open] { padding-bottom: 12px; }
+.follow-row { margin: 8px 0 0; flex-wrap: nowrap; }
+.follow-row .tiny { flex: 1 1 auto; min-width: 0; }
+details.map > summary { justify-content: space-between; gap: 8px; }
+.map-n { font: 400 .875rem var(--sans); color: var(--star-2); }
+#interp .panel, #answer-holder .panel { margin: 10px 0; }
+
+/* theme map, how it was searched and the AI answer: one fold, open on wide screens, folded on phones */
+.search-more { margin: 10px 0; border: 1px solid var(--rule); border-radius: 16px; background: var(--surface); padding: 0 14px; }
+.search-more:not(:has(#interp-more > *, #map-holder > *, #answer-holder > *)) { display: none; }
+.search-more > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 1fr auto; column-gap: 10px; align-items: center; min-height: 56px; padding: 6px 0; }
+.search-more > summary::-webkit-details-marker { display: none; }
+.search-more > summary::after { content: ""; grid-column: 2; grid-row: 1 / span 2; width: 9px; height: 9px; border: solid var(--ink-3); border-width: 0 2px 2px 0; transform: rotate(45deg) translateY(-3px); transition: transform .15s; }
+.search-more[open] > summary::after { transform: rotate(-135deg) translateY(-3px); }
+.sm-t { font: 600 1.0625rem/1.25 var(--display); }
+.sm-s { font-size: .875rem; color: var(--ink-2); }
+.search-more[open] { padding-bottom: 4px; }
+.search-more #interp-more .panel, .search-more #answer-holder .panel { margin: 4px 0 10px; }
+.search-more details.map { margin: 4px -6px 10px; }
+.follow-row .btn { white-space: nowrap; flex: none; }
+@media (prefers-reduced-motion: reduce) { .search-more > summary::after { transition: none; } }
+
+/* the shortest phones: fewer lines above the first paper */
+@media (max-width: 429px) {
+  .follow-row .tiny { display: none; }
+  .search-more .sm-s { display: none; }
+  .search-more > summary { min-height: 50px; }
+}
+/* landscape phones: after a search the search box and the ranking modes share one row */
+@media (orientation: landscape) and (max-height: 500px) {
+  .searchpanel.compact { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: center; padding-top: 8px; padding-bottom: 10px; }
+  .searchpanel.compact .pathways { display: none; }
+  .searchpanel.compact .modes { margin: 0; }
+  .searchpanel.compact .modes button { min-height: 44px; padding: 4px; }
+}
+#g-appearance legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="top-inner">
-    <button type="button" class="icon-btn nav-back" id="nav-back" hidden aria-label="Back"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="appbar">
+  <div class="appbar-in">
+    <button type="button" class="icon-btn nav-back" id="nav-back" hidden aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
     <a class="brand" href="#search" id="home-link" aria-label="Paperscope Lab, back to the start">
       <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="#4fc8d2" stroke-width="2.4"/><circle cx="16" cy="16" r="7.5" fill="none" stroke="#f0ac4b" stroke-width="2.4"/><circle cx="16" cy="16" r="3" fill="#eef2ff"/></svg>
       <span>Paperscope <span class="lab-chip">Lab</span></span>
     </a>
-    <button type="button" class="icon-btn" id="appearance-btn" aria-label="Appearance: Auto. Tap to change."></button>
+    <button type="button" class="icon-btn" id="menu-btn" aria-haspopup="dialog" aria-label="More: settings, about, appearance"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg></button>
   </div>
 </header>
-<div class="tabbar">
-  <nav class="tabs" aria-label="Sections">
-    <a href="#search" data-view="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Search</span></a>
-    <a href="#profile" data-view="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.8 4-5.6 7.5-5.6s6.3 1.8 7.5 5.6"/></svg><span>Profile</span></a>
-    <a href="#saved" data-view="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.8h11v16.7l-5.5-3.9-5.5 3.9z"/></svg><span>Saved <span class="count" id="saved-count"></span></span></a>
-    <a href="#about" data-view="about"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.1"/></svg><span>About</span></a>
-  </nav>
-</div>
 
-<main>
+<main id="main">
   <!-- SEARCH -->
   <section id="view-search" aria-labelledby="search-h">
-    <div class="hero" id="hero">
-    <svg class="hero-rings" viewBox="0 0 200 200" aria-hidden="true"><circle class="r" cx="100" cy="100" r="96"/><circle class="r" cx="100" cy="100" r="70"/><circle class="r" cx="100" cy="100" r="44"/><circle class="r" cx="100" cy="100" r="18"/><circle class="o1" cx="44" cy="141" r="4.5"/><circle class="o2" cx="181" cy="58" r="3.5"/><circle class="o1" cx="118" cy="57" r="2.5"/></svg>
-    <h1 id="search-h" class="hero-title">Find the papers that matter to your work.</h1>
-    <p class="hero-lede" id="hero-lede">Search open scholarly databases and see, for each paper, why it may matter to you.</p>
-    <div class="pathways" role="radiogroup" aria-label="Search by">
-      <button type="button" role="radio" data-pathway="topic" aria-checked="true">Topics</button>
-      <button type="button" role="radio" data-pathway="author" aria-checked="false">Authors</button>
-    </div>
-    <form id="search-form" class="searchbar" role="search">
-      <label for="q" class="sr-only">Search terms, research question or DOI</label>
-      <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Topic, question or DOI">
-      <button class="btn primary" type="submit">Search</button>
-    </form>
-    <p class="profile-line" id="profile-line"></p>
-    <div class="modes" role="radiogroup" aria-label="Which papers to favour" id="modes">
-      <button type="button" role="radio" data-mode="close" aria-checked="false">Close to my work</button>
-      <button type="button" role="radio" data-mode="all" aria-checked="true">Everything</button>
-      <button type="button" role="radio" data-mode="adjacent" aria-checked="false">Adjacent &amp; emerging</button>
-    </div>
-    <p class="mode-hint" id="mode-hint"></p>
+    <div class="searchpanel" id="hero">
+      <h1 id="search-h" class="sr-only">Search papers</h1>
+      <div class="pathways" role="radiogroup" aria-label="Search by">
+        <button type="button" role="radio" data-pathway="topic" aria-checked="true">Topics</button>
+        <button type="button" role="radio" data-pathway="author" aria-checked="false">Authors</button>
+      </div>
+      <form id="search-form" class="searchbar" role="search">
+        <label for="q" class="sr-only">Search terms, research question or DOI</label>
+        <input id="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Topic, question or DOI">
+        <button class="btn primary" type="submit">Search</button>
+      </form>
+      <div class="modes" role="radiogroup" aria-label="Which papers to favour" id="modes">
+        <button type="button" role="radio" data-mode="close" aria-checked="false">Close to my work</button>
+        <button type="button" role="radio" data-mode="all" aria-checked="true">Everything</button>
+        <button type="button" role="radio" data-mode="adjacent" aria-checked="false">Adjacent &amp; emerging</button>
+      </div>
+      <p class="mode-hint" id="mode-hint"></p>
+      <p class="profile-line" id="profile-line"></p>
+      <p class="hero-lede" id="hero-lede"></p>
     </div>
 
     <div id="start">
-      <div id="today"></div>
+      <div id="today-teaser"></div>
       <div class="lab-note" role="note">
-        <p><strong>You’re in Paperscope Lab</strong>, a copy for trying new ideas: swipe through results, and see your saved papers as a night sky. It keeps its own saved papers and settings, separate from <a href="../">the main app</a>.</p>
-        <div class="row"><button type="button" class="btn small" id="lab-import">Bring over my saved papers and profile</button><button type="button" class="btn link" id="lab-note-hide">Got it</button></div>
+        <p><strong>Paperscope Lab</strong> is a copy for trying new ideas, with its own saved papers and settings. <a href="../">Open the main app</a></p>
+        <div class="row"><button type="button" class="btn small" id="lab-import">Bring over my saved papers and profile</button><button type="button" class="btn small quiet" id="lab-note-hide">Got it</button></div>
       </div>
       <div id="install-hint"></div>
       <div id="follows-start"></div>
       <h2 class="start-h">Try a search</h2>
-      <p class="muted small">Add a profile first for personalised ranking, or tap an example:</p>
       <ul class="examples" id="examples">
         <li><button type="button">exciton migration in molecular crystals</button></li>
         <li><button type="button">coherence</button></li>
@@ -773,7 +995,6 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
         <li><button type="button">MD simulations of polymer electrolytes</button></li>
       </ul>
       <h2 class="start-h">Or look up a researcher</h2>
-      <p class="muted small">See everything an author has published, grouped by field. You can also tap any author’s name on a result.</p>
       <ul class="examples authors-ex">
         <li><button type="button" data-author-example="Jennifer Doudna">Jennifer Doudna</button></li>
         <li><button type="button" data-author-example="Frances Arnold">Frances Arnold</button></li>
@@ -782,8 +1003,11 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
 
     <div id="clarify"></div>
     <div id="interp"></div>
-    <div id="map-holder"></div>
-    <div id="answer-holder"></div>
+    <details class="search-more" id="search-more"><summary><span class="sm-t">Theme map and search details</span><span class="sm-s">How it was searched, themes, AI answer</span></summary>
+      <div id="interp-more"></div>
+      <div id="map-holder"></div>
+      <div id="answer-holder"></div>
+    </details>
     <div id="filterbar"></div>
     <div id="grade-note"></div>
     <div id="loading" class="loading" hidden><span class="spinner" aria-hidden="true"></span><span id="loading-text">Searching…</span></div>
@@ -792,44 +1016,106 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     <div id="compare-holder"></div>
   </section>
 
-  <!-- PROFILE -->
-  <section id="view-profile" aria-labelledby="profile-h" hidden>
-    <h2 id="profile-h">Your research profile</h2>
-    <p class="lede">Upload a CV or paste a research statement. Paperscope reads it in this browser and lists your interests, methods and areas. Nothing from it is uploaded.</p>
-    <h3>Import from ORCID</h3>
-    <p class="small muted">Builds your profile from your publications in OpenAlex. Your ORCID iD is sent to OpenAlex; your publications are public there already.</p>
-    <form id="orcid-form" class="add-term"><label for="orcid" class="sr-only">ORCID iD</label><input id="orcid" autocomplete="off" inputmode="text" placeholder="0000-0002-1825-0097"><button class="btn small primary" type="submit">Import</button></form>
-    <p id="orcid-status" class="small muted" role="status"></p>
-    <h3>Or use a CV or research statement</h3>
-    <div class="drop" id="drop">
-      <p><label class="btn" for="cv-file">Choose a file</label> <span class="muted small">or drop it here: PDF, Word (.docx) or plain text</span></p>
-      <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" class="sr-only">
-      <p class="tiny" id="file-note">Opening a PDF or Word file downloads a free reader library (pdf.js or mammoth.js, about 1 MB) from jsDelivr. Your file itself stays on this device.</p>
-    </div>
-    <p class="muted small" style="margin-top:14px">Or paste text:</p>
-    <label for="cv-text" class="sr-only">CV or research statement text</label>
-    <textarea id="cv-text" placeholder="Paste a CV, research statement or a few sentences about your work"></textarea>
-    <div class="row" style="margin-top:8px"><button class="btn primary" id="read-text" type="button">Read profile</button><span id="parse-status" class="small muted" role="status"></span></div>
-    <div id="profile-editor"></div>
-    <div id="taste-box"></div>
-    <div id="bench-box"></div>
-
-    <h2>On-device relevance model <span class="tiny">(optional)</span></h2>
-    <div class="panel" id="ai-panel"></div>
+  <!-- TODAY -->
+  <section id="view-today" aria-labelledby="today-h" hidden>
+    <div id="today"></div>
   </section>
 
   <!-- SAVED -->
   <section id="view-saved" aria-labelledby="saved-h" hidden>
-    <h2 id="saved-h">Saved papers</h2>
+    <h2 id="saved-h" class="view-h">Saved papers</h2>
     <div id="saved-body"></div>
     <div id="follows-saved"></div>
   </section>
 
-  <!-- ABOUT -->
-  <section id="view-about" aria-labelledby="about-h" hidden>
-    <h2 id="about-h">About Paperscope</h2>
-    <p>Paperscope searches free scholarly databases, merges the results and ranks them against your query and, if you add one, your research profile. It is not Google Scholar and does not search the same sources or reproduce its ranking. It is free to use and needs no paid AI service.</p>
+  <!-- PROFILE -->
+  <section id="view-profile" aria-labelledby="profile-h" hidden>
+    <h2 id="profile-h" class="view-h">Your research profile</h2>
+    <p class="lede">Upload a CV or paste a research statement. Paperscope reads it in this browser and lists your interests, methods and areas. Nothing from it is uploaded.</p>
+    <details class="group" id="g-orcid" open><summary>Import from ORCID</summary>
+      <p class="small muted">Builds your profile from your publications in OpenAlex. Your ORCID iD is sent to OpenAlex; your publications are public there already.</p>
+      <form id="orcid-form" class="add-term"><label for="orcid" class="sr-only">ORCID iD</label><input id="orcid" autocomplete="off" inputmode="text" placeholder="0000-0002-1825-0097"><button class="btn small primary" type="submit">Import</button></form>
+      <p id="orcid-status" class="small muted" role="status"></p>
+    </details>
+    <details class="group" id="g-cv" open><summary>Use a CV or research statement</summary>
+      <div class="drop" id="drop">
+        <p><label class="btn" for="cv-file">Choose a file</label> <span class="muted small">or drop it here: PDF, Word (.docx) or plain text</span></p>
+        <input id="cv-file" type="file" accept=".pdf,.docx,.txt,.md,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" class="sr-only">
+        <p class="tiny" id="file-note">Opening a PDF or Word file downloads a free reader library (pdf.js or mammoth.js, about 1 MB) from jsDelivr. Your file itself stays on this device.</p>
+      </div>
+      <p class="muted small" style="margin-top:14px">Or paste text:</p>
+      <label for="cv-text" class="sr-only">CV or research statement text</label>
+      <textarea id="cv-text" placeholder="Paste a CV, research statement or a few sentences about your work"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn primary" id="read-text" type="button">Read profile</button><span id="parse-status" class="small muted" role="status"></span></div>
+    </details>
+    <div id="profile-editor"></div>
+    <div id="taste-box"></div>
+    <div id="bench-box"></div>
+    <details class="group" id="g-model"><summary>On-device relevance model <span class="tiny">(optional)</span></summary>
+      <div id="ai-panel"></div>
+    </details>
+  </section>
 
+  <!-- SETTINGS (from the menu) -->
+  <section id="view-settings" aria-labelledby="settings-h" hidden>
+    <h2 id="settings-h" class="view-h">Settings</h2>
+    <details class="group" id="g-appearance" open><summary>Appearance</summary>
+      <fieldset class="appearance" id="appearance-picker"><legend>Appearance</legend>
+        <label class="ap"><input type="radio" name="appearance" value="light"><span class="ap-prev light" aria-hidden="true"><b></b><i></i></span>Light</label>
+        <label class="ap"><input type="radio" name="appearance" value="dark"><span class="ap-prev dark" aria-hidden="true"><b></b><i></i></span>Dark</label>
+        <label class="ap"><input type="radio" name="appearance" value="auto"><span class="ap-prev auto" aria-hidden="true"><b></b><i></i></span>Auto</label>
+      </fieldset>
+      <p class="tiny">Auto follows your device’s light or dark setting, like other apps.</p>
+    </details>
+    <details class="group" id="g-sources" open><summary>Databases</summary>
+      <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
+      <label class="switch"><input type="checkbox" id="set-rerank"><span>OpenAlex reranker (Lab)<br><span class="tiny">OpenAlex reorders its top 100 keyword results with a model that judges how well each answers your search, from the title, journal, year and type (not the abstract). Doubles the cost of the keyword search. Measure it on your graded searches first.</span></span></label>
+      <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
+      <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>
+      <div class="src-check-box"><button type="button" class="btn small" id="check-sources">Check that all databases answer</button><div id="src-check" role="status"></div></div>
+
+    </details>
+    <details class="group" id="g-ranking"><summary>Ranking method</summary>
+      <fieldset class="scoring"><legend>Ranking method</legend>
+        <label class="radio"><input type="radio" name="scoring" value="v2"><span><strong>New</strong> (Lab): specific and rare ideas in your search count more, a paper missing one ranks lower, words close together count more, and synonyms count by how close they are.</span></label>
+        <label class="radio"><input type="radio" name="scoring" value="v1"><span><strong>Previous</strong>: every idea in your search counts the same.</span></label>
+        <p class="tiny">Compare them on your own graded searches under Profile › Graded searches.</p></fieldset>
+    </details>
+    <details class="group" id="g-key"><summary>Free OpenAlex key</summary>
+      <section class="keybox" id="key-box" aria-labelledby="key-h">
+        <h4 id="key-h">Free OpenAlex key: 10× more searches</h4>
+        <div id="key-status" role="status"></div>
+        <form id="key-form" class="add-term" novalidate>
+          <label for="key-email" class="sr-only">Your email address</label>
+          <input id="key-email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="Your email address">
+          <button class="btn small primary" type="submit">Email me a key</button>
+        </form>
+        <p class="tiny" id="key-note">Your email goes to OpenAlex only, to create the key. OpenAlex emails you a link, and the key starts working when you click it. The key is kept in this browser.</p>
+        <details class="key-own"><summary>Use a key you already have</summary>
+          <label for="api-key" class="small">OpenAlex API key</label>
+          <input id="api-key" type="password" autocomplete="off" placeholder="Paste your key">
+          <span class="tiny">Find it at <a href="https://openalex.org/settings/api-key" target="_blank" rel="noopener">openalex.org/settings/api-key</a>.</span>
+        </details>
+      </section>
+    </details>
+    <details class="group" id="g-ai"><summary>AI answers <span class="tiny">(optional)</span></summary>
+      <p class="small">Paperscope can ask an AI model to write a short answer to your search from the abstracts of the top papers, citing each one. It uses your own account with the provider, which bills you directly; Paperscope adds no charge. Your key is kept in this browser only.</p>
+      <div class="field"><label for="llm-provider">Provider</label>
+        <select id="llm-provider"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI-compatible service or local model</option></select></div>
+      <div class="field"><label for="llm-key">API key</label><input id="llm-key" type="password" autocomplete="off" placeholder="Your own key (optional for a local model)"></div>
+      <div class="field"><label for="llm-model">Model</label><input id="llm-model" type="text" autocomplete="off" placeholder="Model name from your provider"></div>
+      <div class="field" id="llm-base-field"><label for="llm-base">Service address</label><input id="llm-base" type="text" autocomplete="off" placeholder="https://api.openai.com/v1 or http://localhost:11434/v1">
+        <span class="tiny">Any service with an OpenAI-style /chat/completions endpoint. A model running on your own computer costs nothing, but it must allow requests from this page.</span></div>
+      <label class="switch"><input type="checkbox" id="llm-consent"><span>I understand each answer sends my search and the top abstracts to this provider and may be billed to my account.</span></label>
+
+    </details>
+  </section>
+
+  <!-- ABOUT (from the menu) -->
+  <section id="view-about" aria-labelledby="about-h" hidden>
+    <h2 id="about-h" class="view-h">About Paperscope</h2>
+    <p>Paperscope searches free scholarly databases, merges the results and ranks them against your query and, if you add one, your research profile. It is not Google Scholar and does not search the same sources or reproduce its ranking. It is free to use and needs no paid AI service.</p>
+    <p class="small">This is <strong>Paperscope Lab</strong>, an experimental copy with its own saved papers and settings. <a href="../">The main app</a> is unchanged.</p>
     <h3>What leaves your device</h3>
     <div class="table-wrap"><table>
       <thead><tr><th>Information</th><th>Sent to</th></tr></thead>
@@ -857,49 +1143,6 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
 
     <h3 id="install-h">Install as an app</h3>
     <div id="install-panel"></div>
-
-    <h3>Settings</h3>
-    <fieldset class="appearance" id="appearance-picker"><legend>Appearance</legend>
-      <label class="ap"><input type="radio" name="appearance" value="light"><span class="ap-prev light" aria-hidden="true"><b></b><i></i></span>Light</label>
-      <label class="ap"><input type="radio" name="appearance" value="dark"><span class="ap-prev dark" aria-hidden="true"><b></b><i></i></span>Dark</label>
-      <label class="ap"><input type="radio" name="appearance" value="auto"><span class="ap-prev auto" aria-hidden="true"><b></b><i></i></span>Auto</label>
-    </fieldset>
-    <p class="tiny">Auto follows your device’s light or dark setting, like other apps.</p>
-    <section class="keybox" id="key-box" aria-labelledby="key-h">
-      <h4 id="key-h">Free OpenAlex key: 10× more searches</h4>
-      <div id="key-status" role="status"></div>
-      <form id="key-form" class="add-term" novalidate>
-        <label for="key-email" class="sr-only">Your email address</label>
-        <input id="key-email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="Your email address">
-        <button class="btn small primary" type="submit">Email me a key</button>
-      </form>
-      <p class="tiny" id="key-note">Your email goes to OpenAlex only, to create the key. OpenAlex emails you a link, and the key starts working when you click it. The key is kept in this browser.</p>
-      <details class="key-own"><summary>Use a key you already have</summary>
-        <label for="api-key" class="small">OpenAlex API key</label>
-        <input id="api-key" type="password" autocomplete="off" placeholder="Paste your key">
-        <span class="tiny">Find it at <a href="https://openalex.org/settings/api-key" target="_blank" rel="noopener">openalex.org/settings/api-key</a>.</span>
-      </details>
-    </section>
-    <fieldset class="scoring"><legend>Ranking method</legend>
-      <label class="radio"><input type="radio" name="scoring" value="v2"><span><strong>New</strong> (Lab): specific and rare ideas in your search count more, a paper missing one ranks lower, words close together count more, and synonyms count by how close they are.</span></label>
-      <label class="radio"><input type="radio" name="scoring" value="v1"><span><strong>Previous</strong>: every idea in your search counts the same.</span></label>
-      <p class="tiny">Compare them on your own graded searches under Profile › Graded searches.</p></fieldset>
-    <label class="switch"><input type="checkbox" id="set-semantic"><span>Meaning-based search (OpenAlex semantic search)<br><span class="tiny">Finds papers that use different words for the same idea. One extra OpenAlex call per search.</span></span></label>
-    <label class="switch"><input type="checkbox" id="set-rerank"><span>OpenAlex reranker (Lab)<br><span class="tiny">OpenAlex reorders its top 100 keyword results with a model that judges how well each answers your search, from the title, journal, year and type (not the abstract). Doubles the cost of the keyword search. Measure it on your graded searches first.</span></span></label>
-    <label class="switch"><input type="checkbox" id="set-crossref"><span>Include Crossref<br><span class="tiny">Adds DOI-registered items OpenAlex may lack. Free, no key.</span></span></label>
-    <label class="switch"><input type="checkbox" id="set-epmc"><span>Include Europe PMC<br><span class="tiny">Adds life-science papers and PubMed’s publication-type labels (useful for spotting reviews). Free, no key.</span></span></label>
-    <div class="src-check-box"><button type="button" class="btn small" id="check-sources">Check that all databases answer</button><div id="src-check" role="status"></div></div>
-
-    <h3>AI answers (optional)</h3>
-    <p class="small">Paperscope can ask an AI model to write a short answer to your search from the abstracts of the top papers, citing each one. It uses your own account with the provider, which bills you directly; Paperscope adds no charge. Your key is kept in this browser only.</p>
-    <div class="field"><label for="llm-provider">Provider</label>
-      <select id="llm-provider"><option value="anthropic">Anthropic (Claude)</option><option value="openai">OpenAI-compatible service or local model</option></select></div>
-    <div class="field"><label for="llm-key">API key</label><input id="llm-key" type="password" autocomplete="off" placeholder="Your own key (optional for a local model)"></div>
-    <div class="field"><label for="llm-model">Model</label><input id="llm-model" type="text" autocomplete="off" placeholder="Model name from your provider"></div>
-    <div class="field" id="llm-base-field"><label for="llm-base">Service address</label><input id="llm-base" type="text" autocomplete="off" placeholder="https://api.openai.com/v1 or http://localhost:11434/v1">
-      <span class="tiny">Any service with an OpenAI-style /chat/completions endpoint. A model running on your own computer costs nothing, but it must allow requests from this page.</span></div>
-    <label class="switch"><input type="checkbox" id="llm-consent"><span>I understand each answer sends my search and the top abstracts to this provider and may be billed to my account.</span></label>
-
     <h3>Feature status</h3>
     <div class="table-wrap"><table id="feature-table">
       <thead><tr><th>Feature</th><th>Status</th><th>Notes</th></tr></thead>
@@ -913,6 +1156,15 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     <p class="small muted">Metadata from <a href="https://openalex.org" target="_blank" rel="noopener">OpenAlex</a> (CC0), <a href="https://www.crossref.org" target="_blank" rel="noopener">Crossref</a> and <a href="https://europepmc.org" target="_blank" rel="noopener">Europe PMC</a>. Optional model: all-MiniLM-L6-v2 (Apache 2.0) run with Transformers.js and ONNX Runtime Web. PDF reading by pdf.js; Word reading by mammoth.js. Typeface: Spectral by Production Type (SIL Open Font License), built into the page. Version <span id="version"></span>.</p>
   </section>
 </main>
+
+<div class="tabbar">
+  <nav class="tabs" aria-label="Sections">
+    <a href="#search" data-view="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Search</span></a>
+    <a href="#today" data-view="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg><span>Today <span class="count" id="today-count"></span></span></a>
+    <a href="#saved" data-view="saved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.8h11v16.7l-5.5-3.9-5.5 3.9z"/></svg><span>Saved <span class="count" id="saved-count"></span></span></a>
+    <a href="#profile" data-view="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.8 4-5.6 7.5-5.6s6.3 1.8 7.5 5.6"/></svg><span>Profile</span></a>
+  </nav>
+</div>
 
 <div id="sheet-root"></div>
 <div id="deck" class="deck" role="dialog" aria-modal="true" aria-labelledby="deck-h" hidden></div>
@@ -2733,7 +2985,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
 (function () {
   'use strict';
   const C = window.Core;
-  const VERSION = '0.9.0-lab';
+  const VERSION = '0.10.0-lab';
   const PAGE = 10;
   const OA = 'https://api.openalex.org';
   const CR = 'https://api.crossref.org';
@@ -2797,7 +3049,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     search: null,
     sessionCost: 0,
     ai: { status: 'off', pipe: null, cache: new Map(), qcache: new Map(), progress: 0, lastRun: null, error: '' },
-    ui: { openDetails: new Set(), grading: false },
+    ui: { openDetails: new Set(), openAbstracts: new Set(), grading: false },
     bench: store.get('bench', []) || [],
   };
   if (S.settings.rememberProfile) S.profile = store.get('profile', null);
@@ -2887,8 +3139,14 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     const root = document.documentElement;
     if (a === 'light' || a === 'dark') root.setAttribute('data-appearance', a); else root.removeAttribute('data-appearance');
     store.set('appearance', a);
-    renderAppearance();
+    renderAppearance(); syncThemeColor();
   }
+  // The phone's status bar takes the colour of the app bar, in light and dark.
+  function syncThemeColor() {
+    const m = document.querySelector('meta[name="theme-color"]'); if (!m) return;
+    const c = getComputedStyle(document.documentElement).getPropertyValue('--night').trim(); if (c) m.setAttribute('content', c);
+  }
+  if (window.matchMedia) { const mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', () => syncThemeColor()); }
   function renderAppearance() {
     const a = currentAppearance();
     const b = $('#appearance-btn');
@@ -2898,37 +3156,44 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
   function goHome() {
     searchToken++;
     S.search = null; S.prevSearch = null; S.filters.theme = null; S.quest = null;
-    ['#clarify', '#interp', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
+    ['#clarify', '#interp', '#interp-more', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
     setLoading(null);
     $('#start').hidden = false; $('#hero').classList.remove('compact'); $('#q').value = '';
-    renderModes(); renderFollows(); renderToday();
+    renderModes(); renderFollows(); renderToday(); updateBack();
   }
 
   // ---------------------------------------------------------------- routing
-  const VIEWS = ['search', 'profile', 'saved', 'about'];
+  // Search, Today, Saved and Profile are the tabs at the bottom; Settings and About open from the ⋯ menu.
+  const VIEWS = ['search', 'today', 'saved', 'profile', 'settings', 'about'];
+  const VIEW_TITLES = { search: 'Search', today: 'Papers of the day', saved: 'Saved papers', profile: 'Your research profile', settings: 'Settings', about: 'About' };
   function showView(view) {
     if (!VIEWS.includes(view)) view = 'search';
     nav.view = view;
     VIEWS.forEach(x => { $('#view-' + x).hidden = x !== view; });
-    document.querySelectorAll('.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.view === view ? 'page' : 'false'));
+    document.querySelectorAll('.tabs a').forEach(a => { if (a.dataset.view === view) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    document.body.dataset.view = view;
     if (view === 'saved') { renderSaved(); renderFollows(); }
     if (view === 'search') renderFollows();
+    if (view === 'today') renderToday();
     if (view === 'profile') { renderProfileEditor(); renderAI(); const tb = $('#taste-box'); if (tb) tb.innerHTML = tasteHTML(); renderBench(); }
-    if (view === 'about') renderAbout();
+    if (view === 'settings' || view === 'about') { renderAbout(); renderInstall(); }
+    document.title = view === 'search' ? 'Paperscope Lab: experimental copy' : `${VIEW_TITLES[view]}: Paperscope Lab`;
     updateBack();
   }
+  // Open a group in Settings (e.g. the OpenAlex key) and bring it into view.
+  function openGroup(id) { const g = $(id); if (!g) return; if (g.tagName === 'DETAILS') g.open = true; setTimeout(() => g.scrollIntoView({ block: 'start' }), 0); }
   // A link to #profile, #saved, #about, #install or #key inside the app (or typed in the address bar).
   function route() {
     const v = (location.hash || '#search').slice(1);
     if (v.startsWith('trail=')) { history.replaceState(navState(), '', '#search'); showView('search'); openSharedTrail(v.slice(6)); return; }
-    const view = v === 'install' || v === 'key' ? 'about' : VIEWS.includes(v) ? v : 'search'; // #install, #key: links into About
+    const view = v === 'install' ? 'about' : v === 'key' ? 'settings' : VIEWS.includes(v) ? v : 'search'; // #install → About, #key → Settings
     if (!history.state || !history.state.ps) { // the browser added this entry; give it a state like a tab tap would
       const from = nav.view; if (from === 'search') nav.searchState = nav.lastSearchState || { ps: 'home', depth: 0 };
-      history.replaceState(view === 'search' ? (nav.searchState || { ps: 'home', depth: 0 }) : { ps: 'tab', view, depth: (nav.depth || 0) + 1 }, '', '#' + (view === 'about' && v !== 'about' ? v : view));
+      history.replaceState(view === 'search' ? (nav.searchState || { ps: 'home', depth: 0 }) : { ps: 'tab', view, depth: (nav.depth || 0) + 1 }, '', '#' + (v === 'install' || v === 'key' ? v : view));
       nav.tabBase = from === 'search' && view !== 'search';
     }
     showView(view);
-    if (v === 'install' || v === 'key') { renderInstall(); const h = $(v === 'key' ? '#key-box' : '#install-h'); if (h) setTimeout(() => h.scrollIntoView({ block: 'start' }), 0); return; }
+    if (v === 'install' || v === 'key') { renderInstall(); openGroup(v === 'key' ? '#g-key' : '#install-h'); return; }
     window.scrollTo(0, nav.scroll[view] || 0);
   }
 
@@ -3075,7 +3340,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     if (!nav.popping && nav.view === 'search') saveScroll(); // remember where you were before the page empties
     $('#start').hidden = true;
     $('#hero').classList.add('compact');
-    ['#clarify', '#interp', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
+    ['#clarify', '#interp', '#interp-more', '#map-holder', '#answer-holder', '#filterbar', '#results', '#more', '#compare-holder'].forEach(id => { $(id).innerHTML = ''; });
   }
 
   // Follow the citation trail from one paper: papers citing it, its references, or OpenAlex's related works.
@@ -3312,7 +3577,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
       all: hp ? 'Ranked by match to your search, with a light nudge towards your profile.' : 'Add a profile to separate papers close to your work from adjacent ones.',
       adjacent: 'Favouring relevant papers outside your listed areas, and recent ones.',
     };
-    $('#mode-hint').textContent = hints[hp ? S.mode : 'all'];
+    $('#mode-hint').textContent = hints[hp ? S.mode : 'all']; $('#mode-hint').hidden = !hp; // without a profile, the line below says it
     const pl = $('#profile-line');
     if (hp) {
       const n = (S.profile.interests || []).length + (S.profile.methods || []).length + (S.profile.areas || []).length;
@@ -3423,7 +3688,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     const sugg = C.relatedTerms(s.ranked, a, 8);
     const active = a.related.map(r => `<li class="chip on">+ ${esc(r.text)} <button type="button" data-related-rm="${esc(r.text)}" aria-label="Stop searching ${esc(r.text)}">×</button></li>`).join('');
     if (!sugg.length && !active) return '';
-    return `<div class="related"><p class="small" style="margin:0"><strong>Related terms in these results</strong> <span class="tiny">Tap one to search it as well</span></p>
+    return `<div class="related"><p class="small" style="margin:0"><strong>Related terms</strong> <span class="tiny">tap to add one to the search</span></p>
       <ul class="chips">${active}${sugg.map(t => `<li><button type="button" class="chip add" data-related-add="${esc(t.text)}">${esc(t.text)} <span class="tiny">${t.n}</span></button></li>`).join('')}</ul></div>`;
   }
 
@@ -3431,6 +3696,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
 
   function renderInterp() {
     const s = S.search;
+    $('#interp-more').innerHTML = '';
     if (s.kind === 'trail') { renderTrailHeader(); return; }
     if (s.kind === 'like') { renderLikeHeader(); return; }
     if (s.kind === 'doi') {
@@ -3471,7 +3737,8 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     const fi = followIndex(s);
     const since = s.since ? `<div class="panel since"><strong>Papers published since ${esc(s.since)}</strong> for “${esc(s.q)}”. ${s.pool.size ? '' : 'Nothing new yet.'} <span class="tiny">Uses publication dates, so papers indexed late with older dates can be missed.</span></div>` : '';
     const follow = `<div class="row follow-row"><button type="button" class="btn small" id="follow-toggle" aria-pressed="${fi >= 0}">${fi >= 0 ? 'Following this search' : 'Follow this search'}</button><span class="tiny">${fi >= 0 ? 'Check it for new papers from the Saved tab.' : 'Keep it on this device and check later for new papers.'}</span></div>`;
-    $('#interp').innerHTML = `${warn}${since}${sourcesLine(s)}${renderRelated()}<details class="panel interp"><summary class="small"><strong>How this was searched</strong></summary>${bits.join('')}</details>${follow}`;
+    $('#interp').innerHTML = `${warn}${since}${sourcesLine(s)}${renderRelated()}${follow}`;
+    $('#interp-more').innerHTML = `<details class="panel interp"><summary class="small"><strong>How this was searched</strong></summary>${bits.join('')}</details>`;
   }
 
   // Always visible above the results: which databases answered this search and how many papers each gave.
@@ -3570,7 +3837,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     const legend = `<div class="legend"><span><i style="background:var(--close)"></i>${hp ? 'Close to your profile' : 'Most of the top results'}</span><span><i style="background:var(--adj)"></i>${hp ? 'Adjacent to your profile' : 'Further from the top results'}</span><span><i class="e"></i>Emerging: many papers from the last 3 years</span></div>`;
     const list = `<ul class="theme-list">${top.map(t => `<li><button type="button" data-theme="${esc(t.id)}" aria-pressed="${sel === t.id}"><span class="dot ${t.close ? 'close' : 'adj'}" aria-hidden="true">${num.get(t.id)}</span><span class="tl"><span>${esc(t.name)}</span><span class="meta">${t.count} paper${t.count === 1 ? '' : 's'}${t.field ? `, ${esc(t.field)}` : ''}${t.emerging ? ', emerging' : ''}</span></span></button></li>`).join('')}</ul>`;
     const wasOpen = $('#map-holder details') ? $('#map-holder details').open : true;
-    $('#map-holder').innerHTML = `<details class="map" ${wasOpen ? 'open' : ''}><summary>Theme map</summary>
+    $('#map-holder').innerHTML = `<details class="map" ${wasOpen ? 'open' : ''}><summary>Theme map <span class="map-n">${top.length} themes</span></summary>
       <p class="small muted">Themes are the OpenAlex topics of the papers found. ${hp ? 'Inner ring: themes that overlap your profile. Outer ring: adjacent themes.' : 'Inner ring: themes holding most of the top results.'} Bigger bubbles hold more papers; numbers match the list below. Tap a theme to see only its papers.</p>
       ${svg}${legend}${list}</details>`;
   }
@@ -3584,9 +3851,8 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     if (f.oaOnly) chips.push(`<li class="chip">Open access <button data-clear="oaOnly" aria-label="Clear">×</button></li>`);
     if (f.theme && s.themes) { const t = s.themes.themes.find(x => x.id === f.theme); if (t) chips.push(`<li class="chip">Theme: ${esc(t.name)} <button data-clear="theme" aria-label="Clear theme">×</button></li>`); }
     const canSwipe = s.kind !== 'author' && !inQuest() && vis.some(w => !S.saved.has(w.key) && !S.later.has(w.key));
-    $('#filterbar').innerHTML = `<div class="filterbar">${canSwipe ? '<button type="button" class="btn small swipe-btn" id="swipe-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="3"/><path d="M2.5 9.5 1 12l1.5 2.5M21.5 9.5 23 12l-1.5 2.5"/></svg>Swipe to sort</button>' : ''}<button type="button" class="btn small" id="open-filters">Filters${filtersActive() ? ' (on)' : ''}</button>${s.kind === 'search' ? `<button type="button" class="btn small" id="grade-toggle" aria-pressed="${S.ui.grading}">${S.ui.grading ? 'Done grading' : 'Grade results'}</button>` : ''}
-      <label class="sortsel"><span class="sr-only">Sort results</span><select id="sort">${sortOptions(s)}</select></label>
-      <ul class="chips" style="margin:0">${chips.join('')}</ul><span class="count">${s.kind === 'author' ? `${fmt(vis.length)} works` : grading() ? `${gradingList().length} to grade` : `${Math.min(s.shown, vis.length)} of ${vis.length} shown`}</span></div>`;
+    $('#filterbar').innerHTML = `<div class="filterbar">${canSwipe ? '<button type="button" class="btn small swipe-btn" id="swipe-open"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3.5" width="12" height="17" rx="3"/><path d="M2.5 9.5 1 12l1.5 2.5M21.5 9.5 23 12l-1.5 2.5"/></svg>Swipe to sort</button>' : ''}<button type="button" class="btn small" id="open-filters"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filters${filtersActive() ? ' (on)' : ''}</button>${S.ui.grading && s.kind === 'search' ? '<button type="button" class="btn small" id="grade-toggle" aria-pressed="true">Done grading</button>' : ''}
+      <ul class="chips" style="margin:0">${chips.join('')}</ul><div class="fb-meta"><label class="sortsel"><span class="sr-only">Sort results</span><select id="sort">${sortOptions(s)}</select></label><span class="count">${s.kind === 'author' ? `${fmt(vis.length)} works` : grading() ? `${gradingList().length} to grade` : `${Math.min(s.shown, vis.length)} of ${vis.length} shown`}</span></div></div>`;
   }
 
   function sortOptions(s) {
@@ -3628,20 +3894,25 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
       + (w.rank.orbit ? `<li class="profile">Close to papers you saved: ${esc(w.rank.orbit.hits.join(', '))}.</li>` : '');
     const ev = ex.evidence ? `<blockquote>“${highlight(ex.evidence.text, hset)}${ex.evidence.truncated ? '…' : ''}”<cite>From the abstract (${esc(ex.evidence.from)})</cite></blockquote>` : '';
     const sem = w.rank.sem ? `; model similarity to query ${w.rank.sem.q.toFixed(2)}${w.rank.sem.p != null ? `, to profile ${w.rank.sem.p.toFixed(2)}` : ''}` : '';
+    const absOpen = S.ui.openAbstracts.has(w.key);
+    const kid = cssId(w.key);
+    // A card: what the paper is, why it is here, then four actions. Citation trails, links and the score are in ⋯.
     return `<li class="paper ${closeCls}" data-key="${esc(w.key)}">
       <div class="badges">${S.search && S.search.since && w.date && w.date >= S.search.since ? '<span class="badge new">New</span>' : ''}<span class="badge ${esc(ti.conf)}" title="${esc(ti.why)}">${esc(ti.label)}</span>${w.isOA ? '<span class="badge oa">Open access</span>' : ''}${w.retracted ? '<span class="badge warn">Retracted</span>' : ''}${w.cites ? `<span class="badge">Cited by ${fmt(w.cites)}</span>` : ''}${meter}</div>
-      <h3>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
-      <p class="byline">${authors}${authors ? '. ' : ''}${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.year ? ` (${w.year})` : ''}</p>
-      <div class="why"><ul>${reasons}</ul>${ev}${ex.note ? `<p class="note">${esc(ex.note)}</p>` : ''}</div>
+      <h3 id="t-${kid}">${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(w.title)}</a>` : esc(w.title)}</h3>
+      ${authors ? `<p class="byline">${authors}</p>` : ''}
+      ${w.venue || w.year ? `<p class="publine">${w.venue ? `<span class="venue">${esc(w.venue)}</span>` : ''}${w.venue && w.year ? ', ' : ''}${w.year ? `<span class="year">${w.year}</span>` : ''}</p>` : ''}
+      <div class="why"><p class="why-h">Why it’s here</p><ul>${reasons}</ul>${ev}${ex.note ? `<p class="note">${esc(ex.note)}</p>` : ''}</div>
+      ${w.abstract ? `<div class="abstract" id="abs-${kid}" ${absOpen ? '' : 'hidden'}><p class="abs-h">Abstract${w.abstractFrom ? ` <span class="tiny">from ${esc(w.abstractFrom)}</span>` : ''}</p><p>${highlight(w.abstract, hset)}</p></div>` : ''}
       ${grading() ? gradeHTML(w) : ''}
-      <div class="actions">
-        <button type="button" class="save" data-save="${esc(w.key)}" aria-pressed="${saved}">${saved ? 'Saved' : 'Save'}</button>
-        ${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${w.doi ? 'Publisher page' : 'Source page'}</a>` : ''}
-        ${free && free !== link ? `<a href="${esc(free)}" target="_blank" rel="noopener">Free full text${w.oaHost ? ` (${esc(w.oaHost)})` : ''}</a>` : ''}
-        ${pdf && pdf !== free ? `<a href="${esc(pdf)}" target="_blank" rel="noopener">PDF</a>` : ''}
-        <button type="button" class="btn link" data-details="${esc(w.key)}" aria-expanded="${open}">Details</button>
+      <div class="actions card-actions">
+        <button type="button" class="act save" data-save="${esc(w.key)}" aria-pressed="${saved}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.8h11v16.7l-5.5-3.9-5.5 3.9z"/></svg><span>${saved ? 'Saved' : 'Save'}</span></button>
+        ${w.abstract ? `<button type="button" class="act" data-abstract="${esc(w.key)}" aria-expanded="${absOpen}" aria-controls="abs-${kid}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 10.5h14M5 15h9"/></svg><span>Abstract</span></button>` : '<span class="act none" aria-hidden="true"></span>'}
+        ${w.doi ? `<a class="act" href="https://doi.org/${esc(w.doi)}" target="_blank" rel="noopener" aria-label="DOI: open the publisher’s page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><span>DOI</span></a>` : link ? `<a class="act" href="${esc(link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><span>Source</span></a>` : '<span class="act none" aria-hidden="true"></span>'}
+        <button type="button" class="act" data-like="${esc(w.key)}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.6"/><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/></svg><span>More like this</span></button>
+        <button type="button" class="act more" data-card-menu="${esc(w.key)}" aria-haspopup="dialog" aria-label="More actions" aria-describedby="t-${kid}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
       </div>
-      ${inQuest() ? questCardHTML(w) : w.openalexId ? `<div class="trail"><span class="tiny">Explore:</span>${w.cites ? `<button type="button" class="btn link" data-trail="cites" data-key="${esc(w.key)}">Cited by ${fmt(w.cites)}</button>` : ''}<button type="button" class="btn link" data-trail="refs" data-key="${esc(w.key)}">References</button><button type="button" class="btn link" data-trail="related" data-key="${esc(w.key)}">Similar</button><button type="button" class="btn link quest-go" data-quest-start="origin" data-key="${esc(w.key)}">Trace its origin</button><button type="button" class="btn link" data-like="${esc(w.key)}">More like this</button></div>` : ''}
+      ${inQuest() ? questCardHTML(w) : ''}
       <div class="details" ${open ? '' : 'hidden'}><dl>
         <dt>Type</dt><dd>${esc(ti.label)}: ${esc(ti.why)}</dd>
         ${w.topic ? `<dt>Topic</dt><dd>${esc(w.topic.name)} (${esc(w.topic.field || '')})</dd>` : ''}
@@ -3651,6 +3922,57 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
         <dt>Score</dt><dd>${w.rank.score.toFixed(2)} (search match ${w.rank.q.toFixed(2)}, source rank ${w.rank.rrf.toFixed(2)}${hp ? `, profile ${w.rank.prof.toFixed(2)}` : ''}${sem})</dd>
       </dl></div>
     </li>`;
+  }
+
+  const cssId = k => String(k).replace(/[^A-Za-z0-9_-]/g, '_');
+  // ⋯ on a card: the citation trail, the paper's links, and the details and score.
+  function openCardMenu(key) {
+    const w = S.search && S.search.pool.get(key); if (!w) return;
+    const link = primaryLink(w); const free = safeUrl(w.oaUrl) && w.isOA ? safeUrl(w.oaUrl) : ''; const pdf = safeUrl(w.pdf);
+    const k = esc(w.key); const open = S.ui.openDetails.has(w.key);
+    const item = (attrs, label, sub) => `<button type="button" class="menu-item" ${attrs}><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</button>`;
+    const ext = (href, label, sub) => `<a class="menu-item" href="${esc(href)}" target="_blank" rel="noopener"><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</a>`;
+    const explore = w.openalexId && !inQuest() ? `<h4 class="menu-h">Follow the citation trail</h4><div class="menu-list">
+        ${w.cites ? item(`data-trail="cites" data-key="${k}"`, `Cited by ${fmt(w.cites)}`, 'Later papers that cite this one') : ''}
+        ${item(`data-trail="refs" data-key="${k}"`, 'References', 'Papers this one cites')}
+        ${item(`data-trail="related" data-key="${k}"`, 'Similar papers', 'Related works listed by OpenAlex')}
+        ${item(`class="quest-go" data-quest-start="origin" data-key="${k}"`, 'Trace its origin', 'Step back through references to where the idea started')}
+      </div>` : '';
+    const links = [link ? ext(link, w.doi ? 'Publisher page' : 'Source page', w.doi ? esc(w.doi) : '') : '',
+      free && free !== link ? ext(free, 'Free full text', w.oaHost ? esc(w.oaHost) : '') : '', pdf && pdf !== free ? ext(pdf, 'PDF', '') : '',
+      w.openalexId ? ext(safeUrl(w.openalexId), 'OpenAlex record', '') : ''].filter(Boolean).join('');
+    openSheet(`<h3 id="sheet-h" class="sheet-title">${esc(w.title)}</h3>
+      ${explore}
+      ${links ? `<h4 class="menu-h">Read it</h4><div class="menu-list">${links}</div>` : ''}
+      <h4 class="menu-h">This result</h4><div class="menu-list">${item(`data-details="${k}" data-key="${k}"`, open ? 'Hide details and score' : 'Details and score', 'Type, topic, which databases found it, and how it was ranked')}</div>
+      <button type="button" class="btn sheet-cancel" data-close-sheet>Close</button>`, 'card');
+  }
+  // Run what was picked in a paper's ⋯ sheet once the sheet (and its history entry) is gone.
+  function cardAction(d) {
+    const w = S.search && S.search.pool.get(d.key || d.details || d.like); if (!w) return;
+    if (d.trail) { runTrail(w, d.trail); return; }
+    if (d.questStart) { startQuest(w, d.questStart); return; }
+    if (d.details) {
+      const li = document.querySelector(`#results .paper[data-key="${CSS.escape(w.key)}"]`); const box = li && $('.details', li);
+      if (!box) return; box.hidden = !box.hidden; box.hidden ? S.ui.openDetails.delete(w.key) : S.ui.openDetails.add(w.key);
+      if (!box.hidden) box.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' });
+    }
+  }
+  // The ⋯ in the header: Settings, About, appearance, install, the main app.
+  function openMenu() {
+    const a = currentAppearance();
+    const seg = ['auto', 'light', 'dark'].map(x => `<button type="button" data-menu-appearance="${x}" aria-pressed="${a === x}">${APPEARANCE_ICONS[x]}<span>${x === 'auto' ? 'Auto' : APPEARANCE_NAMES[x]}</span></button>`).join('');
+    const item = (view, label, sub) => `<button type="button" class="menu-item" data-menu="${view}"><span>${label}</span><small>${sub}</small></button>`;
+    openSheet(`<h3 id="sheet-h" class="sr-only">More</h3>
+      <div class="menu-list">
+        ${item('settings', 'Settings', 'Databases, ranking, OpenAlex key, AI answers')}
+        ${item('about', 'About Paperscope', 'How it works, what leaves your device, costs')}
+        ${isStandalone() ? '' : item('install', 'Install as an app', 'Home screen icon, opens offline')}
+        <a class="menu-item" href="../"><span>Open the main app</span><small>Paperscope without the Lab experiments</small></a>
+      </div>
+      <h4 class="menu-h" id="menu-appearance-h">Appearance</h4>
+      <div class="seg" role="group" aria-labelledby="menu-appearance-h">${seg}</div>
+      <button type="button" class="btn sheet-cancel" data-close-sheet>Close</button>`, 'menu');
   }
 
   function renderResults() {
@@ -3718,10 +4040,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
   // ---------------------------------------------------------------- filters sheet
   function openFilters() {
     const f = S.filters;
-    const root = $('#sheet-root');
-    root.innerHTML = `<div class="sheet-backdrop" data-close-sheet></div>
-      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
-        <h3 id="sheet-h">Filter results</h3>
+    openSheet(`<h3 id="sheet-h">Filter results</h3>
         <fieldset><legend>Publication type</legend>
           ${CATS.map(([k, label, sub]) => `<label class="check"><input type="checkbox" name="cat" value="${k}" ${f.cats.has(k) ? 'checked' : ''}><span>${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ''}</span></label>`).join('')}
           <label class="check"><input type="checkbox" id="f-inferred" ${f.hideInferred ? 'checked' : ''}><span>Hide types that are only inferred<small>Types marked with ? come from title or abstract wording, not from the database.</small></span></label>
@@ -3732,11 +4051,32 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
         <fieldset><legend>Access</legend><label class="check"><input type="checkbox" id="f-oa" ${f.oaOnly ? 'checked' : ''}><span>Open access only</span></label></fieldset>
         <div class="row"><button type="button" class="btn primary" id="apply-filters">Apply</button><button type="button" class="btn" id="reset-filters">Reset</button><button type="button" class="btn link" data-close-sheet>Cancel</button></div>
         <p class="tiny" style="margin-top:12px">Filters apply to the papers already fetched. If few remain, you can search the databases again with them.</p>
-      </div>`;
-    $('.sheet input', root).focus();
-    navOverlay('sheet');
+        ${S.search && S.search.kind === 'search' ? `<h4 class="menu-h">Benchmark (Lab)</h4><button type="button" class="btn" id="grade-toggle" aria-pressed="${S.ui.grading}">${S.ui.grading ? 'Done grading' : 'Grade these results'}</button><p class="tiny">Mark how relevant each paper is. Your grades measure how well the ranking works (Profile › Graded searches).</p>` : ''}`, 'filters');
   }
-  function closeSheet(fromBack) { if (!$('#sheet-root').innerHTML) return; $('#sheet-root').innerHTML = ''; if (!fromBack) navCloseOverlay(); const b = $('#open-filters'); if (b) b.focus(); }
+  // Bottom sheets (filters, the ⋯ menu, a paper's actions) have their own history entry, so back closes them.
+  // `then` runs once that entry is gone, so an action picked in a sheet adds its own entry in the right place.
+  let sheetOpener = null;
+  function openSheet(html, kind, label) {
+    sheetOpener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    $('#sheet-root').innerHTML = `<div class="sheet-backdrop" data-close-sheet></div><div class="sheet" data-kind="${kind}" role="dialog" aria-modal="true" aria-labelledby="sheet-h"><div class="sheet-grip" aria-hidden="true"></div>${html}</div>`;
+    document.body.classList.add('sheet-open');
+    const first = $('#sheet-root .sheet [data-autofocus]') || $('#sheet-root .sheet button, #sheet-root .sheet a, #sheet-root .sheet input');
+    if (first) first.focus({ preventScroll: true });
+    navOverlay(kind || 'sheet');
+  }
+  // Grading mode (Lab benchmark): offered in the Filters sheet; “Done grading” sits in the toolbar while it is on.
+  function setGrading(on) {
+    S.ui.grading = on; gradingCache = null; renderResults();
+    if (!S.ui.grading) toast(benchEntry(S.search) ? 'Grades saved on this device' : 'Grading off');
+    else $('#grade-note').scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+  }
+  function closeSheet(fromBack, then) {
+    if (!$('#sheet-root').innerHTML) { if (then) then(); return; }
+    $('#sheet-root').innerHTML = ''; document.body.classList.remove('sheet-open');
+    const o = sheetOpener; sheetOpener = null;
+    if (o && document.contains(o) && !then) o.focus({ preventScroll: true }); else if (!then) { const b = $('#open-filters'); if (b) b.focus({ preventScroll: true }); }
+    if (!fromBack) navCloseOverlay(then); else if (then) then();
+  }
   function applyFilters() {
     const f = S.filters;
     f.cats = new Set([...document.querySelectorAll('.sheet input[name="cat"]:checked')].map(i => i.value));
@@ -3759,10 +4099,10 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
       toast(store.set('__probe', 1) ? 'Saved on this device' : 'Saved for this session only (browser storage is unavailable)');
     }
     persistSaved(); updateSavedCount();
-    document.querySelectorAll(`[data-save="${CSS.escape(key)}"]`).forEach(b => { const on = S.saved.has(key); b.setAttribute('aria-pressed', on); b.textContent = on ? 'Saved' : 'Save'; });
+    document.querySelectorAll(`[data-save="${CSS.escape(key)}"]`).forEach(b => { const on = S.saved.has(key); b.setAttribute('aria-pressed', on); const sp = b.querySelector('span'); (sp || b).textContent = on ? 'Saved' : 'Save'; });
     if (S.search && S.search.kind === 'like') renderLikeHeader();
   }
-  function updateSavedCount() { $('#saved-count').textContent = S.saved.size ? `(${S.saved.size})` : ''; }
+  function updateSavedCount() { $('#saved-count').textContent = S.saved.size ? String(S.saved.size) : ''; }
   function renderSaved() {
     const list = [...S.saved.values()].sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
     if (!list.length) { $('#saved-body').innerHTML = `${skyHTML()}${trailsHTML()}<p class="muted">Papers you save appear here. They are kept in this browser, not in an account.</p>${laterHTML()}`; return; }
@@ -4318,8 +4658,10 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
       : `<p class="small">AI checked the top ${ck.n} papers (${esc(ck.model)}${ck.usage ? `, ${esc(ck.usage)} tokens, billed to your account` : ''}): ${ck.counts[3]} directly address your search, ${ck.counts[2]} relevant, ${ck.counts[1] + ck.counts[0]} only touch it or not.${ck.missing ? ` ${ck.missing} got no grade.` : ''} <button type="button" class="btn link" id="ai-order">${ck.order ? 'Show the usual order' : 'Order by the AI check'}</button></p>`) : '';
     if (!a) {
       const n = answerPapers().length;
-      el.innerHTML = `<div class="panel answer"><div class="row"><button type="button" class="btn" id="answer-run" ${llmReady() && n >= 2 ? '' : 'disabled'}>Write a short answer from the top papers</button><button type="button" class="btn" id="ai-check" ${llmReady() && !(ck && ck.loading) ? '' : 'disabled'}>Check the top 30 with AI</button></div>${checkLine}
-        <p class="tiny" style="margin:6px 0 0">${llmReady() ? `Sends your search and the titles and abstracts of the top papers to ${S.settings.llmProvider === 'anthropic' ? 'Anthropic' : esc(S.settings.llmBase)}, billed to your account. The check asks the model whether each paper studies what you searched for, not just whether it uses the words. Your CV and profile are not sent.` : 'Optional. Uses an AI model with your own key; set it up in <a href="#about">About › Settings</a>. Off by default.'}</p></div>`;
+      const inner = `<div class="row"><button type="button" class="btn" id="answer-run" ${llmReady() && n >= 2 ? '' : 'disabled'}>Write a short answer from the top papers</button><button type="button" class="btn" id="ai-check" ${llmReady() && !(ck && ck.loading) ? '' : 'disabled'}>Check the top 30 with AI</button></div>${checkLine}
+        <p class="tiny" style="margin:6px 0 0">${llmReady() ? `Sends your search and the titles and abstracts of the top papers to ${S.settings.llmProvider === 'anthropic' ? 'Anthropic' : esc(S.settings.llmBase)}, billed to your account. The check asks the model whether each paper studies what you searched for, not just whether it uses the words. Your CV and profile are not sent.` : 'Optional. Uses an AI model with your own key; set it up in <a href="#settings">Settings</a>. Off by default.'}</p>`;
+      // Not set up: a folded line, so it does not push the papers down.
+      el.innerHTML = llmReady() || ck ? `<div class="panel answer">${inner}</div>` : `<details class="panel answer ai-off"><summary class="small"><strong>AI answer and check</strong> <span class="tiny">off: needs your own key</span></summary>${inner}</details>`;
       return;
     }
     if (a.loading) { el.innerHTML = `<div class="panel answer loading"><span class="spinner" aria-hidden="true"></span> Writing an answer from ${a.papers.length} abstracts…</div>`; return; }
@@ -4371,10 +4713,13 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
       throw e;
     } finally { clearTimeout(timer); }
   }
+  // The AI answer and check sit in the “Theme map and search details” fold; open it when one is asked for.
+  function showSearchMore() { const m = $('#search-more'); if (m) m.open = true; }
   async function runAnswer() {
     const s = S.search; if (!s || !llmReady()) return;
     const papers = answerPapers();
     if (papers.length < 2) { toast('Need at least two papers with abstracts'); return; }
+    showSearchMore();
     const token = searchToken;
     s.answer = { loading: true, papers }; renderAnswer();
     const { system, user } = C.buildAnswerPrompt(s.q, papers);
@@ -4396,7 +4741,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     const s = S.search; if (!s || !llmReady()) return;
     const papers = visibleWorks().slice(0, 30); if (!papers.length) return;
     const token = searchToken;
-    s.aiCheck = { loading: true, n: papers.length }; renderAnswer();
+    s.aiCheck = { loading: true, n: papers.length }; showSearchMore(); renderAnswer();
     const { system, user } = C.buildCheckPrompt(s.q, papers);
     try {
       const out = await callLLM(system, user, 1500);
@@ -4542,9 +4887,27 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
   document.addEventListener('click', e => {
     const tab = e.target.closest('.tabs a[data-view]');
     if (tab) { e.preventDefault(); goTab(tab.dataset.view); return; }
+    if (e.target.classList && e.target.classList.contains('sheet-backdrop')) { closeSheet(); return; } // tap outside a sheet
     const t = e.target.closest('button, [data-theme], [data-exp], [data-star], a[href^="#"]');
     if (!t) return;
     const d = t.dataset;
+    { const h = t.tagName === 'A' && t.getAttribute('href'); const m = h && /^#(search|today|saved|profile|settings|about)$/.exec(h);
+      if (m && !t.closest('.tabs') && t.id !== 'home-link') { e.preventDefault(); const go = () => goTab(m[1]); $('#sheet-root').innerHTML ? closeSheet(false, go) : go(); return; } }
+    if (t.id === 'menu-btn') { openMenu(); return; }
+    if (d.menu) { const v = d.menu; closeSheet(false, () => { if (v === 'install') { goTab('about'); openGroup('#install-h'); } else goTab(v); }); return; }
+    if (d.menuAppearance) {
+      applyAppearance(d.menuAppearance);
+      document.querySelectorAll('[data-menu-appearance]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.menuAppearance === d.menuAppearance)));
+      return;
+    }
+    if (d.cardMenu) { openCardMenu(d.cardMenu); return; }
+    if (t.closest('.sheet[data-kind="card"]') && (d.trail || d.questStart || d.details)) { const ds = Object.assign({}, d); closeSheet(false, () => cardAction(ds)); return; }
+    if (d.abstract) {
+      const k = d.abstract; const box = document.getElementById('abs-' + cssId(k)); if (!box) return;
+      box.hidden = !box.hidden; t.setAttribute('aria-expanded', String(!box.hidden));
+      box.hidden ? S.ui.openAbstracts.delete(k) : S.ui.openAbstracts.add(k);
+      return;
+    }
     if (d.mode && t.closest('#modes')) {
       if (t.disabled) return;
       S.mode = d.mode; store.set('mode', S.mode); renderModes();
@@ -4584,12 +4947,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
     if (t.id === 'lab-import') { labImport(); return; }
     if (t.id === 'lab-note-hide') { store.set('labNoteHidden', true); const n = $('.lab-note'); if (n) n.hidden = true; return; }
     if (t.id === 'swipe-open') { openDeck(); return; }
-    if (t.id === 'grade-toggle' || t.id === 'grade-done') {
-      S.ui.grading = t.id === 'grade-toggle' ? !S.ui.grading : false; gradingCache = null; renderResults();
-      if (!S.ui.grading) toast(benchEntry(S.search) ? 'Grades saved on this device' : 'Grading off');
-      else $('#grade-note').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
+    if (t.id === 'grade-toggle' || t.id === 'grade-done') { const on = t.id === 'grade-toggle' ? !S.ui.grading : false; t.closest('.sheet') ? closeSheet(false, () => setGrading(on)) : setGrading(on); return; }
     if (d.grade !== undefined && d.key) {
       gradeWork(d.key, Number(d.grade));
       const e = benchEntry(S.search); const g = e && e.grades[d.key];
@@ -4763,6 +5121,13 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
   }, true);
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && $('#sheet-root').innerHTML) closeSheet();
+    if (e.key === 'Tab' && $('#sheet-root').innerHTML) { // keep the keyboard inside an open sheet
+      const f = [...document.querySelectorAll('#sheet-root .sheet button, #sheet-root .sheet a[href], #sheet-root .sheet input, #sheet-root .sheet select, #sheet-root .sheet textarea')].filter(x => !x.disabled && x.offsetParent !== null);
+      if (f.length) { const first = f[0], last = f[f.length - 1];
+        if (!document.querySelector('#sheet-root .sheet').contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+        else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } }
+    }
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-theme], [data-exp], [data-star]')) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent('click', { bubbles: true })); }
   });
   document.addEventListener('submit', e => {
@@ -4980,7 +5345,19 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
   const todaySig = () => `3|${pubsOn().map(p => p.id).join(',')}|${C.todayQuery(todayTermsNow())}|${S.settings.todayS2 ? 's2' : ''}`;
   function todayWork(w) { if (!w._prep) C.prepWork(w); return w; }
   const VIA = { crossref: 'Crossref', oa_kw: 'OpenAlex', s2: 'Semantic Scholar' };
-  function renderToday() {
+  function renderToday() { renderTodayBox(); renderTodayExtras(); }
+  // The Today tab shows how many new papers there are; the start screen shows a one-line pointer to them.
+  function renderTodayExtras() {
+    const t = S.today; const n = t && t.day === localDay() ? (t.items || []).length : 0;
+    const c = $('#today-count'); if (c) c.textContent = n ? String(n) : '';
+    const tz = $('#today-teaser'); if (!tz) return;
+    const terms = todayTermsNow();
+    const body = !terms.length ? 'Choose journals and topics to get new papers each day.'
+      : todayBusy && !n ? '<span class="spinner" aria-hidden="true"></span> Checking for new papers…'
+      : n ? `${n} new: ${esc(short(t.items[0].title))}` : 'Nothing new on your topics yet today.';
+    tz.innerHTML = `<a class="teaser" href="#today"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg><span><strong>Papers of the day</strong><span class="teaser-s">${body}</span></span></a>`;
+  }
+  function renderTodayBox() {
     const box = $('#today'); if (!box) return;
     const terms = todayTermsNow(); const pubs = pubsOn(); const t = S.today; const related = C.todayRelated(terms);
     const names = pubs.map(p => p.name); const pubList = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || 'no publishers';
@@ -4990,7 +5367,7 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
         <textarea id="today-topics" rows="3" placeholder="e.g. exciton diffusion, transient absorption, perylene diimide">${esc(S.settings.todayTopics || '')}</textarea>
         ${related.length ? `<p class="tiny" id="today-related">Related wording that also counts: ${esc(related.slice(0, 10).join(', '))}${related.length > 10 ? ` and ${related.length - 10} more` : ''}.</p>` : ''}
         <label class="switch small"><input type="checkbox" id="today-s2" ${S.settings.todayS2 ? 'checked' : ''}><span>Also suggest papers like my saved ones<br><span class="tiny">Sends the DOIs of your 10 most recently saved papers to Semantic Scholar, which suggests similar new papers. ${S.saved.size ? `You have ${S.saved.size} saved.` : 'Save some papers first.'}</span></span></label>
-        <p class="tiny">${hasProfile() ? 'Your profile’s terms are used too.' : 'Tip: a profile (Profile tab, or “Bring over” above) adds your terms automatically.'} Your topics and the publishers are sent to Crossref and OpenAlex to find new papers.</p>
+        <p class="tiny">${hasProfile() ? 'Your profile’s terms are used too.' : 'Tip: a profile (the Profile tab, or “Bring over my saved papers and profile” on Search) adds your terms automatically.'} Your topics and the publishers are sent to Crossref and OpenAlex to find new papers.</p>
         <button type="button" class="btn small primary" id="today-save">Save and check now</button></details>`;
     if (!terms.length) {
       box.innerHTML = `<section class="today" aria-labelledby="today-h"><h2 id="today-h">Papers of the day</h2>
@@ -5654,7 +6031,8 @@ a, button, label, summary, select, [role="radio"] { -webkit-tap-highlight-color:
 
   // ---------------------------------------------------------------- init
   { const st = history.state || {}; if (st.ps === 'res' || st.ps === 'overlay') history.replaceState({ ps: 'home', depth: st.depth || 0 }, '', '#search'); nav.depth = (history.state || {}).depth || 0; }
-  updateSavedCount(); renderModes(); route(); renderFollows(); renderAppearance(); renderInstall();
+  { const m = $('#search-more'); if (m) m.open = !(window.matchMedia && window.matchMedia('(max-width: 759px), (max-height: 500px)').matches); } // folded on phones, either way up
+  updateSavedCount(); renderModes(); route(); renderFollows(); renderAppearance(); syncThemeColor(); renderInstall();
   { const n = $('.lab-note'); if (n && store.get('labNoteHidden', false)) n.hidden = true; }
   S.today = store.get('today', null); renderToday(); if (!location.hash.startsWith('#trail=')) fetchToday(false);
   if (S.settings.pendingKey) checkKey(true);

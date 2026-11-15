@@ -69,18 +69,24 @@ function route(req) {
   await page.goto(BASE + '?nosw#search', { waitUntil: 'load' });
   await page.$eval('#q', e => { e.value = 'exciton diffusion'; }); await page.$eval('#search-form button', b => b.click());
   await page.waitForFunction(() => document.querySelectorAll('#results .paper').length > 0 && document.querySelector('#loading').hidden, { timeout: 15000 });
-  check('result cards offer “Trace its origin”', (await page.$$('[data-quest-start="origin"]')).length >= 1);
+  // “Trace its origin” lives in each card's ⋯ sheet, with the other citation trails.
+  await page.$eval('#results .paper [data-card-menu]', b => b.click()); await sleep(250);
+  check('result cards offer “Trace its origin” (in the card’s ⋯ sheet)', (await page.$$('#sheet-root [data-quest-start="origin"][data-key]')).length === 1 && (await page.$$('#results [data-quest-start]')).length === 0);
 
   // ---------- start: the references of Q1
   calls.length = 0;
-  await page.$eval(`#results .paper [data-quest-start="origin"][data-key]`, b => b.click()); await waitTrail();
+  await page.$eval(`#sheet-root [data-quest-start="origin"][data-key]`, b => b.click()); await waitTrail();
+  check('picking it closes the sheet', !(await page.$eval('#sheet-root', e => e.innerHTML)));
   let h = await head();
   check('quest starts at the paper, looking at its references', /Quest: find where this idea started/.test(h) && /Start: 2022/.test(h) && calls.some(c => /cited_by:W771/.test(c)), h.slice(0, 160));
   let cs = await cards();
   check('closest match comes first and explains itself', cs[0].t === 'Exciton diffusion length in organic films' && cs[0].sg && /^Closest match\. 12 years earlier/.test(cs[0].why) && /exciton/.test(cs[0].why) && /Step back to this/.test(cs[0].btn), JSON.stringify(cs[0]));
   check('a big leap back to an older landmark is offered too', cs[1].t === 'Charge transport in organic semiconductors' && /^Big leap back\. 17 years earlier/.test(cs[1].why), JSON.stringify(cs[1]));
   check('an unrelated paper is not suggested, and each card says how much earlier it is', cs.filter(c => c.sg).length === 2 && cs.some(c => /An unrelated/.test(c.t) && !c.sg && /7 years earlier/.test(c.when)), cs.map(c => c.when).join(' | '));
-  check('no swiping or other trails in the middle of a quest', !(await page.$('#swipe-open')) && !(await page.$('#results [data-trail]')));
+  await page.$eval('#results .paper [data-card-menu]', b => b.click()); await sleep(250);
+  const menuTrails = await page.$$('#sheet-root [data-trail], #sheet-root [data-quest-start]');
+  await page.$eval('#sheet-root [data-close-sheet].btn', b => b.click()); await sleep(250);
+  check('no swiping or other trails in the middle of a quest', !(await page.$('#swipe-open')) && !(await page.$('#results [data-trail]')) && !menuTrails.length);
   check('quest header: no WCAG A/AA violations', (await axe()).length === 0, (await axe()).join(' | '));
   await page.screenshot({ path: path.join(OUT, 'lab-quest-step.png') });
 

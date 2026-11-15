@@ -9,6 +9,7 @@ const M = require('./mock-data.js');
 const server = require('./static-server.cjs')(8781);
 const WHICH = process.argv[2] === undefined ? '' : process.argv[2];
 const BASE = `http://localhost:8781/${WHICH}`;
+const SETTINGS = WHICH ? '#settings' : '#about'; // the Lab has its own Settings screen
 const log = []; const check = (n, ok, d = '') => { log.push(!!ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); };
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' };
 const json = (req, obj, status = 200) => req.respond({ status, headers: { 'content-type': 'application/json', ...CORS }, body: JSON.stringify(obj) });
@@ -39,7 +40,8 @@ function route(req) {
   await page.setRequestInterception(true); page.on('request', route);
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const search = async q => { await page.$eval('#q', (e, v) => { e.value = v; }, q); await page.$eval('#search-form button[type="submit"]', b => b.click()); await page.waitForFunction(() => document.querySelectorAll('#results .paper, #results .panel').length > 0, { timeout: 10000 }); await sleep(300); };
-  const interp = () => page.$eval('#interp', e => e.textContent.replace(/\s+/g, ' '));
+  // In the Lab, “How this was searched” sits in the fold under the sources line (#interp-more).
+  const interp = () => page.evaluate(() => ['#interp', '#interp-more'].map(x => document.querySelector(x)).filter(Boolean).map(e => e.textContent).join(' ').replace(/\s+/g, ' '));
   const epmcPapers = () => page.evaluate(() => [...window.Paperscope.S.search.pool.values()].filter(w => (w.sources || []).includes('Europe PMC')).length);
   await page.goto(BASE + '?nosw#search', { waitUntil: 'load' }); await sleep(300);
 
@@ -80,8 +82,8 @@ function route(req) {
   t = await interp();
   check('when OpenAlex’s main search fails, the red warning says the results are incomplete', /These results are incomplete\./.test(t) && /OpenAlex keyword search did not answer/.test(t) && !!(await page.$('#interp .panel.warn')), t.slice(0, 300));
   kwFails = false;
-  // About › Settings: check that all databases answer, from this device
-  await page.evaluate(() => { location.hash = '#about'; }); await sleep(300);
+  // Settings (in the main app, under About): check that all databases answer, from this device
+  await page.evaluate(h => { location.hash = h; }, SETTINGS); await sleep(300);
   epmcFailures = 0;
   await page.$eval('#check-sources', b => b.click());
   await page.waitForFunction(() => !/checking…/.test(document.querySelector('#src-check').textContent) && /Checked from this device/.test(document.querySelector('#src-check').textContent), { timeout: 8000 });
@@ -100,7 +102,7 @@ function route(req) {
   await page.evaluate(() => { location.hash = '#search'; }); await sleep(200);
   await search('triplet pair separation');
   check('…and the search line says it is off', /– Crossref off in Settings/.test(await page.$eval('.srcline', e => e.textContent.replace(/\s+/g, ' '))));
-  await page.evaluate(() => { location.hash = '#about'; }); await sleep(200); await page.$eval('#set-crossref', i => i.click()); await sleep(100);
+  await page.evaluate(h => { location.hash = h; }, SETTINGS); await sleep(200); await page.$eval('#set-crossref', i => i.click()); await sleep(100);
   check('no page errors', errors.length === 0, errors.join(' | '));
   const failed = log.filter(x => !x).length;
   console.log(`\n${log.length - failed}/${log.length} source-failure checks passed (${WHICH ? 'Lab' : 'main app'})`);
